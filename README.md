@@ -1,1 +1,1 @@
-# core-tg
+# Mobile core network traffic generator
