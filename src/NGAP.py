@@ -100,9 +100,33 @@ class NGSetupProc(NonUEAssociatedNGAPProc):
       - 15: Cause (M)
       - 19: CriticalityDiagnostics (O)
       - 107: TimeToWait (O)
+
+    NG Setup Request: 
+        IEs: (for ie in NGAP.NGAP_PDU_Contents.NGSetupRequestIEs().root: print(ie))
+        {'id': 27, 'criticality': 'reject', 'Value': <Value ([GlobalRANNodeID] CHOICE)>, 'presence': 'mandatory'}
+        {'id': 82, 'criticality': 'ignore', 'Value': <Value ([RANNodeName] PrintableString)>, 'presence': 'optional'}
+        {'id': 102, 'criticality': 'reject', 'Value': <Value ([SupportedTAList] SEQUENCE OF)>, 'presence': 'mandatory'}
+        {'id': 21, 'criticality': 'ignore', 'Value': <Value ([PagingDRX] ENUMERATED)>, 'presence': 'mandatory'}
+        {'id': 147, 'criticality': 'ignore', 'Value': <Value ([UERetentionInformation] ENUMERATED)>, 'presence': 'optional'}
+        {'id': 204, 'criticality': 'ignore', 'Value': <Value ([NB-IoT-DefaultPagingDRX] ENUMERATED)>, 'presence': 'optional'}
+        {'id': 273, 'criticality': 'ignore', 'Value': <Value ([Extended-RANNodeName] SEQUENCE)>, 'presence': 'optional'}
     """
     def __init__(self, data: bytes = None):
         super().__init__(data)
+
+    def initiate(self, data: bytes = None) -> None:
+        if data:
+            self.PDU.from_aper(data)
+        else:
+            PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+            IEs = []
+            IEs.append({'id': 27, 'criticality': 'reject', 'value': ('GlobalRANNodeID', ('globalGNB-ID', {'pLMNIdentity': b'\x02\xf8Y', 'gNB-ID': ('gNB-ID', (1, 32))}))})
+            IEs.append({'id': 82, 'criticality': 'ignore', 'value': ('RANNodeName', 'TGRANSIM-gnb-208-95-1')})
+            IEs.append({'id': 102, 'criticality': 'reject', 'value': ('SupportedTAList', [{'tAC': b'\x00\xa0\x00', 'broadcastPLMNList': [{'pLMNIdentity': b'\x02\xf8Y', 'tAISliceSupportList': [{'s-NSSAI': {'sST': b'\xde', 'sD': b'\x00\x00{'}}]}]}])})
+            IEs.append({'id': 21, 'criticality': 'ignore', 'value': ('PagingDRX', 'v128')})
+            val = ('initiatingMessage', {'procedureCode': 21, 'criticality': 'reject', 'value': ('NGSetupRequest', {'protocolIEs': IEs})})
+            PDU.set_val(val)
+            self.PDU = PDU
 
     def _load_procedure(self):
         return NGAP.NGAP_PDU_Descriptions.NGAP_PDU
