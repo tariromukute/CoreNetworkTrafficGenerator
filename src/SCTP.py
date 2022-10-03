@@ -5,6 +5,7 @@ import binascii
 import logging
 import json
 import time
+import sctp
 
 from Ctx import ClientCtx, ServerCtx
 
@@ -21,9 +22,10 @@ class SCTPClient(ClientCtx):
 
     def _load_socket(self):
         # Create SCTP socket
-        sctp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_SCTP)
+        # sctp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_SCTP)
+        sk = sctp.sctpsocket_tcp(socket.AF_INET)
         # Return SCTP socket
-        return sctp_socket
+        return sk
 
     def _load_sctp_queue(self):
         # Create SCTP queue
@@ -82,7 +84,7 @@ class SCTPClient(ClientCtx):
                 # Get SCTP message from queue
                 sctp_message = self._sctp_queue.get()
                 # Send SCTP message
-                self._socket.send(sctp_message)
+                self._socket.sctp_send(sctp_message,ppid = socket.htonl(60))
                 # Log SCTP message
                 self.logger.info('_sctp_thread_function: sent SCTP message: {}'.format(sctp_message))
             # Sleep for 1 second

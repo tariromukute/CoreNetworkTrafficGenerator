@@ -1,7 +1,7 @@
 {
     "sctp": {
-        "port": 5000,
+        "port": 38412,
         "maxMessageSize": 262144,
-        "address": "127.0.0.1"
+        "address": "48.0.70.132"
     }
 }
