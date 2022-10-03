@@ -3,7 +3,7 @@ import logging
 import json
 import time
 from SCTP import SCTPClient, SCTPServer
-from NGAP import NGAPNonUEProcRANDispatcher, NGAPProc
+from NGAP import NGAPNonUEProcRANDispatcher, NGAPUEAssociatedProcDispatcher, NGAPProc
 # Set logging level
 logging.basicConfig(level=logging.INFO)
 
@@ -31,6 +31,16 @@ gNBcp.connect(server_config['sctp']['address'], server_config['sctp']['port'])
 
 # Send NGSetupRequest message to 5G Core)
 gNBcp._sctp_queue.put(nGSetupPDU_APER)
+
+# Get NGInitialUEMessage message. Creates the InitiatingMessage with default values
+nGInitialUEMessage = NGAPUEAssociatedProcDispatcher[15]()
+# Get NGInitialUEMessage PDU
+nGInitialUEMessagePDU = nGInitialUEMessage.get_pdu()
+# Get NGInitialUEMessage PDU APER
+nGInitialUEMessagePDU_APER = nGInitialUEMessagePDU.to_aper()
+
+# Send NGInitialUEMessage message to 5G Core)
+gNBcp._sctp_queue.put(nGInitialUEMessagePDU_APER)
 
 # Wait for 5 seconds
 time.sleep(5)
