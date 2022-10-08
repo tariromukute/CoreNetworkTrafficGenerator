@@ -1,0 +1,3 @@
+[submodule "CryptoMobile"]
+	path = CryptoMobile
+	url = https://github.com/P1sec/CryptoMobile.git

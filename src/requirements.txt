@@ -1,2 +1,0 @@
-pycrate==0.5.5
-pysctp==0.7.1

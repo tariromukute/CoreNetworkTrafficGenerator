@@ -19,6 +19,7 @@ class SCTPClient(ClientCtx):
         self._sctp_queue = self._load_sctp_queue()
         self._thread = self._load_thread(self._thread_function)
         self._listener_thread = self._load_listener(self._listener_thread_function)
+        self._rcv_queue = self._load_sctp_queue()
 
     def _load_socket(self):
         # Create SCTP socket
@@ -67,7 +68,7 @@ class SCTPClient(ClientCtx):
             # Log SCTP data
             self.logger.info('SCTP Client data: %s', binascii.hexlify(sctp_data).decode('utf-8'))
             # Put data in SCTP queue
-            # self.sctp_queue.put(sctp_data)
+            self._rcv_queue.put(sctp_data)
         # Close SCTP connection
         self._socket.close()
 
