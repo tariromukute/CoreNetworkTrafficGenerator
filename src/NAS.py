@@ -5,6 +5,7 @@ from abc import ABC, ABCMeta, abstractmethod
 from CryptoMobile.Milenage import Milenage
 from CryptoMobile.Milenage import make_OPc
 from CryptoMobile.conv import conv_501_A4
+from CryptoMobile.ECIES import *
 
 def byte_xor(ba1, ba2):
     """ XOR two byte strings """
@@ -96,8 +97,79 @@ class SecProtNASMessageProc(NASProc):
         """ Send data to the socket. """
         return b''
 
+    def create_req(self):
+        IEs = {}
+        IEs['5GMMHeaderSec'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 4 }
+        Msg = FGMMSecProtNASMessage(val=IEs)
+        return Msg
+
     def process(self, data: bytes) -> bytes:
+        Msg, err = parse_NAS_MO(unhexlify('7e034fe5375f007e005d110204f0f0f0f0e1360102'))
+        Ms, e = parse_NAS_MO(unhexlify('7e04c82f8d0600a03c57f5d1de4dd86f51f78670b4e3327da292e84eb075b9dc9584c3c7a80e4ed2ab303dd2fa949bed96dd43cffa7b59298c5f0dda155cb6'))
+        M = FGMMSecProtNASMessage()
+        Mx = FGMMSecurityModeCommand()
         return unhexlify('7e04c82f8d0600a03c57f5d1de4dd86f51f78670b4e3327da292e84eb075b9dc9584c3c7a80e4ed2ab303dd2fa949bed96dd43cffa7b59298c5f0dda155cb6')
+
+
+class SecurityModeProc(NASProc):
+
+    def __init__(self):
+        super().__init__()
+
+    def recv(self, data: bytes) -> bytes:
+        print("==== SecurityModeProc.recv")
+        b = process(data)
+        return send(b)
+
+    def send(self, data: bytes) -> bytes:
+        """ Send data to the socket. """
+        return b''
+
+    def process(self, data: bytes) -> bytes:
+        Msg, err = parse_NAS5G(data)
+
+        if not self.verify_security_capabilities(Msg):
+            return b''
+
+        if not self.verify_integrity_protection(Msg):
+            return b''
+
+        # Send Security Mode Complete
+        IEs = {}
+        IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0 }
+        IEs['NASContainer'] = { 'V': b'7e004179000d0102f8590000000000000000132e04f0f0f0f0' }
+        Msg = FGMMSecurityModeComplete(val=IEs)
+
+        # Encrypt NAS message
+        SecMsg = SecProtNASMessageProc().create_req()
+        SecMsg['NASMessage'].set_val(Msg.to_bytes())
+        k = unhexlify('0C0A34601D4F07677303652C0462535B')
+        SecMsg.encrypt(key=k, dir=0, fgea=1, seqnoff=0, bearer=1)
+        return SecMsg.to_bytes()
+
+    def verify_security_capabilities(self, msg) -> bool:
+        # algo = msg['5GMMSecurityModeCommand']['NASSecAlgo'].get_val()
+        return True
+
+    def verify_integrity_protection(self, msg) -> bool:
+        nas_integrity_protected = True
+        nas_integrity_algorithm = None
+        nas_integrity_key = None
+
+        # TODO: Check if NAS integrity protected
+        return nas_integrity_protected
+
+class RegistrationProc():
+
+    def create_req(self):
+        IEs = {}
+        IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65 }
+        IEs['NAS_KPI'] = { 'TSC': 0, 'Value': 7 }
+        IEs['5GSRegType'] = { 'FOR': 1, 'Value': 1 }
+        IEs['5GSID'] = { 'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': { 'PLMN': '20895', 'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': b'\x00\x00\x00\x00\x13'} }
+        IEs['UESecCap'] = { '5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0, '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0, '5G-IA6': 0, '5G-IA7': 0, 'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0, 'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0 }
+        Msg = FGMMRegistrationRequest(val=IEs)
+        return Msg.to_bytes()
 
 # Function to process NAS procedure
 def process_nas_procedure(data: bytes) -> bytes:
@@ -105,12 +177,16 @@ def process_nas_procedure(data: bytes) -> bytes:
     # Create NAS object
     NAS_PDU, err = NAS.parse_NAS5G(data)
     print(NAS_PDU)
+    print("--------------- Uplink NAS message ---------------")
+    print("-------- NAS message: %s --------" % NAS_PDU._name)
     # Print NAS PDU name
-    print(NAS_PDU._name)
+
     if NAS_PDU._name == '5GMMAuthenticationRequest':
         print("Received 5GMMAuthenticationRequest")
         return AuthenticationProc().recv(data)
     elif NAS_PDU._name == '5GMMSecProtNASMessage':
-        return SecProtNASMessageProc().process(data)
+        if NAS_PDU._by_name.count('5GMMSecurityModeCommand') > 0:
+            print("Received 5GMMSecurityModeCommand")
+            smc = NAS_PDU['5GMMSecurityModeCommand'].to_bytes()
+            return SecurityModeProc().process(smc)
     return None
-

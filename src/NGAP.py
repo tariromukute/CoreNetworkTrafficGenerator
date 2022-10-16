@@ -1,6 +1,6 @@
 import struct
 import time
-from NAS import process_nas_procedure
+from NAS import process_nas_procedure, RegistrationProc
 from pycrate_asn1dir import NGAP
 from binascii import unhexlify
 from abc import ABC, ABCMeta, abstractmethod
@@ -181,10 +181,11 @@ class NGInitialUEMessageProc(UEAssociatedNGAPProc):
         if data:
             self.PDU.from_aper(data)
         else:
+            NAS_PDU = RegistrationProc().create_req()
             IEs = []
             curTime = int(time.time()) + 2208988800 #1900 instead of 1970
             IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', 1)}) # RAN-UE-NGAP-ID must be unique for each UE
-            IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', b'~\x00Ay\x00\r\x01\x02\xf8Y\x00\x00\x00\x00\x00\x00\x00\x00\x13.\x04\xf0\xf0\xf0\xf0')})
+            IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', NAS_PDU) })
             IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': b'\x02\xf8Y', 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': b'\x02\xf8Y', 'tAC': b'\x00\xa0\x00'}, 'timeStamp': struct.pack("!I",curTime)}))})
             IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
             IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
@@ -264,7 +265,7 @@ class NGDownlinkNASTransportProc(UEAssociatedNGAPProc):
             obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': uplink_nas_pdu}
             uplink_nas_transport_pdu = uplink_nas_transport_proc.create_request(obj)
             return uplink_nas_transport_pdu
-        return uplink_nas_transport_pdu
+        return b''
 
 class NGUplinkNASTransportProc(UEAssociatedNGAPProc):
     """Uplink NAS Transport: TS 38.413, section 8.6.3
