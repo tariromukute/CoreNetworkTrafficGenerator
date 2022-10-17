@@ -1,17 +1,94 @@
 import struct
 import time
+from UE import UE
+import logging
+import threading
+from SCTP import SCTPClient, SCTPServer
 from NAS import process_nas_procedure, RegistrationProc
 from pycrate_asn1dir import NGAP
 from binascii import unhexlify
 from abc import ABC, ABCMeta, abstractmethod
 
 from Proc import Proc
+
+class GNB():
+    def __init__(self, client_config: dict, server_config) -> None:
+        self._sctp = SCTPClient(client_config)
+        self.ues = dict()
+        self.connect(server_config)
+        self._dispatch_thread = self._load_dispatch()
+        self.initiate()
+
+    def connect(self, server_config: dict) -> None:
+        logging.info("Connecting to 5G Core")
+        self._sctp.connect(server_config['sctp']['address'], server_config['sctp']['port'])
+
+    def disconnect(self) -> None:
+        logging.info("Disconnecting from 5G Core")
+        self._sctp.disconnect()
+
+    def initiate(self) -> None:
+        # Send NGSetupRequest
+        logging.info("Sending NGSetupRequest")
+        self._sctp._sctp_queue.put(NGAPProcDispatcher[21]().get_pdu().to_aper())
+    
+    def select_ngap_procedure(self, procedure_code: int) -> Proc:
+        return NGAPProcDispatcher[procedure_code]()
+
+    def _load_dispatch(self) -> threading.Thread:
+        dispatch_thread = threading.Thread(target=self._dispatch_thread_function)
+        dispatch_thread.start()
+        return dispatch_thread
+
+    def _dispatch_thread_function(self) -> None:
+        while True:
+            if not self._sctp._rcv_queue.empty():
+                data = self._sctp._rcv_queue.get()
+                PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+                PDU.from_aper(data)
+                procedureCode = PDU.get_val()[1]['procedureCode']
+                Proc = self.select_ngap_procedure(procedureCode)
+                pdu_res = Proc.process(data)
+                print(pdu_res)
+                if pdu_res:
+                    logging.info(pdu_res.to_aper())
+                    # Put data in SCTP queue
+                    self._sctp._sctp_queue.put(pdu_res.to_aper())
+
+    def add_ue(self, ran_ue_ngap_id, ue):
+        self.ues[ran_ue_ngap_id] = ue
+        # Start a registration procedure
+        ue.nas_proc = RegistrationProc()
+        pdu = ue.nas_proc.initiate()
+        # Create InitialUEMessage
+        initialUE = NGInitialUEMessageProc()
+        initialUE.initiate(ran_ue_ngap_id, pdu)
+
+        # Send Initial NAS message to Core Network
+        self._sctp._sctp_queue.put(initialUE.get_pdu().to_aper())
+
+    def get_ue(self, ran_ue_ngap_id):
+        return self.ues[ran_ue_ngap_id]
+
+    def get_ran_ue_ngap_id(self, ue):
+        for ran_ue_ngap_id, ue in self.ues.items():
+            if ue == ue:
+                return ran_ue_ngap_id
+        return None
+    
+    def remove_ue(self, ran_ue_ngap_id):
+        del self.ues[ran_ue_ngap_id]
+
+    def get_ues(self):
+        return self.ues
+
+    
 # Create NGAP Procedure class
 class NGAPProc(Proc, metaclass=ABCMeta):
     """ This class is the base class for all NGAP procedures."""
     def __init__(self, data: bytes = None):
         super().__init__(data)
-    
+
     def initiate(self, data: bytes = None) -> None:
         if data:
             self.PDU.from_aper(data)
@@ -177,20 +254,17 @@ class NGInitialUEMessageProc(UEAssociatedNGAPProc):
         {'id': 259, 'criticality': 'reject', 'Value': <Value ([NPN-AccessInformation] CHOICE)>, 'presence': 'optional'}
     """
 
-    def initiate(self, data: bytes = None) -> None:
-        if data:
-            self.PDU.from_aper(data)
-        else:
-            NAS_PDU = RegistrationProc().create_req()
-            IEs = []
-            curTime = int(time.time()) + 2208988800 #1900 instead of 1970
-            IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', 1)}) # RAN-UE-NGAP-ID must be unique for each UE
-            IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', NAS_PDU) })
-            IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': b'\x02\xf8Y', 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': b'\x02\xf8Y', 'tAC': b'\x00\xa0\x00'}, 'timeStamp': struct.pack("!I",curTime)}))})
-            IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
-            IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
-            val = ('initiatingMessage', {'procedureCode': 15, 'criticality': 'ignore', 'value': ('InitialUEMessage', {'protocolIEs': IEs})})
-            self.PDU.set_val(val)
+    def initiate(self, nas_pdu, id) -> None:
+        
+        IEs = []
+        curTime = int(time.time()) + 2208988800 #1900 instead of 1970
+        IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', id)}) # RAN-UE-NGAP-ID must be unique for each UE
+        IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', nas_pdu) })
+        IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': b'\x02\xf8Y', 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': b'\x02\xf8Y', 'tAC': b'\x00\xa0\x00'}, 'timeStamp': struct.pack("!I",curTime)}))})
+        IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
+        IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
+        val = ('initiatingMessage', {'procedureCode': 15, 'criticality': 'ignore', 'value': ('InitialUEMessage', {'protocolIEs': IEs})})
+        self.PDU.set_val(val)
 
     def process(self, data) -> bytes:
         # TODO: Implement this method
@@ -254,6 +328,8 @@ class NGDownlinkNASTransportProc(UEAssociatedNGAPProc):
         if not nas_pdu:
             return None
         
+        # Get UE
+        ue = self.get_ue[ran_ue_ngap_id]
         # Send the NAS PDU to UE
         uplink_nas_pdu = process_nas_procedure(nas_pdu)
 

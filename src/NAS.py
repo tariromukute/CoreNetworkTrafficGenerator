@@ -1,6 +1,7 @@
 from binascii import unhexlify, hexlify
 from pycrate_mobile import *
 from pycrate_mobile.NAS import *
+from UE import UE
 from abc import ABC, ABCMeta, abstractmethod
 from CryptoMobile.Milenage import Milenage
 from CryptoMobile.Milenage import make_OPc
@@ -15,8 +16,9 @@ def byte_xor(ba1, ba2):
 
 class NASProc(metaclass=ABCMeta):
     """ Base class for NAS Procedures. """
-    def __init__(self, data: bytes = None):
+    def __init__(self, ue: UE) -> None:
         print("NASProc.__init__")
+        self.ue = ue
 
     def recv(self, data: bytes) -> bytes:
         """ Receive data from the socket. """
@@ -35,8 +37,8 @@ class AuthenticationProc(NASProc):
 
         3GPP TS 33.501 version 15.2.0 Release 15: Figure 6.1.3.2-1: Authentication procedure for 5G AKA
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, ue: UE) -> None:
+        super().__init__(ue)
 
     def extract_req_parameters(msg):
         # Msg, err = parse_NAS_MO(unhexlify('7e0056020200002178c5aa53d14c2af655970a08ac5388ca2010b54abf5b068880000888d4e3e43c21ae'))
@@ -51,21 +53,33 @@ class AuthenticationProc(NASProc):
 
         sqn_xor_ak, amf, mac = Msg['AUTN']['AUTN'].get_val()
         _, rand = Msg['RAND'].get_val()
+        abba = Msg['ABBA'].get_val()
 
         Mil = Milenage(OP)
         AK = Mil.f5star(key, rand)
         SQN = byte_xor(AK, sqn_xor_ak)
         Mil.set_opc(make_OPc(key, OP))
         Mil.f1(key, rand, SQN=SQN, AMF=amf)
-        R = Mil.f2345(key, rand)
+        RES, CK, IK, _  = Mil.f2345(key, rand)
         sn_name = b"5G:mnc095.mcc208.3gppnetwork.org"
-        Res = conv_501_A4(R[1], R[2], sn_name, rand, R[0])
+        Res = conv_501_A4(CK, IK, sn_name, rand, RES)
 
         IEs = {}
         IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 87 }
         IEs['RES'] = unhexlify('b3982d2d4b458ba33ae509f5004110c5')
         Msg = FGMMAuthenticationResponse(val=IEs)
         
+        # Get K_AUSF
+        self.ue.k_ausf = conv_501_A2(CK, IK, sn_name, sqn_xor_ak)
+        # Get K_SEAF
+        self.ue.k_seaf = conv_501_A6(self.ue.k_ausf, sn_name)
+        # Get K_AMF
+        self.ue.k_amf = conv_501_A7(self.ue.k_seaf, self.ue.supi, abba)
+        # Get K_NAS_ENC
+        self.ue.k_nas_enc = conv_501_A8(self.ue.k_amf, alg_type=1, alg_id=1)
+        # Get K_NAS_INT
+        self.ue.k_nas_int = conv_501_A8(self.ue.k_amf, alg_type=1, alg_id=2)
+
         return Msg.to_bytes()
 
     def send(self, data: bytes) -> int:
@@ -86,8 +100,8 @@ class SecProtNASMessageProc(NASProc):
     """ 5GMM Security Protected NAS Message Procedure TS 23.502 Section
 
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, ue: UE) -> None:
+        super().__init__(ue)
 
     def recv(self, data: bytes) -> bytes:
         b = process(data)
@@ -113,8 +127,8 @@ class SecProtNASMessageProc(NASProc):
 
 class SecurityModeProc(NASProc):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, ue: UE) -> None:
+        super().__init__(ue)
 
     def recv(self, data: bytes) -> bytes:
         print("==== SecurityModeProc.recv")
@@ -141,10 +155,10 @@ class SecurityModeProc(NASProc):
         Msg = FGMMSecurityModeComplete(val=IEs)
 
         # Encrypt NAS message
-        SecMsg = SecProtNASMessageProc().create_req()
+        SecMsg = SecProtNASMessageProc(self.ue).create_req()
         SecMsg['NASMessage'].set_val(Msg.to_bytes())
         k = unhexlify('0C0A34601D4F07677303652C0462535B')
-        SecMsg.encrypt(key=k, dir=0, fgea=1, seqnoff=0, bearer=1)
+        SecMsg.encrypt(key=self.ue.key, dir=0, fgea=1, seqnoff=0, bearer=1)
         return SecMsg.to_bytes()
 
     def verify_security_capabilities(self, msg) -> bool:
@@ -161,7 +175,7 @@ class SecurityModeProc(NASProc):
 
 class RegistrationProc():
 
-    def create_req(self):
+    def initiate(self):
         IEs = {}
         IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65 }
         IEs['NAS_KPI'] = { 'TSC': 0, 'Value': 7 }
@@ -172,7 +186,7 @@ class RegistrationProc():
         return Msg.to_bytes()
 
 # Function to process NAS procedure
-def process_nas_procedure(data: bytes) -> bytes:
+def process_nas_procedure(data: bytes, ue: UE) -> bytes:
     """ Process NAS procedure. """
     # Create NAS object
     NAS_PDU, err = NAS.parse_NAS5G(data)
@@ -183,10 +197,10 @@ def process_nas_procedure(data: bytes) -> bytes:
 
     if NAS_PDU._name == '5GMMAuthenticationRequest':
         print("Received 5GMMAuthenticationRequest")
-        return AuthenticationProc().recv(data)
+        return AuthenticationProc().recv(data, ue)
     elif NAS_PDU._name == '5GMMSecProtNASMessage':
         if NAS_PDU._by_name.count('5GMMSecurityModeCommand') > 0:
             print("Received 5GMMSecurityModeCommand")
             smc = NAS_PDU['5GMMSecurityModeCommand'].to_bytes()
-            return SecurityModeProc().process(smc)
+            return SecurityModeProc().process(smc, ue)
     return None

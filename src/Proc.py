@@ -8,7 +8,7 @@ class Proc(metaclass=ABCMeta):
     def __init__(self, data: bytes = None):
         # Create PDU instance that will be instatiated by the _____PDU_Descriptions.____ class
         self.PDU = self._load_procedure()
-        self.initiate(data)
+        # self.initiate(data)
 
     @abstractmethod
     def initiate(self, data: bytes = None) -> None:
