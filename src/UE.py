@@ -1,5 +1,4 @@
-from typing import Set
-from NAS import process_nas_procedure, RegistrationProc
+from NAS import process_nas_procedure
 
 class UE():
     """ UE class """
@@ -15,7 +14,7 @@ class UE():
         self.imei = config['imei']
         self.imeiSv = config['imeiSv']
         self.tac = config['tac']
-        self.nas_key_set = Set()
+        self.nas_key_set = set()
         self.amf_ue_ngap_id = None
         self.sqn = None
         self.rand = None

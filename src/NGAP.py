@@ -30,10 +30,13 @@ class GNB():
     def initiate(self) -> None:
         # Send NGSetupRequest
         logging.info("Sending NGSetupRequest")
-        self._sctp._sctp_queue.put(NGAPProcDispatcher[21]().get_pdu().to_aper())
+        ngSetupRequest = NGSetupProc()
+        ngSetupRequest.initiate()
+        nGSetupPDU_APER = ngSetupRequest.get_pdu().to_aper()
+        self._sctp._sctp_queue.put(nGSetupPDU_APER)
     
     def select_ngap_procedure(self, procedure_code: int) -> Proc:
-        return NGAPProcDispatcher[procedure_code]()
+        return NGAPProcDispatcher[procedure_code](self)
 
     def _load_dispatch(self) -> threading.Thread:
         dispatch_thread = threading.Thread(target=self._dispatch_thread_function)
@@ -62,7 +65,7 @@ class GNB():
         pdu = ue.nas_proc.initiate()
         # Create InitialUEMessage
         initialUE = NGInitialUEMessageProc()
-        initialUE.initiate(ran_ue_ngap_id, pdu)
+        initialUE.initiate(pdu, ran_ue_ngap_id)
 
         # Send Initial NAS message to Core Network
         self._sctp._sctp_queue.put(initialUE.get_pdu().to_aper())
@@ -86,7 +89,8 @@ class GNB():
 # Create NGAP Procedure class
 class NGAPProc(Proc, metaclass=ABCMeta):
     """ This class is the base class for all NGAP procedures."""
-    def __init__(self, data: bytes = None):
+    def __init__(self, gNB: GNB, data: bytes = None):
+        self.gNB = gNB
         super().__init__(data)
 
     def initiate(self, data: bytes = None) -> None:
@@ -329,9 +333,9 @@ class NGDownlinkNASTransportProc(UEAssociatedNGAPProc):
             return None
         
         # Get UE
-        ue = self.get_ue[ran_ue_ngap_id]
+        ue = self.gNB.get_ue(ran_ue_ngap_id)
         # Send the NAS PDU to UE
-        uplink_nas_pdu = process_nas_procedure(nas_pdu)
+        uplink_nas_pdu = process_nas_procedure(nas_pdu, ue)
 
         # Create the Uplink NAS Transport procedure
         if uplink_nas_pdu:

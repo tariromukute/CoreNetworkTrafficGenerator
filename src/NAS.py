@@ -1,11 +1,11 @@
 from binascii import unhexlify, hexlify
 from pycrate_mobile import *
 from pycrate_mobile.NAS import *
-from UE import UE
+import UE
 from abc import ABC, ABCMeta, abstractmethod
 from CryptoMobile.Milenage import Milenage
 from CryptoMobile.Milenage import make_OPc
-from CryptoMobile.conv import conv_501_A4
+from CryptoMobile.conv import *
 from CryptoMobile.ECIES import *
 
 def byte_xor(ba1, ba2):
@@ -52,33 +52,57 @@ class AuthenticationProc(NASProc):
         key = unhexlify('0C0A34601D4F07677303652C0462535B')
 
         sqn_xor_ak, amf, mac = Msg['AUTN']['AUTN'].get_val()
+        print("sqn_xor_ak: ", hexlify(sqn_xor_ak))
+        print("amf: ", hexlify(amf))
+        print("mac: ", hexlify(mac))
+
         _, rand = Msg['RAND'].get_val()
-        abba = Msg['ABBA'].get_val()
+        print("rand: ", hexlify(rand))
+
+        abba = Msg['ABBA']['V'].get_val()
+        print("abba: ", hexlify(abba))
 
         Mil = Milenage(OP)
         AK = Mil.f5star(key, rand)
+        print("AK: ", hexlify(AK))
+
         SQN = byte_xor(AK, sqn_xor_ak)
+        print("SQN: ", hexlify(SQN))
+
         Mil.set_opc(make_OPc(key, OP))
-        Mil.f1(key, rand, SQN=SQN, AMF=amf)
+        Mil.f1(unhexlify(self.ue.key), rand, SQN=SQN, AMF=amf)
         RES, CK, IK, _  = Mil.f2345(key, rand)
+        print("RES: ", hexlify(RES))
+        print("CK: ", hexlify(CK))
+        print("IK: ", hexlify(IK))
+
         sn_name = b"5G:mnc095.mcc208.3gppnetwork.org"
         Res = conv_501_A4(CK, IK, sn_name, rand, RES)
+        print("Res: ", hexlify(Res))
 
         IEs = {}
         IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 87 }
-        IEs['RES'] = unhexlify('b3982d2d4b458ba33ae509f5004110c5')
+        IEs['RES'] = { 'V': Res }
         Msg = FGMMAuthenticationResponse(val=IEs)
         
         # Get K_AUSF
         self.ue.k_ausf = conv_501_A2(CK, IK, sn_name, sqn_xor_ak)
+        print("K_AUSF: ", hexlify(self.ue.k_ausf))
         # Get K_SEAF
         self.ue.k_seaf = conv_501_A6(self.ue.k_ausf, sn_name)
+        print("K_SEAF: ", hexlify(self.ue.k_seaf))
         # Get K_AMF
-        self.ue.k_amf = conv_501_A7(self.ue.k_seaf, self.ue.supi, abba)
+        self.ue.k_amf = conv_501_A7(self.ue.k_seaf, self.ue.supi.encode('ascii'), abba)
+        print("K_AMF: ", hexlify(self.ue.k_amf))
         # Get K_NAS_ENC
         self.ue.k_nas_enc = conv_501_A8(self.ue.k_amf, alg_type=1, alg_id=1)
+        # Get least significate 16 bytes from K_NAS_ENC 32 bytes
+        self.ue.k_nas_enc = self.ue.k_nas_enc[16:]
+        print("K_NAS_ENC: ", hexlify(self.ue.k_nas_enc))
         # Get K_NAS_INT
         self.ue.k_nas_int = conv_501_A8(self.ue.k_amf, alg_type=1, alg_id=2)
+        self.ue.k_nas_int = self.ue.k_nas_int[16:]
+        print("K_NAS_INT: ", hexlify(self.ue.k_nas_int))
 
         return Msg.to_bytes()
 
@@ -158,7 +182,9 @@ class SecurityModeProc(NASProc):
         SecMsg = SecProtNASMessageProc(self.ue).create_req()
         SecMsg['NASMessage'].set_val(Msg.to_bytes())
         k = unhexlify('0C0A34601D4F07677303652C0462535B')
-        SecMsg.encrypt(key=self.ue.key, dir=0, fgea=1, seqnoff=0, bearer=1)
+        print("k: ", len(self.ue.k_nas_int), self.ue.k_nas_int)
+        SecMsg.mac_compute(key=self.ue.k_nas_int, dir=0, fgia=1, seqnoff=0, bearer=1)
+        SecMsg.encrypt(key=self.ue.k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
         return SecMsg.to_bytes()
 
     def verify_security_capabilities(self, msg) -> bool:
@@ -197,10 +223,10 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
 
     if NAS_PDU._name == '5GMMAuthenticationRequest':
         print("Received 5GMMAuthenticationRequest")
-        return AuthenticationProc().recv(data, ue)
+        return AuthenticationProc(ue).recv(data)
     elif NAS_PDU._name == '5GMMSecProtNASMessage':
         if NAS_PDU._by_name.count('5GMMSecurityModeCommand') > 0:
             print("Received 5GMMSecurityModeCommand")
             smc = NAS_PDU['5GMMSecurityModeCommand'].to_bytes()
-            return SecurityModeProc().process(smc, ue)
+            return SecurityModeProc(ue).process(smc)
     return None

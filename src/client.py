@@ -25,15 +25,15 @@ gNB = GNB(client_config, server_config)
 
 # Create UE config
 ue_config = {
-    'supi': 'imsi-2089500007487',
+    'supi': '208950000000031',
     'mcc': '208',
     'mnc': '95',
-    'key': '00112233445566778899AABBCCDDEEFF',
-    'op': '6BCD4597E8A7B3F2D1846A5BDF6582B7',
-    'op_type': 'OP',
+    'key': '0C0A34601D4F07677303652C0462535B',
+    'op': '63bfa50ee6523365ff14c1f45f88737d',
+    'op_type': 'OPC',
     'amf': '8000',
-    'imei': '123456789012345',
-    'imeiSv': '12',
+    'imei': '356938035643803',
+    'imeiSv': '0035609204079514',
     'tac': '0001'
 }
 
