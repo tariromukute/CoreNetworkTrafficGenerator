@@ -52,6 +52,7 @@ class AuthenticationProc(NASProc):
         key = unhexlify('0C0A34601D4F07677303652C0462535B')
 
         sqn_xor_ak, amf, mac = Msg['AUTN']['AUTN'].get_val()
+        print("AUTN: ",  Msg['AUTN'])
         print("sqn_xor_ak: ", hexlify(sqn_xor_ak))
         print("amf: ", hexlify(amf))
         print("mac: ", hexlify(mac))
@@ -63,13 +64,13 @@ class AuthenticationProc(NASProc):
         print("abba: ", hexlify(abba))
 
         Mil = Milenage(OP)
+        Mil.set_opc(OP)
         AK = Mil.f5star(key, rand)
         print("AK: ", hexlify(AK))
 
         SQN = byte_xor(AK, sqn_xor_ak)
         print("SQN: ", hexlify(SQN))
 
-        Mil.set_opc(make_OPc(key, OP))
         Mil.f1(unhexlify(self.ue.key), rand, SQN=SQN, AMF=amf)
         RES, CK, IK, _  = Mil.f2345(key, rand)
         print("RES: ", hexlify(RES))
@@ -82,7 +83,7 @@ class AuthenticationProc(NASProc):
 
         IEs = {}
         IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 87 }
-        IEs['RES'] = { 'V': Res }
+        IEs['RES'] = Res
         Msg = FGMMAuthenticationResponse(val=IEs)
         
         # Get K_AUSF
@@ -96,14 +97,15 @@ class AuthenticationProc(NASProc):
         print("K_AMF: ", hexlify(self.ue.k_amf))
         # Get K_NAS_ENC
         self.ue.k_nas_enc = conv_501_A8(self.ue.k_amf, alg_type=1, alg_id=1)
+        print("K_NAS_ENC 32: ", hexlify(self.ue.k_nas_enc))
         # Get least significate 16 bytes from K_NAS_ENC 32 bytes
         self.ue.k_nas_enc = self.ue.k_nas_enc[16:]
-        print("K_NAS_ENC: ", hexlify(self.ue.k_nas_enc))
+        print("K_NAS_ENC 16: ", hexlify(self.ue.k_nas_enc))
         # Get K_NAS_INT
-        self.ue.k_nas_int = conv_501_A8(self.ue.k_amf, alg_type=1, alg_id=2)
+        self.ue.k_nas_int = conv_501_A8(self.ue.k_amf, alg_type=2, alg_id=1)
+        print("K_NAS_INT 32: ", hexlify(self.ue.k_nas_int))
         self.ue.k_nas_int = self.ue.k_nas_int[16:]
-        print("K_NAS_INT: ", hexlify(self.ue.k_nas_int))
-
+        print("K_NAS_INT 16: ", hexlify(self.ue.k_nas_int))
         return Msg.to_bytes()
 
     def send(self, data: bytes) -> int:
@@ -175,16 +177,17 @@ class SecurityModeProc(NASProc):
         # Send Security Mode Complete
         IEs = {}
         IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0 }
-        IEs['NASContainer'] = { 'V': b'7e004179000d0102f8590000000000000000132e04f0f0f0f0' }
+        IEs['IMEISV'] = unhexlify(self.ue.imeiSv)
+        IEs['NASContainer'] = RegistrationProc().initiate()
         Msg = FGMMSecurityModeComplete(val=IEs)
-
+        print("==== SecurityModeProc.send")
+        print(Msg)
         # Encrypt NAS message
         SecMsg = SecProtNASMessageProc(self.ue).create_req()
         SecMsg['NASMessage'].set_val(Msg.to_bytes())
-        k = unhexlify('0C0A34601D4F07677303652C0462535B')
-        print("k: ", len(self.ue.k_nas_int), self.ue.k_nas_int)
-        SecMsg.mac_compute(key=self.ue.k_nas_int, dir=0, fgia=1, seqnoff=0, bearer=1)
         SecMsg.encrypt(key=self.ue.k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
+        SecMsg.mac_compute(key=self.ue.k_nas_int, dir=0, fgia=1, seqnoff=0, bearer=1)
+        print(SecMsg)
         return SecMsg.to_bytes()
 
     def verify_security_capabilities(self, msg) -> bool:
