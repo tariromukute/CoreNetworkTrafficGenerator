@@ -3,6 +3,7 @@
 ## Requirements
 
 - pycrate `pip install pycrate`
+- headers for pysctp `sudo apt-get install python3-dev`
 - pysctp `pip install pysctp`
 - CryptoMobile (See the submodule for installation)
 
