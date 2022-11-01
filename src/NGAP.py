@@ -8,6 +8,8 @@ from NAS import process_nas_procedure, RegistrationProc
 from pycrate_asn1dir import NGAP
 from binascii import unhexlify
 from abc import ABC, ABCMeta, abstractmethod
+from pycrate_mobile.NAS import *
+import queue
 
 from Proc import Proc
 
@@ -16,7 +18,9 @@ class GNB():
         self._sctp = SCTPClient(client_config)
         self.ues = dict()
         self.connect(server_config)
+        self._nas_queue = self._load_nas_queue()
         self._dispatch_thread = self._load_dispatch()
+        self._nas_send_thread = self._load_nas_send()
         self.initiate()
 
     def connect(self, server_config: dict) -> None:
@@ -38,6 +42,10 @@ class GNB():
     def select_ngap_procedure(self, procedure_code: int) -> Proc:
         return NGAPProcDispatcher[procedure_code](self)
 
+    def _load_nas_queue(self):
+        # Create SCTP queue
+        return queue.Queue()
+
     def _load_dispatch(self) -> threading.Thread:
         dispatch_thread = threading.Thread(target=self._dispatch_thread_function)
         dispatch_thread.start()
@@ -58,8 +66,67 @@ class GNB():
                     # Put data in SCTP queue
                     self._sctp._sctp_queue.put(pdu_res.to_aper())
 
+    def _load_nas_send(self):
+        nas_send_thread = threading.Thread(target=self._nas_send_thread_function)
+        nas_send_thread.start()
+        return nas_send_thread
+
+    def _nas_send_thread_function(self):
+        while True:
+            if not self._nas_queue.empty():
+                data = self._nas_queue.get()
+                PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+                Msg, err = parse_NAS5G(data)
+                if err:
+                    print("Error processing nas")
+                    continue
+                # Check if it is a NAS for uplink
+                print(Msg._name)
+                if Msg._name == '5GMMSecProtNASMessage':
+                    # Create uplink NAS transport
+                    # ran_ue_ngap_id = Msg['5GMMHeader']['5GMMMessageIdentity'].get_val()
+                    ran_ue_ngap_id = 1
+                    amf_ue_ngap_id = self.get_ue(ran_ue_ngap_id).amf_ue_ngap_id
+                    ue = self.get_ue(ran_ue_ngap_id)
+                    # ue.nas_proc.process(Msg['5GMMHeader']['5GMMMessageIdentity'].get_val())
+                    uplink_nas_transport_proc = NGUplinkNASTransportProc()
+                    # Create obj for the Uplink NAS Transport procedure
+                    obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': Msg.to_bytes()}
+                    uplink_nas_transport_pdu = uplink_nas_transport_proc.create_request(obj)
+                    print("Sending uplink message")
+                    self._sctp._sctp_queue.put(uplink_nas_transport_pdu.to_aper())
+                # else if it's an initial NAS message
+                elif Msg._name == '5GMMMessage':
+                    # Create Initial UE Message
+                    # ran_ue_ngap_id = Msg['5GMMHeader']['5GMMMessageIdentity'].get_val()
+                    ran_ue_ngap_id = 1
+                    ue = self.get_ue(ran_ue_ngap_id)
+                    # ue.nas_proc.process(Msg['5GMMHeader']['5GMMMessageIdentity'].get_val())
+                    initial_ue_message_proc = NGInitialUEMessageProc()
+                    # Create obj for the Initial UE Message procedure
+                    obj = {'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': Msg.to_bytes()}
+                    initial_ue_message_pdu = initial_ue_message_proc.create_request(obj)
+                    print("Sending initial message")
+                    self._sctp._sctp_queue.put(initial_ue_message_pdu.to_aper())
+                else: # Create Uplink NAS Transport
+                    # Create uplink NAS transport
+                    # ran_ue_ngap_id = Msg['5GMMHeader']['5GMMMessageIdentity'].get_val()
+                    ran_ue_ngap_id = 1
+                    amf_ue_ngap_id = self.get_ue(ran_ue_ngap_id).amf_ue_ngap_id
+                    print("amf_ue_ngap_id ", amf_ue_ngap_id)
+                    ue = self.get_ue(ran_ue_ngap_id)
+                    # ue.nas_proc.process(Msg['5GMMHeader']['5GMMMessageIdentity'].get_val())
+                    uplink_nas_transport_proc = NGUplinkNASTransportProc()
+                    # Create obj for the Uplink NAS Transport procedure
+                    obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': Msg.to_bytes()}
+                    uplink_nas_transport_pdu = uplink_nas_transport_proc.create_request(obj)
+                    print("Sending uplink message")
+                    self._sctp._sctp_queue.put(uplink_nas_transport_pdu.to_aper())
+
     def add_ue(self, ran_ue_ngap_id, ue):
         self.ues[ran_ue_ngap_id] = ue
+        # Pass nas queue to ue
+        ue.set_nas_queue(self._nas_queue)
         # Start a registration procedure
         ue.nas_proc = RegistrationProc()
         pdu = ue.nas_proc.initiate()
@@ -334,18 +401,20 @@ class NGDownlinkNASTransportProc(UEAssociatedNGAPProc):
         
         # Get UE
         ue = self.gNB.get_ue(ran_ue_ngap_id)
+        # Set amf_ue_ngap_id
+        ue.amf_ue_ngap_id = amf_ue_ngap_id
         # Send the NAS PDU to UE
         uplink_nas_pdu = process_nas_procedure(nas_pdu, ue)
 
-        # Create the Uplink NAS Transport procedure
-        if uplink_nas_pdu:
-            print("Sending Uplink NAS Transport")
-            uplink_nas_transport_proc = NGUplinkNASTransportProc()
-            # Create obj for the Uplink NAS Transport procedure
-            obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': uplink_nas_pdu}
-            uplink_nas_transport_pdu = uplink_nas_transport_proc.create_request(obj)
-            return uplink_nas_transport_pdu
-        return b''
+        # # Create the Uplink NAS Transport procedure
+        # if uplink_nas_pdu:
+        #     print("Sending Uplink NAS Transport")
+        #     uplink_nas_transport_proc = NGUplinkNASTransportProc()
+        #     # Create obj for the Uplink NAS Transport procedure
+        #     obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': uplink_nas_pdu}
+        #     uplink_nas_transport_pdu = uplink_nas_transport_proc.create_request(obj)
+        #     return uplink_nas_transport_pdu
+        # return b''
 
 class NGUplinkNASTransportProc(UEAssociatedNGAPProc):
     """Uplink NAS Transport: TS 38.413, section 8.6.3
@@ -462,16 +531,49 @@ class NGInitialContextSetupProc(UEAssociatedNGAPProc):
         """ This is not applicable for the core network traffic generator """
         pass
 
-    def create_response(self, data: bytes = None) -> None:
+    def create_response(self, obj = None, data: bytes = None):
+        amf_ue_ngap_id = obj['amf_ue_ngap_id'] if 'amf_ue_ngap_id' in obj else 1
+        ran_ue_ngap_id = obj['ran_ue_ngap_id'] if 'ran_ue_ngap_id' in obj else 1
+        PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
         IEs = []
         curTime = int(time.time()) + 2208988800 #1900 instead of 1970
-        IEs.append({'id': 10, 'criticality': 'ignore', 'value': ('AMF-UE-NGAP-ID', 1)})
-        IEs.append({'id': 85, 'criticality': 'ignore', 'value': ('RAN-UE-NGAP-ID', 1)})
+        IEs.append({'id': 10, 'criticality': 'ignore', 'value': ('AMF-UE-NGAP-ID', amf_ue_ngap_id)})
+        IEs.append({'id': 85, 'criticality': 'ignore', 'value': ('RAN-UE-NGAP-ID', ran_ue_ngap_id)})
         val = ('successfulOutcome', {'procedureCode': 14, 'criticality': 'reject', 'value': ('InitialContextSetupResponse', {'protocolIEs': IEs})})
-        self.PDU.set_val(val)
+        PDU.set_val(val)
+        return PDU
 
     def process(self, data) -> bytes:
-        return b''
+        PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+        PDU.from_aper(data)
+        # Extract IE values
+        IEs = PDU.get_val()[1]['value'][1]['protocolIEs']
+        # Extract AMF-UE-NGAP-ID
+        amf_ue_ngap_id = next((ie['value'][1] for ie in IEs if ie['id'] == 10), None)
+        # Extract RAN-UE-NGAP-ID
+        ran_ue_ngap_id = next((ie['value'][1] for ie in IEs if ie['id'] == 85), None)
+        # Extract the NAS PDU
+        nas_pdu = next((ie['value'][1] for ie in IEs if ie['id'] == 38), None)
+        if not nas_pdu:
+            return None
+        
+        # Get UE
+        ue = self.gNB.get_ue(ran_ue_ngap_id)
+        # Send the NAS PDU to UE
+        uplink_nas_pdu = process_nas_procedure(nas_pdu, ue)
+
+        # Create the Uplink NAS Transport procedure
+        if uplink_nas_pdu:
+            print("Sending Uplink NAS Transport")
+            uplink_nas_transport_proc = NGUplinkNASTransportProc()
+            # Create obj for the Uplink NAS Transport procedure
+            obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': uplink_nas_pdu}
+            uplink_nas_transport_pdu = uplink_nas_transport_proc.create_request(obj)
+            return uplink_nas_transport_pdu
+        else:
+            obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': uplink_nas_pdu}
+            pdu = self.create_response(obj)
+            return pdu
 
 class NGPDUSessionResourceSetupProc(UEAssociatedNGAPProc):
     """PDU Session Resource Setup: TS 38.413, section 8.2.1

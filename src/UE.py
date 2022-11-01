@@ -38,18 +38,24 @@ class UE():
         self.ue_network_capability = None
         self.nas_proc = None
         self.nas_pdu = None
+        self._nas_queue = None
     
     def process(self, data: bytes) -> bytes:
         """ Process the NAS message. """
         return process_nas_procedure(data, self)
 
     def send(self, data: bytes) -> bytes:
-        """ Send data to the socket. """
-        pass
+        # Put data on quene
+        if data:
+            self._nas_queue.put(data)
 
     def recv(self, data: bytes) -> bytes:
         """ Receive data from the socket. """
         pass
+
+    def set_nas_queue(self, nas_queue):
+        """ Set the NAS queue. """
+        self._nas_queue = nas_queue
 
     
     
