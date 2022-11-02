@@ -40,8 +40,13 @@ ue_config = {
 # Create UE
 ue = UE(ue_config)
 
+supi = ue.supi
+# Get last 10 digits of supi and convert to int
+ue_id = int(supi[-10:])
+
+ran_ue_ngap_id = ue_id
 # Add UE to NGAP
-gNB.add_ue(1, ue)
+gNB.add_ue(ran_ue_ngap_id, ue)
 
 time.sleep(30)
 

@@ -47,7 +47,8 @@ class UE():
     def send(self, data: bytes) -> bytes:
         # Put data on quene
         if data:
-            self._nas_queue.put(data)
+            # Send object with data and supi
+            self._nas_queue.put((data, self.supi))
 
     def recv(self, data: bytes) -> bytes:
         """ Receive data from the socket. """

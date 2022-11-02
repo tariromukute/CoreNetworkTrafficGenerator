@@ -265,10 +265,17 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
     print("-------- NAS message: %s --------" % NAS_PDU._name)
     # Print NAS PDU name
 
-    if NAS_PDU._name == '5GMMAuthenticationRequest':
+    if not ue.amf_ue_ngap_id: # If AMF UE NGAP ID is not set send registration request
+        print("AMF UE NGAP ID not set")
+        # Create Registration Request
+        RegReq = RegistrationProc().initiate()
+        # Send Registration Request
+        return RegReq.to_bytes()
+    elif NAS_PDU._name == '5GMMAuthenticationRequest':
         print("Received 5GMMAuthenticationRequest")
         tx_nas_pdu = AuthenticationProc(ue).recv(data)
-        ue.send(tx_nas_pdu)
+        # ue.send(tx_nas_pdu)
+        return tx_nas_pdu
     elif NAS_PDU._name == '5GMMSecProtNASMessage':
         # Check if NAS message is integrity protected
         DEC_PDU = SecProtNASMessageProc(ue).process(data)
@@ -278,12 +285,36 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
             print("Received 5GMMSecurityModeCommand")
             smc = DEC_PDU['5GMMSecurityModeCommand'].to_bytes()
             tx_nas_pdu = SecurityModeProc(ue).process(smc)
-            ue.send(tx_nas_pdu)
+            # ue.send(tx_nas_pdu)
+            return tx_nas_pdu
         elif DEC_PDU._name == '5GMMRegistrationAccept':
             print("Received 5GMMRegistrationAccept")
             ra = DEC_PDU.to_bytes()
             tx_nas_pdu = RegistrationAcceptProc().process(ra)
             # Send NAS message
-            ue.send(tx_nas_pdu)
+            # ue.send(tx_nas_pdu)
+            return tx_nas_pdu
 
     return None
+
+class NAS():
+    
+    def __init__(self, nas_dl_queue: Queue, nas_ul_queue: Queue):
+        self.nas_dl_queue = nas_dl_queue
+        self.nas_ul_queue = nas_ul_queue
+
+    def process_nas_dl(self):
+        while True:
+            ue, data = self.nas_dl_queue.get()
+            if data is None:
+                break
+            else:
+                tx_nas_pdu = process_nas_procedure(data, ue)
+                if tx_nas_pdu is not None:
+                    self.nas_ul_queue.put((ue.supi, tx_nas_pdu))
+    
+    def run(self):
+        nas_dl_thread = Thread(target=self.process_nas_dl)
+        nas_dl_thread.start()
+
+        nas_dl_thread.join()
