@@ -15,23 +15,22 @@ from Proc import Proc
 
 class GNB():
     def __init__(self, client_config: dict, server_config: dict,  ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ues) -> None:
-        self._sctp = SCTPClient(client_config)
-        self.ues = ues # A ctypes array contain the UEs that have been initialized
-        self.connect(server_config)
+        self.ues = [None for i in range(100)] # A ctypes array contain the UEs that have been initialized
         self.ngap_dl_queue = ngap_dl_queue
         self.ngap_ul_queue = ngap_ul_queue
         self.nas_dl_queue = nas_dl_queue
         self.nas_ul_queue = nas_ul_queue
         self.ues_queue = ues_queue
+
+    def run(self) -> None:
+        """ Run the gNB """
+        logging.info("Starting gNB")
+        self.ngap_dl_thread = self._load_ngap_dl_thread(self._ngap_dl_thread_function)
+        self.nas_dl_thread = self._load_nas_ul_thread(self._nas_ul_thread_function)
+        self.ues_thread = self._load_ues_thread(self._ues_thread_function)
+        # Wait for SCTP to be connected
+        time.sleep(2)
         self.initiate()
-
-    def connect(self, server_config: dict) -> None:
-        logging.info("Connecting to 5G Core")
-        self._sctp.connect(server_config['sctp']['address'], server_config['sctp']['port'])
-
-    def disconnect(self) -> None:
-        logging.info("Disconnecting from 5G Core")
-        self._sctp.disconnect()
 
     def initiate(self) -> None:
         # Send NGSetupRequest
@@ -39,7 +38,8 @@ class GNB():
         ngSetupRequest = NGSetupProc()
         ngSetupRequest.initiate()
         nGSetupPDU_APER = ngSetupRequest.get_pdu().to_aper()
-        self._sctp._sctp_queue.put(nGSetupPDU_APER)
+        logging.info("Sending NGSetupRequest to 5G Core with size: %d", len(nGSetupPDU_APER))
+        self.ngap_ul_queue.put(nGSetupPDU_APER)
     
     def select_ngap_dl_procedure(self, procedure_code: int) -> Proc:
         return NGAPProcDispatcher[procedure_code](self)
@@ -50,12 +50,18 @@ class GNB():
         else:
             return NGUplinkNASTransportProc(self)
 
-    def _load_ngap_dl_thread(self):
-        ngap_dl_thread = threading.Thread(target=self._ngap_dl_thread_function)
+    def _load_ngap_dl_thread(self, ngap_dl_thread_function):
+        """ Load the thread that will handle NGAP DownLink messages from 5G Core """
+        ngap_dl_thread = threading.Thread(target=ngap_dl_thread_function)
         ngap_dl_thread.start()
         return ngap_dl_thread
 
     def _ngap_dl_thread_function(self) -> None:
+        """ This thread function will read from queue and handle NGAP DownLink messages from 5G Core 
+        
+            It will then select the appropriate NGAP procedure to handle the message. Where the procedure
+            returns an NAS PDU, it will be put in the queue to be sent to the UE
+        """
         while True:
             if not self.ngap_dl_queue.empty():
                 data = self.ngap_dl_queue.get()
@@ -69,12 +75,18 @@ class GNB():
                 if nas_pdu:
                     self.nas_dl_queue.put(nas_pdu)
     
-    def _load_nas_ul_thread(self):
-        nas_ul_thread = threading.Thread(target=self._nas_ul_thread_function)
+    def _load_nas_ul_thread(self, nas_ul_thread_function):
+        """ Load the thread that will handle NAS UpLink messages from UE """
+        nas_ul_thread = threading.Thread(target=nas_ul_thread_function)
         nas_ul_thread.start()
         return nas_ul_thread
 
     def _nas_ul_thread_function(self) -> None:
+        """ This thread function will read from queue NAS UpLink messages from UE 
+
+            It will then select the appropriate NGAP procedure to put the NAS message in
+            and put the NGAP message in the queue to be sent to 5G Core
+        """
         while True:
             if not self.nas_ul_queue.empty():
                 supi, data = self.nas_ul_queue.get()
@@ -86,42 +98,32 @@ class GNB():
                     continue
                 amf_ue_ngap_id = self.get_ue(ran_ue_ngap_id).amf_ue_ngap_id
                 obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': Msg.to_bytes()}
-                ngap_proc = self.select_ngap_ul_procedure(nas_type)
-                ngap_pdu = ngap_proc.send(Msg.to_bytes(), ran_ue_ngap_id)
-                self.ngap_ul_queue.put(ngap_pdu.to_aper())
+                ngap_proc = self.select_ngap_ul_procedure(Msg._name)
+                ngap_pdu = ngap_proc.send(Msg.to_bytes(), obj)
+                if ngap_pdu:
+                    self.ngap_ul_queue.put(ngap_pdu.to_aper())
 
-    def _load_ues_thread(self):
-        ues_thread = threading.Thread(target=self._ues_thread_function)
+    
+    def _load_ues_thread(self, ues_thread_function):
+        """ Load the thread that will handle new UEs being added to gNB """
+        ues_thread = threading.Thread(target=ues_thread_function)
         ues_thread.start()
         return ues_thread
 
     def _ues_thread_function(self) -> None:
+        """ This thread function will read from queue and handle new UEs being added to gNB 
+        
+            It will then initiate the UE to start the registration procedure
+        """
         while True:
             if not self.ues_queue.empty():
                 ue = self.ues_queue.get()
                 ran_ue_ngap_id = int(ue.supi[-10:])
                 # Check if UE is already registered
-                if ues[ran_ue_ngap_id]:
+                if self.ues[ran_ue_ngap_id]:
                     continue
                 self.ues[ran_ue_ngap_id] = ue
-                # Send InitialUEMessage
-                logging.info("Sending InitialUEMessage")
-                initialUEMessage = InitialUEMessageProc(self, ue)
-                initialUEMessage.initiate()
-                self.add_ue(ue.ran_ue_ngap_id, ue)
-    def add_ue(self, ran_ue_ngap_id, ue):
-        self.ues[ran_ue_ngap_id] = ue
-        # Pass nas queue to ue
-        ue.set_nas_queue(self._nas_queue)
-        # Start a registration procedure
-        ue.nas_proc = RegistrationProc()
-        pdu = ue.nas_proc.initiate()
-        # Create InitialUEMessage
-        initialUE = NGInitialUEMessageProc()
-        initialUE.initiate(pdu, ran_ue_ngap_id)
-
-        # Send Initial NAS message to Core Network
-        self._sctp._sctp_queue.put(initialUE.get_pdu().to_aper())
+                ue.initiate()
 
     def get_ue(self, ran_ue_ngap_id):
         return self.ues[ran_ue_ngap_id]

@@ -7,6 +7,7 @@ class UE():
         self.supi = config['supi']
         self.mcc = config['mcc']
         self.mnc = config['mnc']
+        self.msin = config['supi'][-10:]
         self.key = config['key']
         self.op = config['op']
         self.op_type = config['op_type']
@@ -40,6 +41,10 @@ class UE():
         self.nas_pdu = None
         self._nas_queue = None
     
+    def initiate(self):
+        """ Initiate the UE. """
+        process_nas_procedure(None, self)
+
     def process(self, data: bytes) -> bytes:
         """ Process the NAS message. """
         return process_nas_procedure(data, self)

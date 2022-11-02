@@ -1,3 +1,5 @@
+import logging
+import threading
 from binascii import unhexlify, hexlify
 from pycrate_mobile import *
 from pycrate_mobile.NAS import *
@@ -8,6 +10,7 @@ from CryptoMobile.Milenage import make_OPc
 from CryptoMobile.conv import *
 from CryptoMobile.ECIES import *
 from pycrate_mobile.TS24501_IE import *
+from pycrate_mobile.TS24008_IE import encode_bcd
 
 def byte_xor(ba1, ba2):
     """ XOR two byte strings """
@@ -233,12 +236,12 @@ class SecurityModeProc(NASProc):
 
 class RegistrationProc():
 
-    def initiate(self):
+    def initiate(self, ue: UE) -> bytes:
         IEs = {}
         IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65 }
         IEs['NAS_KSI'] = { 'TSC': 0, 'Value': 7 }
         IEs['5GSRegType'] = { 'FOR': 1, 'Value': 1 }
-        IEs['5GSID'] = { 'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': { 'PLMN': '20895', 'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': b'\x00\x00\x00\x00\x13'} }
+        IEs['5GSID'] = { 'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': { 'PLMN': ue.mcc + ue.mnc, 'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin) } }
         IEs['UESecCap'] = { '5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0, '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0, '5G-IA6': 0, '5G-IA7': 0, 'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0, 'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0 }
         Msg = FGMMRegistrationRequest(val=IEs)
         return Msg.to_bytes()
@@ -259,7 +262,7 @@ class RegistrationAcceptProc():
 def process_nas_procedure(data: bytes, ue: UE) -> bytes:
     """ Process NAS procedure. """
     # Create NAS object
-    NAS_PDU, err = NAS.parse_NAS5G(data)
+    NAS_PDU, err = parse_NAS5G(data)
     print(NAS_PDU)
     print("--------------- Uplink NAS message ---------------")
     print("-------- NAS message: %s --------" % NAS_PDU._name)
@@ -268,7 +271,7 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
     if not ue.amf_ue_ngap_id: # If AMF UE NGAP ID is not set send registration request
         print("AMF UE NGAP ID not set")
         # Create Registration Request
-        RegReq = RegistrationProc().initiate()
+        RegReq = RegistrationProc().initiate(ue)
         # Send Registration Request
         return RegReq.to_bytes()
     elif NAS_PDU._name == '5GMMAuthenticationRequest':
@@ -299,22 +302,32 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
 
 class NAS():
     
-    def __init__(self, nas_dl_queue: Queue, nas_ul_queue: Queue):
+    def __init__(self, nas_dl_queue, nas_ul_queue):
         self.nas_dl_queue = nas_dl_queue
         self.nas_ul_queue = nas_ul_queue
 
-    def process_nas_dl(self):
+    def _load_nas_dl_thread(self):
+        """ Load the thread that will handle NAS DownLink messages from gNB """
+        nas_dl_thread = threading.Thread(target=self._nas_dl_thread_function)
+        nas_dl_thread.start()
+        return nas_dl_thread
+
+    def _nas_dl_thread_function(self):
+        """ Thread function that will handle NAS DownLink messages from gNB 
+        
+            It will select the NAS procedure to be executed based on the NAS message type.
+            When the NAS procedure is completed, the NAS message will be put on a queue 
+            that will be read by the gNB thread.
+        """
         while True:
             ue, data = self.nas_dl_queue.get()
             if data is None:
                 break
-            else:
-                tx_nas_pdu = process_nas_procedure(data, ue)
-                if tx_nas_pdu is not None:
-                    self.nas_ul_queue.put((ue.supi, tx_nas_pdu))
-    
-    def run(self):
-        nas_dl_thread = Thread(target=self.process_nas_dl)
-        nas_dl_thread.start()
+            # Process NAS procedure
+            tx_nas_pdu = process_nas_procedure(data, ue)
+            if tx_nas_pdu:
+                self.nas_ul_queue.put(tx_nas_pdu)
 
-        nas_dl_thread.join()
+    def run(self):
+        """ Run the NAS thread """
+        self._load_nas_dl_thread()
