@@ -1,5 +1,5 @@
 import socket
-import queue
+# import queue
 import threading
 import binascii
 import logging
@@ -30,6 +30,7 @@ class SCTPClient():
     def run(self) -> None:
         self.ngap_dl_thread = self._load_ngap_dl_thread(self._ngap_dl_thread_function)
         self.ngap_ul_thread = self._load_ngap_ul_thread(self._ngap_ul_thread_function)
+        # time.sleep(5)
 
     def connect(self, server_config: dict) -> None:
         logging.info("Connecting to 5G Core")
@@ -59,7 +60,7 @@ class SCTPClient():
     def _load_ngap_dl_thread(self, ngap_dl_thread_function) -> threading.Thread:
         """ Load the thread that will handle incoming SCTP messages from 5G Core and put it on NGAP DL queue """
         # Create NGAP DL thread
-        ngap_dl_thread = threading.Thread(target=ngap_dl_thread_function, daemon=True)
+        ngap_dl_thread = threading.Thread(target=ngap_dl_thread_function, daemon=False)
         # Start NGAP DL thread
         ngap_dl_thread.start()
         # Return NGAP DL thread
@@ -93,7 +94,7 @@ class SCTPClient():
     def _load_ngap_ul_thread(self, ngap_ul_thread_function) -> threading.Thread:
         """ Load the thread that will read NGAP UL messages from queue and send them to 5G Core via SCTP """
         # Create NGAP UL thread
-        ngap_ul_thread = threading.Thread(target=ngap_ul_thread_function, daemon=True)
+        ngap_ul_thread = threading.Thread(target=ngap_ul_thread_function, daemon=False)
         # Start NGAP UL thread
         ngap_ul_thread.start()
         # Return NGAP UL thread
@@ -105,7 +106,7 @@ class SCTPClient():
         logging.info('Starting _ngap_ul_thread_function')
         # Loop forever
         while True:
-            logging.info('Checking for NGAP UL message')
+            # logging.info('Checking for NGAP UL message')
             # Check if connection is closed
             if self._socket._closed:
                 # Break loop
@@ -113,6 +114,7 @@ class SCTPClient():
                 break
             # Check if SCTP queue is not empty
             if not self.ngap_ul_queue.empty():
+                logging.info('Getting NGAP UL message from queue')
                 # Get SCTP message from queue
                 sctp_message = self.ngap_ul_queue.get()
                 # Send message
@@ -120,7 +122,7 @@ class SCTPClient():
                 # Log SCTP message
                 self.logger.info('_ngap_ul_thread_function: sent SCTP message: {}'.format(sctp_message))
             # Sleep for 1 second
-            time.sleep(1)
+            time.sleep(0.5)
 
     def send(self, data: bytes):
         # Check if connection is closed

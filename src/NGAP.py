@@ -9,7 +9,7 @@ from pycrate_asn1dir import NGAP
 from binascii import unhexlify
 from abc import ABC, ABCMeta, abstractmethod
 from pycrate_mobile.NAS import *
-import queue
+# import queue
 
 from Proc import Proc
 
@@ -45,8 +45,9 @@ class GNB():
         return NGAPProcDispatcher[procedure_code](self)
 
     def select_ngap_ul_procedure(self, nas_name: int) -> Proc:
-        if nas_name == '5GMMMessage':
-            return RegistrationProc(self)
+        logging.info("Selecting NAS procedure: %s", nas_name)
+        if nas_name == '5GMMRegistrationRequest':
+            return NGInitialUEMessageProc(self)
         else:
             return NGUplinkNASTransportProc(self)
 
@@ -68,12 +69,12 @@ class GNB():
                 PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                 PDU.from_aper(data)
                 procedureCode = PDU.get_val()[1]['procedureCode']
-                ngap_proc = self.select_ngap_procedure(procedureCode)
-                ngap_pdu, nas_pdu = ngap_proc.receive(PDU)
+                ngap_proc = self.select_ngap_dl_procedure(procedureCode)
+                ngap_pdu, nas_pdu, ue = ngap_proc.receive(PDU)
                 if ngap_pdu:
-                    self.ngap_ul_queue.put(ngap_pdu.to_aper())
+                    self.ngap_ul_queue.put(ngap_pdu)
                 if nas_pdu:
-                    self.nas_dl_queue.put(nas_pdu)
+                    self.nas_dl_queue.put((nas_pdu, ue))
     
     def _load_nas_ul_thread(self, nas_ul_thread_function):
         """ Load the thread that will handle NAS UpLink messages from UE """
@@ -101,8 +102,8 @@ class GNB():
                 ngap_proc = self.select_ngap_ul_procedure(Msg._name)
                 ngap_pdu = ngap_proc.send(Msg.to_bytes(), obj)
                 if ngap_pdu:
-                    self.ngap_ul_queue.put(ngap_pdu.to_aper())
-
+                    logging.info("Sent NAS message to 5G Core with size: %d", len(ngap_pdu))
+                    self.ngap_ul_queue.put(ngap_pdu, block=False)
     
     def _load_ues_thread(self, ues_thread_function):
         """ Load the thread that will handle new UEs being added to gNB """
@@ -123,7 +124,7 @@ class GNB():
                 if self.ues[ran_ue_ngap_id]:
                     continue
                 self.ues[ran_ue_ngap_id] = ue
-                ue.initiate()
+                self.nas_dl_queue.put((None, ue))
 
     def get_ue(self, ran_ue_ngap_id):
         return self.ues[ran_ue_ngap_id]
@@ -269,6 +270,15 @@ class NGSetupProc(NonUEAssociatedNGAPProc):
             val = ('initiatingMessage', {'procedureCode': 21, 'criticality': 'reject', 'value': ('NGSetupRequest', {'protocolIEs': IEs})})
             self.PDU.set_val(val)
 
+    def receive(self, data: bytes = None) -> None:
+        if data:
+            # self.PDU.from_aper(data)
+            # logging.debug(self.PDU.to_asn1())
+            return None, None, None
+        else:
+            logging.error('No data received')
+            return None, None, None
+
     def process(self, data) -> bytes:
         # TODO: Implement this method
         return b''
@@ -324,6 +334,27 @@ class NGInitialUEMessageProc(UEAssociatedNGAPProc):
         IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
         val = ('initiatingMessage', {'procedureCode': 15, 'criticality': 'ignore', 'value': ('InitialUEMessage', {'protocolIEs': IEs})})
         self.PDU.set_val(val)
+
+    def receive(self, data) -> None:
+        """ Receive a message from the network """
+        pass
+
+    def send(self, data, obj) -> None:
+        """ Send a message to the network """
+
+        logging.info(obj)
+        IEs = []
+        curTime = int(time.time()) + 2208988800 #1900 instead of 1970
+        IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', obj['ran_ue_ngap_id'])}) # RAN-UE-NGAP-ID must be unique for each UE
+        IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', data) })
+        IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': b'\x02\xf8Y', 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': b'\x02\xf8Y', 'tAC': b'\x00\xa0\x00'}, 'timeStamp': struct.pack("!I",curTime)}))})
+        IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
+        IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
+        val = ('initiatingMessage', {'procedureCode': 15, 'criticality': 'ignore', 'value': ('InitialUEMessage', {'protocolIEs': IEs})})
+        
+        PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+        PDU.set_val(val)
+        return PDU.to_aper()
 
     def process(self, data) -> bytes:
         # TODO: Implement this method
@@ -404,6 +435,29 @@ class NGDownlinkNASTransportProc(UEAssociatedNGAPProc):
         #     return uplink_nas_transport_pdu
         # return b''
 
+    def receive(self, PDU) -> None:
+        logging.info("Received Downlink NAS Transport")
+        # PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+        # PDU.from_aper(data)
+        # Extract IE values
+        IEs = PDU.get_val()[1]['value'][1]['protocolIEs']
+        # Extract AMF-UE-NGAP-ID
+        amf_ue_ngap_id = next((ie['value'][1] for ie in IEs if ie['id'] == 10), None)
+        # Extract RAN-UE-NGAP-ID
+        ran_ue_ngap_id = next((ie['value'][1] for ie in IEs if ie['id'] == 85), None)
+        # Extract the NAS PDU
+        nas_pdu = next((ie['value'][1] for ie in IEs if ie['id'] == 38), None)
+        if not nas_pdu:
+            return None, None, None
+        
+        # Get UE
+        ue = self.gNB.get_ue(ran_ue_ngap_id)
+        # Set amf_ue_ngap_id
+        ue.amf_ue_ngap_id = amf_ue_ngap_id
+        # Send the NAS PDU to UE
+        logging.info("Sending NAS PDU to UE, SUPI %s", ue.supi)
+        return None, nas_pdu, ue
+
 class NGUplinkNASTransportProc(UEAssociatedNGAPProc):
     """Uplink NAS Transport: TS 38.413, section 8.6.3
 
@@ -450,6 +504,21 @@ class NGUplinkNASTransportProc(UEAssociatedNGAPProc):
         PDU.set_val(val)
         return PDU
 
+    def send(self, data, obj):
+        IEs = []
+        curTime = int(time.time()) + 2208988800 #1900 instead of 1970
+        amf_ue_ngap_id = obj['amf_ue_ngap_id'] if 'amf_ue_ngap_id' in obj else 1
+        ran_ue_ngap_id = obj['ran_ue_ngap_id'] if 'ran_ue_ngap_id' in obj else 1
+        nas_pdu = obj['nas_pdu'] if 'nas_pdu' in obj else b'~\x00W-\x10\xb3\x98--KE\x8b\xa3:\xe5\t\xf5\x00A\x10\xc5'
+        IEs.append({'id': 10, 'criticality': 'reject', 'value': ('AMF-UE-NGAP-ID', amf_ue_ngap_id)})
+        IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', ran_ue_ngap_id)})
+        IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', nas_pdu)})
+        IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': b'\x02\xf8Y', 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': b'\x02\xf8Y', 'tAC': b'\x00\xa0\x00'}, 'timeStamp': struct.pack("!I",curTime)}))})
+        val = ('initiatingMessage', {'procedureCode': 46, 'criticality': 'ignore', 'value': ('UplinkNASTransport', {'protocolIEs': IEs})})
+        PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+        PDU.set_val(val)
+        return PDU.to_aper()
+        
     def create_response(self, data: bytes = None) -> None:
         """ This is not applicable for the network traffic generator """
         pass

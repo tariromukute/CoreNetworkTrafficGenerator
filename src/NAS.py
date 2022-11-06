@@ -107,7 +107,8 @@ class AuthenticationProc(NASProc):
         self.ue.k_nas_enc = self.ue.k_nas_enc[16:]
         print("K_NAS_ENC 16: ", hexlify(self.ue.k_nas_enc))
         # Get K_NAS_INT
-        self.ue.k_nas_int = conv_501_A8(self.ue.k_amf, alg_type=2, alg_id=1)
+        k_nas_int = conv_501_A8(self.ue.k_amf, alg_type=2, alg_id=1)
+        self.ue.set_k_nas_int(k_nas_int)
         print("K_NAS_INT 32: ", hexlify(self.ue.k_nas_int))
         self.ue.k_nas_int = self.ue.k_nas_int[16:]
         print("K_NAS_INT 16: ", hexlify(self.ue.k_nas_int))
@@ -200,7 +201,7 @@ class SecurityModeProc(NASProc):
         # TODO: Add NSSAI to RegIEs
         
         # RegMsg = FGMMRegistrationRequest(val=RegIEs)
-        RegMsg = RegistrationProc().initiate()
+        RegMsg = RegistrationProc(self.ue).initiate()
         # Add the RegIEs to the RegMsg
 
         # Send Security Mode Complete
@@ -212,10 +213,11 @@ class SecurityModeProc(NASProc):
         Msg = FGMMSecurityModeComplete(val=IEs)
         print("==== SecurityModeProc.send")
         print(Msg)
+        print("================== %s" % self.ue)
         # Encrypt NAS message
         SecMsg = SecProtNASMessageProc(self.ue).create_req()
         # SecMsg['NASMessage'].set_val(unhexlify('7e005e7700090530659002049715f47100267e004179000d0102f8590000000000000000131001002e04f0f0f0f02f0504de00007b530100'))
-        EncMsg, e = parse_NAS5G(unhexlify('7e005e7700090530659002049715f47100267e004179000d0102f8590000000000000000131001002e04f0f0f0f02f0504de00007b530100'))
+        # EncMsg, e = parse_NAS5G(unhexlify('7e005e7700090530659002049715f47100267e004179000d0102f8590000000000000000131001002e04f0f0f0f02f0504de00007b530100'))
         SecMsg['NASMessage'].set_val(Msg.to_bytes())
         SecMsg.encrypt(key=self.ue.k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
         SecMsg.mac_compute(key=self.ue.k_nas_int, dir=0, fgia=1, seqnoff=0, bearer=1)
@@ -234,14 +236,17 @@ class SecurityModeProc(NASProc):
         # TODO: Check if NAS integrity protected
         return nas_integrity_protected
 
-class RegistrationProc():
+class RegistrationProc(NASProc):
 
-    def initiate(self, ue: UE) -> bytes:
+    def __init__(self, ue: UE) -> None:
+        super().__init__(ue)
+
+    def initiate(self) -> bytes:
         IEs = {}
         IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65 }
         IEs['NAS_KSI'] = { 'TSC': 0, 'Value': 7 }
         IEs['5GSRegType'] = { 'FOR': 1, 'Value': 1 }
-        IEs['5GSID'] = { 'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': { 'PLMN': ue.mcc + ue.mnc, 'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin) } }
+        IEs['5GSID'] = { 'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': { 'PLMN': self.ue.mcc + self.ue.mnc, 'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(self.ue.msin) } }
         IEs['UESecCap'] = { '5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0, '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0, '5G-IA6': 0, '5G-IA7': 0, 'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0, 'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0 }
         Msg = FGMMRegistrationRequest(val=IEs)
         return Msg.to_bytes()
@@ -261,20 +266,22 @@ class RegistrationAcceptProc():
 # Function to process NAS procedure
 def process_nas_procedure(data: bytes, ue: UE) -> bytes:
     """ Process NAS procedure. """
-    # Create NAS object
-    NAS_PDU, err = parse_NAS5G(data)
-    print(NAS_PDU)
-    print("--------------- Uplink NAS message ---------------")
-    print("-------- NAS message: %s --------" % NAS_PDU._name)
+    
     # Print NAS PDU name
 
     if not ue.amf_ue_ngap_id: # If AMF UE NGAP ID is not set send registration request
         print("AMF UE NGAP ID not set")
         # Create Registration Request
-        RegReq = RegistrationProc().initiate(ue)
+        RegReq = RegistrationProc(ue).initiate()
         # Send Registration Request
-        return RegReq.to_bytes()
-    elif NAS_PDU._name == '5GMMAuthenticationRequest':
+        return RegReq
+    # Create NAS object
+    NAS_PDU, err = parse_NAS5G(data)
+    if err:
+        print(err)
+        return b''
+    print("-------- NAS message: %s --------" % NAS_PDU._name)
+    if NAS_PDU._name == '5GMMAuthenticationRequest':
         print("Received 5GMMAuthenticationRequest")
         tx_nas_pdu = AuthenticationProc(ue).recv(data)
         # ue.send(tx_nas_pdu)
@@ -320,13 +327,12 @@ class NAS():
             that will be read by the gNB thread.
         """
         while True:
-            ue, data = self.nas_dl_queue.get()
-            if data is None:
-                break
-            # Process NAS procedure
-            tx_nas_pdu = process_nas_procedure(data, ue)
-            if tx_nas_pdu:
-                self.nas_ul_queue.put(tx_nas_pdu)
+            if not self.nas_dl_queue.empty():
+            # data is None when it's a registration request
+                data, ue = self.nas_dl_queue.get()
+                tx_nas_pdu = process_nas_procedure(data, ue)
+                if tx_nas_pdu:
+                    self.nas_ul_queue.put((ue.supi, tx_nas_pdu))
 
     def run(self):
         """ Run the NAS thread """
