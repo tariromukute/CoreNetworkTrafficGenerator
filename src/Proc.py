@@ -35,9 +35,4 @@ class Proc(metaclass=ABCMeta):
         """ This method returns the PDU. """
         return self._PDU
 
-    @abstractmethod
-    def process(self, data: bytes) -> bytes:
-        """ This method processes the procedure and returns the response to be sent in bytes if any. """
-        pass 
-
     

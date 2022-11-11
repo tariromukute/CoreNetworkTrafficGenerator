@@ -85,11 +85,9 @@ class SCTPClient():
                 # Break loop
                 break
             # Log SCTP message
-            self.logger.info('_ngap_dl_thread_function: sent SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
+            # self.logger.info('_ngap_dl_thread_function: sent SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
             # Put SCTP message in queue
             self.ngap_dl_queue.put(sctp_data)
-            # Sleep for 1 second
-            time.sleep(1)
 
     def _load_ngap_ul_thread(self, ngap_ul_thread_function) -> threading.Thread:
         """ Load the thread that will read NGAP UL messages from queue and send them to 5G Core via SCTP """
@@ -114,15 +112,13 @@ class SCTPClient():
                 break
             # Check if SCTP queue is not empty
             if not self.ngap_ul_queue.empty():
-                logging.info('Getting NGAP UL message from queue')
                 # Get SCTP message from queue
                 sctp_message = self.ngap_ul_queue.get()
                 # Send message
                 self._socket.sctp_send(sctp_message,ppid = socket.htonl(60))
                 # Log SCTP message
-                self.logger.info('_ngap_ul_thread_function: sent SCTP message: {}'.format(sctp_message))
-            # Sleep for 1 second
-            time.sleep(0.5)
+                # self.logger.info('_ngap_ul_thread_function: sent SCTP message: {}'.format(sctp_message))
+                # time.sleep(0.2)
 
     def send(self, data: bytes):
         # Check if connection is closed
@@ -191,11 +187,11 @@ class SCTPServer(ServerCtx):
                 # Break loop
                 break
             # Log SCTP data
-            self.logger.info('SCTP data from %s:%d: %s', sctp_address[0], sctp_address[1], binascii.hexlify(sctp_data).decode('utf-8'))
+            # self.logger.info('SCTP data from %s:%d: %s', sctp_address[0], sctp_address[1], binascii.hexlify(sctp_data).decode('utf-8'))
             # Log SCTP data
             response = self.handle_sctp_data(sctp_data)
             if response:
-                self.logger.info('SCTP response: %s', binascii.hexlify(response).decode('utf-8'))
+                # self.logger.info('SCTP response: %s', binascii.hexlify(response).decode('utf-8'))
                 sctp_connection.send(response)
             # # Put data in SCTP queue
             # self._sctp_queue.put(sctp_data)
@@ -217,7 +213,7 @@ class SCTPServer(ServerCtx):
 
     def handle_sctp_data(self, sctp_data):
         # Log SCTP data
-        self.logger.info('SCTP data: %s', binascii.hexlify(sctp_data).decode('utf-8'))
+        # self.logger.info('SCTP data: %s', binascii.hexlify(sctp_data).decode('utf-8'))
         # Check if data needs a response
         if sctp_data[0] != 0x01:
             # Send response
@@ -233,7 +229,7 @@ class SCTPServer(ServerCtx):
         # Put SCTP message in queue
         self._sctp_queue.put(data)
         # Log SCTP message
-        self.logger.info('send: queued SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
+        # self.logger.info('send: queued SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
 
     def recv(self, size) -> bytes:
         return super().recv(size)

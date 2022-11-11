@@ -1,45 +1,85 @@
-from NAS import process_nas_procedure
+from enum import IntEnum
+from binascii import unhexlify, hexlify
+
+# Define enum
+class FGMMState(IntEnum):
+    """ 5GMM State: 3GPP TS 24.501 version 16.9.0 Release 16, Section 5. """
+    NULL = 0
+    DEREGISTERED = 1
+    REGISTERED_INITIATED = 2
+    REGISTERED = 3
+    DEREGISTERED_INITIATED = 4
+    SERVICE_REQUEST_INITIATED = 5
+    # Not in 3GPP TS 24.501 version 16.9.0 Release 16, Section 5.
+    AUTHENTICATED_INITIATED = 6
+    AUTHENTICATED = 7
+    SECURITY_MODE_INITIATED = 8
+    SECURITY_MODE_COMPLETED = 9
+    # Last state indicate number of states
+    FGMM_STATE_MAX = 10
+
 
 class UE():
     """ UE class """
 
-    def __init__(self, config) -> None:
-        self.supi = config['supi']
-        self.mcc = config['mcc']
-        self.mnc = config['mnc']
-        self.msin = config['supi'][-10:]
-        self.key = config['key']
-        self.op = config['op']
-        self.op_type = config['op_type']
-        self.amf = config['amf']
-        self.imei = config['imei']
-        self.imeiSv = config['imeiSv']
-        self.tac = config['tac']
-        self.nas_key_set = set()
-        self.amf_ue_ngap_id = None
-        self.sqn = None
-        self.rand = None
-        self.autn = None
-        self.res = None
-        self.k_amf = None
-        self.k_ausf = None
-        self.k_seaf = None
-        self.k_nas_int = None
-        self.k_nas_enc = None
-        self.ck = None
-        self.ik = None
-        self.ak = None
-        self.mac_a = None
-        self.mac_s = None
-        self.xres_star = None
-        self.xres = None
-        self.res_star = None
-        self.ue_capabilities = None
-        self.ue_security_capabilities = None
-        self.ue_network_capability = None
-        self.nas_proc = None
-        self.nas_pdu = None
-        self._nas_queue = None
+    def __init__(self, config = None) -> None:
+        """ Initiate the UE. """
+        # if config is None set all values to None
+        if config is None:
+            self.supi = None
+            self.amf_ue_ngap_id = None
+            # initialise to zero in bytes
+            self.k_nas_int = b'\x00' * 32
+            self.k_nas_enc = b'\x00' * 32
+            self.k_amf = b'\x00' * 32
+            self.k_ausf = b'\x00' * 32
+            self.k_seaf = b'\x00' * 32
+            self.k_nas_int = b'\x00' * 32
+            self.k_nas_enc = b'\x00' * 32
+            self.mac_a = b'\x00' * 32
+            self.mac_s = b'\x00' * 32
+            self.xres_star = b'\x00' * 32
+            self.xres = b'\x00' * 32
+            self.res_star = b'\x00' * 32
+            self.ue_capabilities = None
+            self.ue_security_capabilities = None
+            self.ue_network_capability = None
+            self.nas_proc = None
+            self.state = FGMMState.NULL
+        else:   
+            self.supi = config['supi']
+            self.mcc = config['mcc']
+            self.mnc = config['mnc']
+            self.msin = config['supi'][-10:]
+            self.key = config['key']
+            self.op = config['op']
+            self.op_type = config['op_type']
+            self.amf = config['amf']
+            self.imei = config['imei']
+            self.imeiSv = config['imeiSv']
+            self.tac = config['tac']
+            self.nas_key_set = set()
+            self.amf_ue_ngap_id = None
+            self.sqn = b'\x00' * 32
+            self.rand = b'\x00' * 32
+            self.autn = b'\x00' * 32
+            self.res = b'\x00' * 32
+            self.k_amf = b'\x00' * 32
+            self.k_ausf = b'\x00' * 32
+            self.k_seaf = b'\x00' * 32
+            self.k_nas_int = b'\x00' * 32
+            self.k_nas_enc = b'\x00' * 32
+            self.mac_a = b'\x00' * 32
+            self.mac_s = b'\x00' * 32
+            self.xres_star = b'\x00' * 32
+            self.xres = b'\x00' * 32
+            self.res_star = b'\x00' * 32
+            self.ue_capabilities = None
+            self.ue_security_capabilities = None
+            self.ue_network_capability = None
+            self.nas_proc = None
+            self.nas_pdu = None
+            self.state = FGMMState.NULL
     
     def initiate(self):
         """ Initiate the UE. """
@@ -70,8 +110,12 @@ class UE():
         self.k_nas_int = k_nas_int
         
     # Print object
+    def __str__(self) -> str:
+        return f'UE( SUPI: {self.supi}, AMF UE NGAP ID: {self.amf_ue_ngap_id} )'
     def __repr__(self) -> str:
-        return f'UE( SUPI: {self.supi}, AMF UE NGAP ID: {self.amf_ue_ngap_id}, k_nas_int: {self.k_nas_int}, k_nas_enc: {self.k_nas_enc}, k_amf: {self.k_amf}, k_ausf: {self.k_ausf}, k_seaf: {self.k_seaf}, k_nas_int: {self.k_nas_int}, k_nas_enc: {self.k_nas_enc}, ck: {self.ck}, ik: {self.ik}, ak: {self.ak}, mac_a: {self.mac_a}, mac_s: {self.mac_s}, xres_star: {self.xres_star}, xres: {self.xres}, res_star: {self.res_star}, ue_capabilities: {self.ue_capabilities}, ue_security_capabilities: {self.ue_security_capabilities}, ue_network_capability: {self.ue_network_capability} )'
+        return f'UE( SUPI: {self.supi}, AMF UE NGAP ID: {self.amf_ue_ngap_id}, k_nas_int: {hexlify(self.k_nas_int)}, k_nas_enc: {hexlify(self.k_nas_enc)}, k_amf: {hexlify(self.k_amf)}, k_ausf: {hexlify(self.k_ausf)}, k_seaf: {hexlify(self.k_seaf)}, k_nas_int: {hexlify(self.k_nas_int)}, k_nas_enc: {hexlify(self.k_nas_enc)} )'
+    def __format__(self, format_spec: str) -> str:
+        return f'UE( SUPI: {self.supi}, AMF UE NGAP ID: {self.amf_ue_ngap_id}, k_nas_int: {hexlify(self.k_nas_int)}, k_nas_enc: {hexlify(self.k_nas_enc)}, k_amf: {hexlify(self.k_amf)}, k_ausf: {hexlify(self.k_ausf)}, k_seaf: {hexlify(self.k_seaf)}, k_nas_int: {hexlify(self.k_nas_int)}, k_nas_enc: {hexlify(self.k_nas_enc)} )'
 
     
     
