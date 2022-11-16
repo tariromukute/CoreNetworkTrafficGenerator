@@ -6,16 +6,23 @@ import logging
 import json
 import time
 import sctp
+from logging.handlers import QueueHandler
 
 from Ctx import ClientCtx, ServerCtx
+
+logger = logging.getLogger('__SCTPClient__')
 
 # Create SCTP Client class inheriting from Client Ctx class
 class SCTPClient():
     """ This class is a base class for all SCTP client contexts. """
-    def __init__(self, config, server_config, ngap_dl_queue, ngap_ul_queue):
+    def __init__(self, logger_queue, config, server_config, ngap_dl_queue, ngap_ul_queue):
         # Call parent class init
         # super().__init__(config)
-        self.logger = logging.getLogger('SCTPClient')
+        # self.logger = logging.getLogger('__SCTPClient__')
+        # add a handler that uses the shared queue
+        logger.addHandler(QueueHandler(logger_queue))
+        # log all messages, debug and up
+        logger.setLevel(logging.DEBUG)
         self._config = config
         self._socket = self._load_socket()
         self.ngap_dl_queue = ngap_dl_queue
@@ -33,12 +40,12 @@ class SCTPClient():
         # time.sleep(5)
 
     def connect(self, server_config: dict) -> None:
-        logging.info("Connecting to 5G Core")
-        logging.info("Server config: {}".format(server_config))
+        logger.info("Connecting to 5G Core")
+        logger.info("Server config: {}".format(server_config))
         self._connect(server_config['sctp']['address'], server_config['sctp']['port'])
 
     def disconnect(self) -> None:
-        logging.info("Disconnecting from 5G Core")
+        logger.info("Disconnecting from 5G Core")
         self._disconnect()
     
     def _connect(self, address, port) -> None:
@@ -47,7 +54,7 @@ class SCTPClient():
 
     def _disconnect(self) -> None:
         # Disconnect from SCTP socket
-        self.logger.info('Closing SCTP socket')
+        logger.info('Closing SCTP socket')
         self._socket.close()
 
     def _load_socket(self):
@@ -68,24 +75,24 @@ class SCTPClient():
 
     def _ngap_dl_thread_function(self) -> None:
         """ This function will handle incoming SCTP messages from 5G Core and put it on NGAP DL queue """
-        logging.info('Starting _ngap_dl_thread_function')
+        logger.info('Starting _ngap_dl_thread_function')
         # Loop forever
         while True:
-            logging.info('Checking for SCTP message')
+            # logger.info('Checking for SCTP message')
             # Check if connection is closed
             if self._socket._closed:
                 # Break loop
-                self.logger.info('_ngap_dl_thread_function: SCTP socket closed exiting thread')
+                logger.info('_ngap_dl_thread_function: SCTP socket closed exiting thread')
                 break
             sctp_data = self._socket.recv(4096)
             # Check if data is empty
             if not sctp_data:
                 # Log SCTP disconnection
-                self.logger.info('SCTP disconnection')
+                logger.info('SCTP disconnection')
                 # Break loop
                 break
             # Log SCTP message
-            # self.logger.info('_ngap_dl_thread_function: sent SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
+            # logger.info('_ngap_dl_thread_function: sent SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
             # Put SCTP message in queue
             self.ngap_dl_queue.put(sctp_data)
 
@@ -101,14 +108,14 @@ class SCTPClient():
     
     def _ngap_ul_thread_function(self) -> None:
         """ This function will read NGAP UL messages from queue and send them to 5G Core via SCTP """
-        logging.info('Starting _ngap_ul_thread_function')
+        logger.info('Starting _ngap_ul_thread_function')
         # Loop forever
         while True:
-            # logging.info('Checking for NGAP UL message')
+            # logger.info('Checking for NGAP UL message')
             # Check if connection is closed
             if self._socket._closed:
                 # Break loop
-                self.logger.info('_ngap_ul_thread_function: SCTP socket closed exiting thread')
+                logger.info('_ngap_ul_thread_function: SCTP socket closed exiting thread')
                 break
             # Check if SCTP queue is not empty
             if not self.ngap_ul_queue.empty():
@@ -124,12 +131,12 @@ class SCTPClient():
         # Check if connection is closed
         if self._socket._closed:
             # Break loop
-            self.logger.info('_sctp_thread_function: SCTP socket closed exiting thread')
+            logger.info('_sctp_thread_function: SCTP socket closed exiting thread')
             return
         # Put SCTP message in queue
         self._sctp_queue.put(data)
         # Log SCTP message
-        self.logger.info('send: queued SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
+        logger.info('send: queued SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
 
     def recv(self, size) -> bytes:
         return super().recv(size)

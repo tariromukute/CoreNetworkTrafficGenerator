@@ -12,6 +12,10 @@ from CryptoMobile.ECIES import *
 from pycrate_mobile.TS24501_IE import *
 from pycrate_mobile.TS24008_IE import encode_bcd
 
+from logging.handlers import QueueHandler
+
+logger = logging.getLogger('__NAS__')
+
 def byte_xor(ba1, ba2):
     """ XOR two byte strings """
     return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
@@ -116,16 +120,16 @@ class SecProtNASMessageProc(NASProc):
             return
         # check if message is encrypted
         if Msg['5GMMHeaderSec']['SecHdr'].get_val() == 2:
-            logging.info("Processing Encrypted NAS Message")
+            logger.info("Processing Encrypted NAS Message")
             # decrypt message
             Msg.decrypt(ue.k_nas_enc, dir=1, fgea=1, seqnoff=0, bearer=1)
             Msg, err = parse_NAS5G(Msg._dec_msg)
             if err:
-                logging.error("Error decrypting NAS Message")
+                logger.error("Error decrypting NAS Message")
                 return
             return Msg, ue
         else:
-            logging.info("Processing Unencrypted NAS Message")
+            logger.info("Processing Unencrypted NAS Message")
             return Msg, ue
 
     def send(self, data: bytes) -> int:
@@ -208,7 +212,7 @@ class RegistrationAcceptProc():
             ue.state = FGMMState.REGISTERED
             return None, ue
         else:
-            logging.error('Error parsing NAS message: %s', err)
+            logger.error('Error parsing NAS message: %s', err)
             return None, ue
     
 # Function to process NAS procedure
@@ -221,16 +225,16 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
         # Create Registration Request
         RegReq, _ = RegistrationProc().initiate(ue)
         # Send Registration Request
-        logging.info("Sending registration request for UE: %s", ue)
+        logger.info("Sending registration request for UE: %s", ue)
         return RegReq, ue
     # Create NAS object
     NAS_PDU, err = parse_NAS5G(data)
     if err:
-        logging.error('Error parsing NAS message: %s', err)
+        logger.error('Error parsing NAS message: %s', err)
         return b''
     if NAS_PDU._name == '5GMMAuthenticationRequest':
         tx_nas_pdu, ue = AuthenticationProc().receive(data, ue)
-        logging.info("Sending authentication response for UE: %s", ue)
+        logger.info("Sending authentication response for UE: %s", ue)
         return tx_nas_pdu, ue
     elif NAS_PDU._name == '5GMMSecProtNASMessage':
         # Check if NAS message is integrity protected
@@ -238,22 +242,26 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
         if DEC_PDU._by_name.count('5GMMSecurityModeCommand') > 0:
             smc = DEC_PDU['5GMMSecurityModeCommand'].to_bytes()
             tx_nas_pdu, ue = SecurityModeProc().receive(smc, ue)
-            logging.info("Sending security mode complete for UE: %s", ue)
+            logger.info("Sending security mode complete for UE: %s", ue)
             return tx_nas_pdu, ue
         elif DEC_PDU._name == '5GMMRegistrationAccept':
             ra = DEC_PDU.to_bytes()
             tx_nas_pdu, ue = RegistrationAcceptProc().receive(ra, ue)
-            logging.info("Sending registration complete for UE: %s", ue)
+            logger.info("Sending registration complete for UE: %s", ue)
             return tx_nas_pdu, ue
 
     return None
 
 class NAS():
     
-    def __init__(self, nas_dl_queue, nas_ul_queue, ue_list):
+    def __init__(self, logger_queue, nas_dl_queue, nas_ul_queue, ue_list):
         self.nas_dl_queue = nas_dl_queue
         self.nas_ul_queue = nas_ul_queue
         self.ue_list = ue_list
+        # add a handler that uses the shared queue
+        logger.addHandler(QueueHandler(logger_queue))
+        # log all messages, debug and up
+        logger.setLevel(logging.DEBUG)
 
     def _load_nas_dl_thread(self):
         """ Load the thread that will handle NAS DownLink messages from gNB """

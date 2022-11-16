@@ -9,22 +9,29 @@ from pycrate_asn1dir import NGAP
 from binascii import unhexlify
 from abc import ABC, ABCMeta, abstractmethod
 from pycrate_mobile.NAS import *
+from logging.handlers import QueueHandler
 # import queue
 
 from Proc import Proc
 
+logger = logging.getLogger('__NGAP__')
+
 class GNB():
-    def __init__(self, client_config: dict, server_config: dict,  ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ues) -> None:
+    def __init__(self, logger_queue, client_config: dict, server_config: dict,  ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ues) -> None:
         self.ues = ues # [None for i in range(100)] # A ctypes array contain the UEs that have been initialized
         self.ngap_dl_queue = ngap_dl_queue
         self.ngap_ul_queue = ngap_ul_queue
         self.nas_dl_queue = nas_dl_queue
         self.nas_ul_queue = nas_ul_queue
         self.ues_queue = ues_queue
+        # add a handler that uses the shared queue
+        logger.addHandler(QueueHandler(logger_queue))
+        # log all messages, debug and up
+        logger.setLevel(logging.DEBUG)
 
     def run(self) -> None:
         """ Run the gNB """
-        logging.info("Starting gNB")
+        logger.info("Starting gNB")
         self.ngap_dl_thread = self._load_ngap_dl_thread(self._ngap_dl_thread_function)
         self.nas_dl_thread = self._load_nas_ul_thread(self._nas_ul_thread_function)
         self.ues_thread = self._load_ues_thread(self._ues_thread_function)
@@ -37,14 +44,14 @@ class GNB():
         ngSetupRequest = NGSetupProc()
         ngSetupRequest.initiate()
         nGSetupPDU_APER = ngSetupRequest.get_pdu().to_aper()
-        logging.info("Sending NGSetupRequest to 5G Core with size: %d", len(nGSetupPDU_APER))
+        logger.info("Sending NGSetupRequest to 5G Core with size: %d", len(nGSetupPDU_APER))
         self.ngap_ul_queue.put(nGSetupPDU_APER)
     
     def select_ngap_dl_procedure(self, procedure_code: int) -> Proc:
         return NGAPProcDispatcher[procedure_code](self)
 
     def select_ngap_ul_procedure(self, nas_name: int) -> Proc:
-        logging.info("Selecting NAS procedure: %s", nas_name)
+        logger.info("Selecting NAS procedure: %s", nas_name)
         if nas_name == '5GMMRegistrationRequest':
             return NGInitialUEMessageProc(self)
         else:
@@ -96,7 +103,7 @@ class GNB():
                 PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                 Msg, err = parse_NAS5G(data)
                 if err:
-                    logging.error("Error parsing NAS message: %s", err)
+                    logger.error("Error parsing NAS message: %s", err)
                     continue
                 amf_ue_ngap_id = self.get_ue(ran_ue_ngap_id).amf_ue_ngap_id
                 obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': Msg.to_bytes()}
@@ -125,7 +132,7 @@ class GNB():
                 # if self.ues[ran_ue_ngap_id]:
                 #     continue
                 self.ues[ran_ue_ngap_id] = ue
-                logging.info("Registering UE: %s", ue)
+                logger.info("Registering UE: %s", ue)
                 self.nas_dl_queue.put((None, ue))
 
     def get_ue(self, ran_ue_ngap_id):
@@ -278,7 +285,7 @@ class NGSetupProc(NonUEAssociatedNGAPProc):
             # logging.debug(self.PDU.to_asn1())
             return None, None, None
         else:
-            logging.error('No data received')
+            logger.error('No data received')
             return None, None, None
 
     def process(self, data) -> bytes:
