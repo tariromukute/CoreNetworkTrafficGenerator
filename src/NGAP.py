@@ -27,11 +27,11 @@ class GNB():
         # add a handler that uses the shared queue
         logger.addHandler(QueueHandler(logger_queue))
         # log all messages, debug and up
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)
 
     def run(self) -> None:
         """ Run the gNB """
-        logger.info("Starting gNB")
+        logger.debug("Starting gNB")
         self.ngap_dl_thread = self._load_ngap_dl_thread(self._ngap_dl_thread_function)
         self.nas_dl_thread = self._load_nas_ul_thread(self._nas_ul_thread_function)
         self.ues_thread = self._load_ues_thread(self._ues_thread_function)
@@ -44,14 +44,14 @@ class GNB():
         ngSetupRequest = NGSetupProc()
         ngSetupRequest.initiate()
         nGSetupPDU_APER = ngSetupRequest.get_pdu().to_aper()
-        logger.info("Sending NGSetupRequest to 5G Core with size: %d", len(nGSetupPDU_APER))
+        logger.debug("Sending NGSetupRequest to 5G Core with size: %d", len(nGSetupPDU_APER))
         self.ngap_ul_queue.put(nGSetupPDU_APER)
     
     def select_ngap_dl_procedure(self, procedure_code: int) -> Proc:
         return NGAPProcDispatcher[procedure_code](self)
 
     def select_ngap_ul_procedure(self, nas_name: int) -> Proc:
-        logger.info("Selecting NAS procedure: %s", nas_name)
+        logger.debug("Selecting NAS procedure: %s", nas_name)
         if nas_name == '5GMMRegistrationRequest':
             return NGInitialUEMessageProc(self)
         else:
@@ -132,7 +132,7 @@ class GNB():
                 # if self.ues[ran_ue_ngap_id]:
                 #     continue
                 self.ues[ran_ue_ngap_id] = ue
-                logger.info("Registering UE: %s", ue)
+                logger.debug("Registering UE: %s", ue)
                 self.nas_dl_queue.put((None, ue))
 
     def get_ue(self, ran_ue_ngap_id):

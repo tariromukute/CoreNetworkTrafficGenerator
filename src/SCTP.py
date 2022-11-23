@@ -22,7 +22,7 @@ class SCTPClient():
         # add a handler that uses the shared queue
         logger.addHandler(QueueHandler(logger_queue))
         # log all messages, debug and up
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)
         self._config = config
         self._socket = self._load_socket()
         self.ngap_dl_queue = ngap_dl_queue
@@ -40,12 +40,12 @@ class SCTPClient():
         # time.sleep(5)
 
     def connect(self, server_config: dict) -> None:
-        logger.info("Connecting to 5G Core")
-        logger.info("Server config: {}".format(server_config))
+        logger.debug("Connecting to 5G Core")
+        logger.debug("Server config: {}".format(server_config))
         self._connect(server_config['sctp']['address'], server_config['sctp']['port'])
 
     def disconnect(self) -> None:
-        logger.info("Disconnecting from 5G Core")
+        logger.debug("Disconnecting from 5G Core")
         self._disconnect()
     
     def _connect(self, address, port) -> None:
@@ -54,7 +54,7 @@ class SCTPClient():
 
     def _disconnect(self) -> None:
         # Disconnect from SCTP socket
-        logger.info('Closing SCTP socket')
+        logger.debug('Closing SCTP socket')
         self._socket.close()
 
     def _load_socket(self):
@@ -75,24 +75,24 @@ class SCTPClient():
 
     def _ngap_dl_thread_function(self) -> None:
         """ This function will handle incoming SCTP messages from 5G Core and put it on NGAP DL queue """
-        logger.info('Starting _ngap_dl_thread_function')
+        logger.debug('Starting _ngap_dl_thread_function')
         # Loop forever
         while True:
-            # logger.info('Checking for SCTP message')
+            # logger.debug('Checking for SCTP message')
             # Check if connection is closed
             if self._socket._closed:
                 # Break loop
-                logger.info('_ngap_dl_thread_function: SCTP socket closed exiting thread')
+                logger.debug('_ngap_dl_thread_function: SCTP socket closed exiting thread')
                 break
             sctp_data = self._socket.recv(4096)
             # Check if data is empty
             if not sctp_data:
                 # Log SCTP disconnection
-                logger.info('SCTP disconnection')
+                logger.debug('SCTP disconnection')
                 # Break loop
                 break
             # Log SCTP message
-            # logger.info('_ngap_dl_thread_function: sent SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
+            # logger.debug('_ngap_dl_thread_function: sent SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
             # Put SCTP message in queue
             self.ngap_dl_queue.put(sctp_data)
 
@@ -108,14 +108,14 @@ class SCTPClient():
     
     def _ngap_ul_thread_function(self) -> None:
         """ This function will read NGAP UL messages from queue and send them to 5G Core via SCTP """
-        logger.info('Starting _ngap_ul_thread_function')
+        logger.debug('Starting _ngap_ul_thread_function')
         # Loop forever
         while True:
-            # logger.info('Checking for NGAP UL message')
+            # logger.debug('Checking for NGAP UL message')
             # Check if connection is closed
             if self._socket._closed:
                 # Break loop
-                logger.info('_ngap_ul_thread_function: SCTP socket closed exiting thread')
+                logger.debug('_ngap_ul_thread_function: SCTP socket closed exiting thread')
                 break
             # Check if SCTP queue is not empty
             if not self.ngap_ul_queue.empty():
@@ -124,19 +124,19 @@ class SCTPClient():
                 # Send message
                 self._socket.sctp_send(sctp_message,ppid = socket.htonl(60))
                 # Log SCTP message
-                # self.logger.info('_ngap_ul_thread_function: sent SCTP message: {}'.format(sctp_message))
+                # self.logger.debug('_ngap_ul_thread_function: sent SCTP message: {}'.format(sctp_message))
                 # time.sleep(0.2)
 
     def send(self, data: bytes):
         # Check if connection is closed
         if self._socket._closed:
             # Break loop
-            logger.info('_sctp_thread_function: SCTP socket closed exiting thread')
+            logger.debug('_sctp_thread_function: SCTP socket closed exiting thread')
             return
         # Put SCTP message in queue
         self._sctp_queue.put(data)
         # Log SCTP message
-        logger.info('send: queued SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
+        logger.debug('send: queued SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
 
     def recv(self, size) -> bytes:
         return super().recv(size)
@@ -182,7 +182,7 @@ class SCTPServer(ServerCtx):
             # Check if SCTP connection is closed
             if sctp_connection._closed:
                 # Log SCTP connection
-                self.logger.info('SCTP connection from %s:%d closed', sctp_address[0], sctp_address[1])
+                self.logger.debug('SCTP connection from %s:%d closed', sctp_address[0], sctp_address[1])
                 # Break loop
                 break
             # Receive data from SCTP connection
@@ -190,15 +190,15 @@ class SCTPServer(ServerCtx):
             # Check if data is empty
             if not sctp_data:
                 # Log SCTP disconnection
-                self.logger.info('SCTP disconnection from %s:%d', sctp_address[0], sctp_address[1])
+                self.logger.debug('SCTP disconnection from %s:%d', sctp_address[0], sctp_address[1])
                 # Break loop
                 break
             # Log SCTP data
-            # self.logger.info('SCTP data from %s:%d: %s', sctp_address[0], sctp_address[1], binascii.hexlify(sctp_data).decode('utf-8'))
+            # self.logger.debug('SCTP data from %s:%d: %s', sctp_address[0], sctp_address[1], binascii.hexlify(sctp_data).decode('utf-8'))
             # Log SCTP data
             response = self.handle_sctp_data(sctp_data)
             if response:
-                # self.logger.info('SCTP response: %s', binascii.hexlify(response).decode('utf-8'))
+                # self.logger.debug('SCTP response: %s', binascii.hexlify(response).decode('utf-8'))
                 sctp_connection.send(response)
             # # Put data in SCTP queue
             # self._sctp_queue.put(sctp_data)
@@ -212,7 +212,7 @@ class SCTPServer(ServerCtx):
             # Accept incoming connection
             sctp_connection, sctp_address = self._socket.accept()
             # Log SCTP connection
-            self.logger.info('SCTP connection from %s:%d', sctp_address[0], sctp_address[1])
+            self.logger.debug('SCTP connection from %s:%d', sctp_address[0], sctp_address[1])
             # Create SCTP connection thread
             sctp_connection_thread = threading.Thread(target=self._connection_thread_function, args=(sctp_connection, sctp_address), daemon=True)
             # Start SCTP connection thread
@@ -220,7 +220,7 @@ class SCTPServer(ServerCtx):
 
     def handle_sctp_data(self, sctp_data):
         # Log SCTP data
-        # self.logger.info('SCTP data: %s', binascii.hexlify(sctp_data).decode('utf-8'))
+        # self.logger.debug('SCTP data: %s', binascii.hexlify(sctp_data).decode('utf-8'))
         # Check if data needs a response
         if sctp_data[0] != 0x01:
             # Send response
@@ -231,12 +231,12 @@ class SCTPServer(ServerCtx):
         # Check if connection is closed
         if self._socket._closed:
             # Break loop
-            self.logger.info('_sctp_thread_function: SCTP socket closed exiting thread')
+            self.logger.debug('_sctp_thread_function: SCTP socket closed exiting thread')
             return
         # Put SCTP message in queue
         self._sctp_queue.put(data)
         # Log SCTP message
-        # self.logger.info('send: queued SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
+        # self.logger.debug('send: queued SCTP message: {}'.format(binascii.hexlify(sctp_data).decode('utf-8')))
 
     def recv(self, size) -> bytes:
         return super().recv(size)

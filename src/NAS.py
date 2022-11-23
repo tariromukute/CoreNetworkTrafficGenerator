@@ -120,7 +120,7 @@ class SecProtNASMessageProc(NASProc):
             return
         # check if message is encrypted
         if Msg['5GMMHeaderSec']['SecHdr'].get_val() == 2:
-            logger.info("Processing Encrypted NAS Message")
+            logger.debug("Processing Encrypted NAS Message")
             # decrypt message
             Msg.decrypt(ue.k_nas_enc, dir=1, fgea=1, seqnoff=0, bearer=1)
             Msg, err = parse_NAS5G(Msg._dec_msg)
@@ -129,7 +129,7 @@ class SecProtNASMessageProc(NASProc):
                 return
             return Msg, ue
         else:
-            logger.info("Processing Unencrypted NAS Message")
+            logger.debug("Processing Unencrypted NAS Message")
             return Msg, ue
 
     def send(self, data: bytes) -> int:
@@ -225,7 +225,7 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
         # Create Registration Request
         RegReq, _ = RegistrationProc().initiate(ue)
         # Send Registration Request
-        logger.info("Sending registration request for UE: %s", ue)
+        logger.debug("Sending registration request for UE: %s", ue)
         return RegReq, ue
     # Create NAS object
     NAS_PDU, err = parse_NAS5G(data)
@@ -234,7 +234,7 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
         return b''
     if NAS_PDU._name == '5GMMAuthenticationRequest':
         tx_nas_pdu, ue = AuthenticationProc().receive(data, ue)
-        logger.info("Sending authentication response for UE: %s", ue)
+        logger.debug("Sending authentication response for UE: %s", ue)
         return tx_nas_pdu, ue
     elif NAS_PDU._name == '5GMMSecProtNASMessage':
         # Check if NAS message is integrity protected
@@ -242,12 +242,12 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
         if DEC_PDU._by_name.count('5GMMSecurityModeCommand') > 0:
             smc = DEC_PDU['5GMMSecurityModeCommand'].to_bytes()
             tx_nas_pdu, ue = SecurityModeProc().receive(smc, ue)
-            logger.info("Sending security mode complete for UE: %s", ue)
+            logger.debug("Sending security mode complete for UE: %s", ue)
             return tx_nas_pdu, ue
         elif DEC_PDU._name == '5GMMRegistrationAccept':
             ra = DEC_PDU.to_bytes()
             tx_nas_pdu, ue = RegistrationAcceptProc().receive(ra, ue)
-            logger.info("Sending registration complete for UE: %s", ue)
+            logger.debug("Sending registration complete for UE: %s", ue)
             return tx_nas_pdu, ue
 
     return None
@@ -261,7 +261,7 @@ class NAS():
         # add a handler that uses the shared queue
         logger.addHandler(QueueHandler(logger_queue))
         # log all messages, debug and up
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)
 
     def _load_nas_dl_thread(self):
         """ Load the thread that will handle NAS DownLink messages from gNB """

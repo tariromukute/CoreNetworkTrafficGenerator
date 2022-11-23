@@ -22,7 +22,7 @@ class GNBProcess(Process):
         self.gNB = GNB(logger_queue, client_config, server_config, ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_array)
 
     def run(self):
-        logger.info("Starting GNB process")
+        logger.debug("Starting GNB process")
         self.gNB.run()
 
 # Multi process NAS class
@@ -32,7 +32,7 @@ class NASProcess(Process):
         self.nas = NAS(logger_queue, nas_dl_queue, nas_ul_queue, ue_list)
 
     def run(self):
-        logger.info("Starting NAS process")
+        logger.debug("Starting NAS process")
         self.nas.run()
 
 # Multi process SCTP class
@@ -42,7 +42,7 @@ class SCTPProcess(Process):
         self.sctp = SCTPClient(logger_queue, config, server_config, ngap_dl_queue, ngap_ul_queue)
 
     def run(self):
-        logger.info("Starting SCTP client process")
+        logger.debug("Starting SCTP client process")
         self.sctp.run()
 
 # Logging process
@@ -111,7 +111,7 @@ class UtilProcess(Process):
         self.ue_list = ue_list
 
     def run(self):
-        logger.info("Starting util process")
+        logger.debug("Starting util process")
         self._load_util_thread()
 
     def _load_util_thread(self):
@@ -152,7 +152,7 @@ class MultiProcess:
         # add a handler that uses the shared queue
         logger.addHandler(QueueHandler(logger_queue))
         # log all messages, debug and up
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)
 
         # Set the processes to daemon to exit when main process exits
         self.logging.daemon = True
@@ -167,7 +167,7 @@ class MultiProcess:
         self.gNB.start()
         self.nas.start()
         self.util.start()
-        logger.info("Started processes")
+        logger.debug("Started processes")
 
 
 # Main function
@@ -212,11 +212,11 @@ def main():
             ue_list.append(UE())
 
         # Create multi process
-        # logger.info("Creating multi process")
+        # logger.debug("Creating multi process")
         multi_process = MultiProcess(logger_queue, client_config, server_config, ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_list)
         # Run multi process
         multi_process.run()
-        # logger.info("Created multi process")
+        # logger.debug("Created multi process")
 
         # Wait for GNB to be ready
         time.sleep(5)
@@ -231,14 +231,14 @@ def main():
             config = ue_config
             config['supi'] = imsi
             ue = UE(config)
-            logger.info("Adding to Queue UE: %s", ue)
+            logger.debug("Adding to Queue UE: %s", ue)
             ues_queue.put(ue)
 
         # Wait for UE to be added
         time.sleep(10)
         
     # End multi process
-    logger.info("Ending multi process")
+    logger.debug("Ending multi process")
     
 # Main
 if __name__ == "__main__":
