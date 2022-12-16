@@ -25,7 +25,7 @@ class GNBProcess(Process):
             'nci': '0x000000010',
             'idLength': 32,
             'tac': 1,
-            'slices': { 'sst': 1 }
+            'slices': [{ 'sst': 1 }]
         }
         self.gNB = GNB(logger_queue, config, server_config, ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_array)
 
@@ -247,7 +247,7 @@ def main():
         # for i in range(31, 1031):
         base_imsi = ue_config['supi'][:-10]
         init_imsi = int(ue_config['supi'][-10:])
-        for i in range(0, 1):
+        for i in range(0, 10):
             imsi = '{}{}'.format(base_imsi, format(init_imsi + i, '010d'))
             config = ue_config
             config['supi'] = imsi

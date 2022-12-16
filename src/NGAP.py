@@ -39,6 +39,7 @@ def plmn_str_to_buf(s):
 
 # pLMNIdentity
 # taC
+# sST
 class GNB():
     def __init__(self, logger_queue, client_config: dict, server_config: dict,  ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ues) -> None:
         self.ues = ues # [None for i in range(100)] # A ctypes array contain the UEs that have been initialized
@@ -54,6 +55,7 @@ class GNB():
         self.tac = client_config['tac'].to_bytes(3, 'big')
         self.slices = client_config['slices']
         self.pLMNIdentity = plmn_str_to_buf(client_config['mcc'] + client_config['mnc'])
+        self.tAISliceSupportList = [{ 'sST': int(a['sst']).to_bytes(1, 'big') } for a in client_config['slices']]
         # add a handler that uses the shared queue
         logger.addHandler(QueueHandler(logger_queue))
         # log all messages, debug and up
@@ -71,7 +73,7 @@ class GNB():
 
     def initiate(self) -> None:
         # Send NGSetupRequest
-        obj = {'plmn_identity': self.pLMNIdentity, 'tac': self.tac, 'nci': self.nci }
+        obj = {'plmn_identity': self.pLMNIdentity, 'tac': self.tac, 'nci': self.nci, 'tai_slice_support_list': self.tAISliceSupportList }
         ngSetupRequest = NGSetupProc()
         ngSetupRequest.initiate(obj)
         nGSetupPDU_APER = ngSetupRequest.get_pdu().to_aper()
@@ -305,7 +307,7 @@ class NGSetupProc(NonUEAssociatedNGAPProc):
             IEs = []
             IEs.append({'id': 27, 'criticality': 'reject', 'value': ('GlobalRANNodeID', ('globalGNB-ID', {'pLMNIdentity': obj['plmn_identity'], 'gNB-ID': ('gNB-ID', (1, 32))}))})
             IEs.append({'id': 82, 'criticality': 'ignore', 'value': ('RANNodeName', 'UERANSIM-gnb-208-95-1')})
-            IEs.append({'id': 102, 'criticality': 'reject', 'value': ('SupportedTAList', [{'tAC': obj['tac'], 'broadcastPLMNList': [{'pLMNIdentity': obj['plmn_identity'], 'tAISliceSupportList': [{'s-NSSAI': {'sST': b'\x01' }}]}]}])})
+            IEs.append({'id': 102, 'criticality': 'reject', 'value': ('SupportedTAList', [{'tAC': obj['tac'], 'broadcastPLMNList': [{'pLMNIdentity': obj['plmn_identity'], 'tAISliceSupportList': [ {'s-NSSAI': s } for s in obj['tai_slice_support_list'] ]}]}])})
             IEs.append({'id': 21, 'criticality': 'ignore', 'value': ('PagingDRX', 'v128')})
             val = ('initiatingMessage', {'procedureCode': 21, 'criticality': 'reject', 'value': ('NGSetupRequest', {'protocolIEs': IEs})})
             self.PDU.set_val(val)
