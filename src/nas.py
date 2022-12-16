@@ -12,24 +12,24 @@ def byte_xor(ba1, ba2):
     """ XOR two byte strings """
     return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
 
-AUTN=b'09ad2482d2688000a5f4000a039d899b'
-OP = b'63bfa50ee6523365ff14c1f45f88737d'
+AUTN=b'b5b02f7971008000fd4d0dd8db712833'
+OP = b'E8ED289DEBA952E4283B54E88E6183CA'
 # 63 bf a5 e e6 52 33 65 ff 14 c1 f4 5f 88 73 7d 
 OP = unhexlify(OP)
-key = b'0c0a34601d4f07677303652c0462535b'
+key = b'465B5CE8B199B49FAA5F0A2EE238A6BC'
 # c a 34 60 1d 4f 7 67 73 3 65 2c 4 62 53 5b 
 key = unhexlify(key)
-sqn_xor_ak =  b'09ad2482d268'
+sqn_xor_ak =  b'b5b02f797100'
 sqn_xor_ak = unhexlify(sqn_xor_ak)
 amf =  b'8000'
 amf = unhexlify(amf)
-mac =  b'a5f4000a039d899b'
+mac =  b'fd4d0dd8db712833'
 mac = unhexlify(mac)
-rand =  b'f022497e9c3dfd4d412c3f861fb99a0e'
+rand =  b'04f018e4646f46f329857bf88c68bfc6'
 rand = unhexlify(rand)
 abba =  b'0000'
 abba = unhexlify(abba)
-supi = b'208950000000031'
+supi = b'99970000000001'
 
 print("Creating Auth keys")
 Mil = Milenage(OP)
@@ -51,7 +51,7 @@ print("IK: ", hexlify(IK))
 print("AK: ", hexlify(AK))
 
 
-sn_name = b"5G:mnc095.mcc208.3gppnetwork.org"
+sn_name = b"5G:mnc070.mcc999.3gppnetwork.org"
 Res = conv_501_A4(CK, IK, sn_name, rand, RES)
 print("Res: ", hexlify(Res))
 

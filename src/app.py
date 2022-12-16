@@ -194,16 +194,28 @@ def main():
         logger_queue = manager.Queue(-1)
 
         # Create UE config
+        # ue_config = {
+        #     'supi': '208950000000031',
+        #     'mcc': '208',
+        #     'mnc': '95',
+        #     'key': '0C0A34601D4F07677303652C0462535B',
+        #     'op': '63bfa50ee6523365ff14c1f45f88737d',
+        #     'op_type': 'OPC',
+        #     'amf': '8000',
+        #     'imei': '356938035643803',
+        #     'imeiSv': '0035609204079514',
+        #     'tac': '0001'
+        # }
         ue_config = {
-            'supi': '208950000000031',
-            'mcc': '208',
-            'mnc': '95',
-            'key': '0C0A34601D4F07677303652C0462535B',
-            'op': '63bfa50ee6523365ff14c1f45f88737d',
+            'supi': '999700000000001',
+            'mcc': '999',
+            'mnc': '70',
+            'key': '465B5CE8B199B49FAA5F0A2EE238A6BC',
+            'op': 'E8ED289DEBA952E4283B54E88E6183CA',
             'op_type': 'OPC',
             'amf': '8000',
             'imei': '356938035643803',
-            'imeiSv': '0035609204079514',
+            'imeiSv': '4370816125816151',
             'tac': '0001'
         }
 
@@ -226,7 +238,7 @@ def main():
         # for i in range(31, 1031):
         base_imsi = ue_config['supi'][:-10]
         init_imsi = int(ue_config['supi'][-10:])
-        for i in range(0, 5):
+        for i in range(0, 1):
             imsi = '{}{}'.format(base_imsi, format(init_imsi + i, '010d'))
             config = ue_config
             config['supi'] = imsi

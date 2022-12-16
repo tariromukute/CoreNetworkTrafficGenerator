@@ -16,6 +16,29 @@ from Proc import Proc
 
 logger = logging.getLogger('__NGAP__')
 
+def plmn_buf_to_str(buf):
+    d = []
+    [d.extend([0x30 + (b&0xf), 0x30+(b>>4)]) for b in buf]
+    if d[3] == 0x3f:
+        # filler, 5 digits MCC MNC
+        del d[3]
+    return bytes(d).decode()
+
+def plmn_str_to_buf(s):
+    s = s.encode()
+    if len(s) == 5:
+        return bytes([
+            ((s[1]-0x30)<<4) + (s[0]-0x30),
+                        0xf0 + (s[2]-0x30),
+            ((s[4]-0x30)<<4) + (s[3]-0x30)])
+    else:
+        return bytes([
+            ((s[1]-0x30)<<4) + (s[0]-0x30),
+            ((s[3]-0x30)<<4) + (s[2]-0x30),
+            ((s[5]-0x30)<<4) + (s[4]-0x30)])
+
+# pLMNIdentity
+# taC
 class GNB():
     def __init__(self, logger_queue, client_config: dict, server_config: dict,  ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ues) -> None:
         self.ues = ues # [None for i in range(100)] # A ctypes array contain the UEs that have been initialized
@@ -272,9 +295,9 @@ class NGSetupProc(NonUEAssociatedNGAPProc):
             self.PDU.from_aper(data)
         else:
             IEs = []
-            IEs.append({'id': 27, 'criticality': 'reject', 'value': ('GlobalRANNodeID', ('globalGNB-ID', {'pLMNIdentity': b'\x02\xf8Y', 'gNB-ID': ('gNB-ID', (1, 32))}))})
+            IEs.append({'id': 27, 'criticality': 'reject', 'value': ('GlobalRANNodeID', ('globalGNB-ID', {'pLMNIdentity': plmn_str_to_buf('99970'), 'gNB-ID': ('gNB-ID', (1, 32))}))})
             IEs.append({'id': 82, 'criticality': 'ignore', 'value': ('RANNodeName', 'UERANSIM-gnb-208-95-1')})
-            IEs.append({'id': 102, 'criticality': 'reject', 'value': ('SupportedTAList', [{'tAC': b'\x00\xa0\x00', 'broadcastPLMNList': [{'pLMNIdentity': b'\x02\xf8Y', 'tAISliceSupportList': [{'s-NSSAI': {'sST': b'\xde', 'sD': b'\x00\x00{'}}]}]}])})
+            IEs.append({'id': 102, 'criticality': 'reject', 'value': ('SupportedTAList', [{'tAC': b'\x00\x00\x01', 'broadcastPLMNList': [{'pLMNIdentity': plmn_str_to_buf('99970'), 'tAISliceSupportList': [{'s-NSSAI': {'sST': b'\x01' }}]}]}])})
             IEs.append({'id': 21, 'criticality': 'ignore', 'value': ('PagingDRX', 'v128')})
             val = ('initiatingMessage', {'procedureCode': 21, 'criticality': 'reject', 'value': ('NGSetupRequest', {'protocolIEs': IEs})})
             self.PDU.set_val(val)
@@ -333,12 +356,12 @@ class NGInitialUEMessageProc(UEAssociatedNGAPProc):
     """
 
     def initiate(self, nas_pdu, id) -> None:
-        
+        # TODO: check if this is still needed
         IEs = []
         curTime = int(time.time()) + 2208988800 #1900 instead of 1970
         IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', id)}) # RAN-UE-NGAP-ID must be unique for each UE
         IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', nas_pdu) })
-        IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': b'\x02\xf8Y', 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': b'\x02\xf8Y', 'tAC': b'\x00\xa0\x00'}, 'timeStamp': struct.pack("!I",curTime)}))})
+        IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'tAC': b'\x00\x00\x01'}, 'timeStamp': struct.pack("!I",curTime)}))})
         IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
         IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
         val = ('initiatingMessage', {'procedureCode': 15, 'criticality': 'ignore', 'value': ('InitialUEMessage', {'protocolIEs': IEs})})
@@ -355,7 +378,7 @@ class NGInitialUEMessageProc(UEAssociatedNGAPProc):
         curTime = int(time.time()) + 2208988800 #1900 instead of 1970
         IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', obj['ran_ue_ngap_id'])}) # RAN-UE-NGAP-ID must be unique for each UE
         IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', data) })
-        IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': b'\x02\xf8Y', 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': b'\x02\xf8Y', 'tAC': b'\x00\xa0\x00'}, 'timeStamp': struct.pack("!I",curTime)}))})
+        IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'tAC': b'\x00\x00\x01'}, 'timeStamp': struct.pack("!I",curTime)}))})
         IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
         IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
         val = ('initiatingMessage', {'procedureCode': 15, 'criticality': 'ignore', 'value': ('InitialUEMessage', {'protocolIEs': IEs})})
@@ -451,6 +474,7 @@ class NGUplinkNASTransportProc(UEAssociatedNGAPProc):
     """
 
     def initiate(self, data: bytes = None) -> None:
+        # TODO: check if this is still needed
         if data:
             self.PDU.from_aper(data)
         else:
@@ -459,7 +483,7 @@ class NGUplinkNASTransportProc(UEAssociatedNGAPProc):
             IEs.append({'id': 10, 'criticality': 'reject', 'value': ('AMF-UE-NGAP-ID', 1)})
             IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', 1)})
             IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', b'~\x00W-\x10\xb3\x98--KE\x8b\xa3:\xe5\t\xf5\x00A\x10\xc5')})
-            IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': b'\x02\xf8Y', 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': b'\x02\xf8Y', 'tAC': b'\x00\xa0\x00'}, 'timeStamp': struct.pack("!I",curTime)}))})
+            IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'tAC': b'\x00\x00\x01'}, 'timeStamp': struct.pack("!I",curTime)}))})
             val = ('initiatingMessage', {'procedureCode': 46, 'criticality': 'ignore', 'value': ('UplinkNASTransport', {'protocolIEs': IEs})})
             self.PDU.set_val(val)
 
@@ -472,7 +496,7 @@ class NGUplinkNASTransportProc(UEAssociatedNGAPProc):
         IEs.append({'id': 10, 'criticality': 'reject', 'value': ('AMF-UE-NGAP-ID', amf_ue_ngap_id)})
         IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', ran_ue_ngap_id)})
         IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', nas_pdu)})
-        IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': b'\x02\xf8Y', 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': b'\x02\xf8Y', 'tAC': b'\x00\xa0\x00'}, 'timeStamp': struct.pack("!I",curTime)}))})
+        IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'tAC': b'\x00\x00\x01'}, 'timeStamp': struct.pack("!I",curTime)}))})
         val = ('initiatingMessage', {'procedureCode': 46, 'criticality': 'ignore', 'value': ('UplinkNASTransport', {'protocolIEs': IEs})})
         PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
         PDU.set_val(val)

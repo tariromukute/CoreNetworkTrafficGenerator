@@ -16,6 +16,12 @@ from logging.handlers import QueueHandler
 
 logger = logging.getLogger('__NAS__')
 
+# sn_name
+# imei
+# alg_id = 2
+# fgea = 2
+# fgia = 2
+
 def byte_xor(ba1, ba2):
     """ XOR two byte strings """
     return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
@@ -49,8 +55,8 @@ class AuthenticationProc(NASProc):
         Msg, err = parse_NAS_MO(data)
         if err:
             return
-        OP = unhexlify('63bfa50ee6523365ff14c1f45f88737d')
-        key = unhexlify('0C0A34601D4F07677303652C0462535B')
+        OP = unhexlify(ue.op)
+        key = unhexlify(ue.key)
 
         sqn_xor_ak, amf, mac = Msg['AUTN']['AUTN'].get_val()
 
@@ -67,7 +73,7 @@ class AuthenticationProc(NASProc):
         Mil.f1(unhexlify(ue.key), rand, SQN=SQN, AMF=amf)
         RES, CK, IK, _  = Mil.f2345(key, rand)
 
-        sn_name = b"5G:mnc095.mcc208.3gppnetwork.org"
+        sn_name = b"5G:mnc070.mcc999.3gppnetwork.org"
         Res = conv_501_A4(CK, IK, sn_name, rand, RES)
 
         IEs = {}
@@ -82,11 +88,11 @@ class AuthenticationProc(NASProc):
         # Get K_AMF
         ue.k_amf = conv_501_A7(ue.k_seaf, ue.supi.encode('ascii'), abba)
         # Get K_NAS_ENC
-        ue.k_nas_enc = conv_501_A8(ue.k_amf, alg_type=1, alg_id=1)
+        ue.k_nas_enc = conv_501_A8(ue.k_amf, alg_type=1, alg_id=2)
         # Get least significate 16 bytes from K_NAS_ENC 32 bytes
         ue.k_nas_enc = ue.k_nas_enc[16:]
         # Get K_NAS_INT
-        k_nas_int = conv_501_A8(ue.k_amf, alg_type=2, alg_id=1)
+        k_nas_int = conv_501_A8(ue.k_amf, alg_type=2, alg_id=2)
         ue.set_k_nas_int(k_nas_int)
         ue.k_nas_int = ue.k_nas_int[16:]
         # Set state
@@ -122,7 +128,7 @@ class SecProtNASMessageProc(NASProc):
         if Msg['5GMMHeaderSec']['SecHdr'].get_val() == 2:
             logger.debug("Processing Encrypted NAS Message")
             # decrypt message
-            Msg.decrypt(ue.k_nas_enc, dir=1, fgea=1, seqnoff=0, bearer=1)
+            Msg.decrypt(ue.k_nas_enc, dir=1, fgea=2, seqnoff=0, bearer=1)
             Msg, err = parse_NAS5G(Msg._dec_msg)
             if err:
                 logger.error("Error decrypting NAS Message")
@@ -162,24 +168,30 @@ class SecurityModeProc(NASProc):
 
         # Create registration message
         RegIEs = {}
+        RegIEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65 }
+        RegIEs['NAS_KSI'] = { 'TSC': 0, 'Value': 7 }
+        RegIEs['5GSRegType'] = { 'FOR': 1, 'Value': 1 }
+        RegIEs['5GSID'] = { 'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': { 'PLMN': '20895', 'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': b'\x00\x00\x00\x00\x13'} }
+        RegIEs['UESecCap'] = { '5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0, '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0, '5G-IA6': 0, '5G-IA7': 0, 'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0, 'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0 }
         RegIEs['5GSUpdateType'] = {'EPS-PNB-CIoT': 0, '5GS-PNB-CIoT': 0, 'NG-RAN-RCU': 0, 'SMSRequested': 0 }
         RegIEs['5GMMCap'] = {'SGC': 0, '5G-HC-CP-CIoT': 0, 'N3Data': 0, '5G-CP-CIoT': 0, 'RestrictEC': 0, 'LPP': 0, 'HOAttach': 0, 'S1Mode': 0 }
-        # TODO: Add NSSAI to RegIEs
-        
-        # RegMsg = FGMMRegistrationRequest(val=RegIEs)
-        RegMsg, _ = RegistrationProc().initiate(ue)
+        RegIEs['NSSAI'] = [{ 'SNSSAI': { 'SST': 1 } }]
+
+        RegMsg = FGMMRegistrationRequest(val=RegIEs)
+        # RegMsg, _ = RegistrationProc().initiate(ue)
         # Add the RegIEs to the RegMsg
 
         # Send Security Mode Complete
         IEs = {}
         IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0 }
-        IEs['IMEISV'] = {'Type': FGSIDTYPE_IMEISV, 'Digit1': 0, 'Digits': '035609204079514'}
+        IEs['IMEISV'] = {'Type': FGSIDTYPE_IMEISV, 'Digit1': 4, 'Digits': '370816125816151'}
+        IEs['NASContainer'] = RegMsg.to_bytes()
         Msg = FGMMSecurityModeComplete(val=IEs)
         # Encrypt NAS message
         SecMsg = SecProtNASMessageProc().create_req()
         SecMsg['NASMessage'].set_val(Msg.to_bytes())
-        SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
-        SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=1, seqnoff=0, bearer=1)
+        SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=2, seqnoff=0, bearer=1)
+        SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=2, seqnoff=0, bearer=1)
         # Set state
         ue.state = FGMMState.SECURITY_MODE_INITIATED
         return SecMsg.to_bytes(), ue

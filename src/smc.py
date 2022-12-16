@@ -8,6 +8,8 @@ from CryptoMobile.conv import *
 from CryptoMobile.ECIES import *
 from pycrate_mobile.TS24501_IE import *
 
+# NSSAI.CLASS
+# NSSAI._GEN
 def byte_xor(ba1, ba2):
     """ XOR two byte strings """
     return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
@@ -93,13 +95,20 @@ RegIEs['5GSRegType'] = { 'FOR': 1, 'Value': 1 }
 RegIEs['5GSID'] = { 'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': { 'PLMN': '20895', 'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': b'\x00\x00\x00\x00\x13'} }
 RegIEs['UESecCap'] = { '5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0, '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0, '5G-IA6': 0, '5G-IA7': 0, 'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0, 'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0 }
 
-N = SNSSAI(val={'SST': 222, 'SD': 0x00007b})
-P = NSSAI(val={ 'T': 47, 'V': {'SST': 222, 'SD': 0x00007b} })
+# N = SNSSAI(val={'SST': 222, 'SD': 0x00007b})
+# P = NSSAI(val={ 'T': 47, 'V': {'SST': 222, 'SD': 0x00007b} })
 RegIEs['5GSUpdateType'] = {'EPS-PNB-CIoT': 0, '5GS-PNB-CIoT': 0, 'NG-RAN-RCU': 0, 'SMSRequested': 0 }
 RegIEs['5GMMCap'] = {'SGC': 0, '5G-HC-CP-CIoT': 0, 'N3Data': 0, '5G-CP-CIoT': 0, 'RestrictEC': 0, 'LPP': 0, 'HOAttach': 0, 'S1Mode': 0 }
 # RegIEs['NSSAI']['V'] = N.to_bytes()
 # RegIEs['NSSAI'] = {'T':0x2F, 'V':b'\x01\x01'}
-
+# RegIEs['NSSAI'] = ({'SST': 222, 'SD': 0x00007b})
+# RegIEs['NSSAI'] = {'SST': 222, 'SD': 123}
+# RegIEs['NSSAI'] = ({'SST': 222, 'SD': 123})
+# RegIEs['NSSAI'] = { 'NSSAI': { 'SST': 222, 'SD': 123} }
+# RegIEs['NSSAI'] = [{'SST': 222, 'SD': 123}]
+# RegIEs['NSSAI'] = { 'V': ({ 'SST': 222, 'SD': 123}) }
+RegIEs['NSSAI'] = [{ 'SNSSAI': { 'SST': 222, 'SD': 0x00007b } }]
+# NSSAI(val=[{ 'SNSSAI': { 'SST': 222 } }])
 RegMsg = FGMMRegistrationRequest(val=RegIEs)
 # RegMsg['NSSAI']['V'].set_val(N.to_bytes())
 print(RegMsg.show())
@@ -128,10 +137,12 @@ print(".......................Updated Reg Message...............................
 IEs = {}
 IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0 }
 IEs['IMEISV'] = {'Type': FGSIDTYPE_IMEISV, 'Digit1': 0, 'Digits': '035609204079514'}
-# IEs['NASContainer'] = RegMsg.to_bytes()
-# 25f5f12de488dbc1982aa419ceff540122079c7e4807420f5aca1c0e26ef69107b564924ceedcf99fb170e9e26a2f3ba8b874cf6c0b90c50
-# 7337a893f4e04039a8c9cacdcacc8fa65d10381ac12dcc1d6dd9cbe908774f366b55bb20825e6d2b8ae32a6ea933661fda1126b2bc5c3873
+# IEs['NASContainer'] = { 'Type': 113, 'Value': RegMsg }
+# IEs['NASContainer'] = { 'V': RegMsg.to_bytes() }
+IEs['NASContainer'] = { }
+
 Msg = FGMMSecurityModeComplete(val=IEs)
+Msg['NASContainer']['V'].set_val(RegMsg.to_bytes())
 print(".......................Sec Dec Message...............................")
 print(Msg.show())
 print(".......................Sec Dec Message...............................")
