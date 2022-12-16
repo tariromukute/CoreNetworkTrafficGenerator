@@ -12,24 +12,24 @@ def byte_xor(ba1, ba2):
     """ XOR two byte strings """
     return bytes([_a ^ _b for _a, _b in zip(ba1, ba2)])
 
-AUTN=b'b5b02f7971008000fd4d0dd8db712833'
+AUTN=b'44c3e03b5a5980006e85505b4843ceee'
 OP = b'E8ED289DEBA952E4283B54E88E6183CA'
 # 63 bf a5 e e6 52 33 65 ff 14 c1 f4 5f 88 73 7d 
 OP = unhexlify(OP)
 key = b'465B5CE8B199B49FAA5F0A2EE238A6BC'
 # c a 34 60 1d 4f 7 67 73 3 65 2c 4 62 53 5b 
 key = unhexlify(key)
-sqn_xor_ak =  b'b5b02f797100'
+sqn_xor_ak =  b'44c3e03b5a59'
 sqn_xor_ak = unhexlify(sqn_xor_ak)
 amf =  b'8000'
 amf = unhexlify(amf)
-mac =  b'fd4d0dd8db712833'
+mac =  b'6e85505b4843ceee'
 mac = unhexlify(mac)
-rand =  b'04f018e4646f46f329857bf88c68bfc6'
+rand =  b'84b692e300a6513590940b39a35a97f4'
 rand = unhexlify(rand)
 abba =  b'0000'
 abba = unhexlify(abba)
-supi = b'99970000000001'
+supi = b'999700000000001'
 
 print("Creating Auth keys")
 Mil = Milenage(OP)
@@ -70,12 +70,12 @@ k_nas_enc = conv_501_A8(k_amf, alg_type=1, alg_id=1)
 k_nas_enc = k_nas_enc[16:]
 print("K_NAS_ENC: ", hexlify(k_nas_enc))
 # Get K_NAS_INT
-k_nas_int = conv_501_A8(k_amf, alg_type=1, alg_id=2)
+k_nas_int = conv_501_A8(k_amf, alg_type=2, alg_id=2)
 k_nas_int = k_nas_int[16:]
 # k_nas_int = unhexlify('fbf4bfd78c4fe1a4dca0caabc49047f6')
 print("K_NAS_INT: ", hexlify(k_nas_int))
 
-nas_pdu = "7e02bab19def0134bb594638cdad2f061524c3bcbfc3a16ecbd02ffc08d41154864d38639cea20a82e22e2dc4fb783d7af728c27c22cc3970785e0d86c2fb86d5cc85006"
+nas_pdu = "7e0449f9a61e007e005e7700094573806121856151f17100237e004179000d0199f9070000000000000000101001002e04f0f0f0f02f020101530100"
 
 print("..................Decoding EURANSIM generate msg...................")
 EncMsg, e = parse_NAS5G(unhexlify(nas_pdu))
@@ -83,44 +83,69 @@ print(".......................Enc Message...............................")
 print(EncMsg.show())
 print(".......................Enc Message...............................")
 
+# EncMsg.decrypt(key=k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
 
+# print(".......................MAC Message...............................")
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=0x10, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=0, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=1, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=2, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=3, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=4, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=5, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=6, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=7, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=8, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=9, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=10, bearer=1))
 
-print(".......................MAC Message...............................")
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=0x10, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=0, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=1, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=2, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=3, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=4, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=5, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=6, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=7, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=8, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=9, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=1, seqnoff=10, bearer=1))
+# print("---------------------")
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=0x10, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=0, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=1, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=2, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=3, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=4, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=5, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=6, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=7, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=8, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=9, bearer=1))
+# print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=2, seqnoff=10, bearer=1))
+# print(".......................MAC Message...............................")
 
-print("---------------------")
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=0x10, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=0, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=1, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=2, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=3, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=4, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=5, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=6, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=7, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=8, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=9, bearer=1))
-print(EncMsg.mac_verify(key=k_nas_int, dir=1, fgia=1, seqnoff=10, bearer=1))
-print(".......................MAC Message...............................")
+print(EncMsg.mac_verify(key=k_nas_int, dir=0, fgia=2, seqnoff=0, bearer=1))
 
-EncMsg.decrypt(key=k_nas_enc, dir=1, fgea=1, seqnoff=0, bearer=1)
+EncMsg.decrypt(key=k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
 
 print(".......................Dec Message...............................")
 print(hexlify(EncMsg._dec_msg))
 print(".......................Dec Message...............................")
 
 DecMsg, e = parse_NAS5G(EncMsg._dec_msg)
+print(e)
 print(".......................Dec Message...............................")
+# print(DecMsg.show())
+print(".......................Dec Message...............................")
+
+k_nas_enc = conv_501_A8(k_amf, alg_type=1, alg_id=1)
+k_nas_enc = k_nas_enc[16:]
+print("K_NAS_ENC: ", hexlify(k_nas_enc))
+EncMsg.decrypt(key=k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
+DecMsg, e = parse_NAS5G(EncMsg._dec_msg)
+print("error ", e)
 print(DecMsg.show())
-print(".......................Dec Message...............................")
+
+k_nas_enc = conv_501_A8(k_amf, alg_type=1, alg_id=2)
+k_nas_enc = k_nas_enc[16:]
+print("K_NAS_ENC: ", hexlify(k_nas_enc))
+EncMsg.decrypt(key=k_nas_enc, dir=0, fgea=2, seqnoff=0, bearer=1)
+DecMsg, e = parse_NAS5G(EncMsg._dec_msg)
+print("error ", e)
+
+k_nas_enc = conv_501_A8(k_amf, alg_type=1, alg_id=0)
+k_nas_enc = k_nas_enc[16:]
+print("K_NAS_ENC: ", hexlify(k_nas_enc))
+EncMsg.decrypt(key=k_nas_enc, dir=0, fgea=0, seqnoff=0, bearer=1)
+DecMsg, e = parse_NAS5G(EncMsg._dec_msg)
+print("error ", e)

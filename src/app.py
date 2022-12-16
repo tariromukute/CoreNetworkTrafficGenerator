@@ -19,7 +19,15 @@ logger = logging.getLogger('__app__')
 class GNBProcess(Process):
     def __init__(self, logger_queue, client_config, server_config, ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_array):
         Process.__init__(self)
-        self.gNB = GNB(logger_queue, client_config, server_config, ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_array)
+        config = {
+            'mcc': '999',
+            'mnc': '70',
+            'nci': '0x000000010',
+            'idLength': 32,
+            'tac': 1,
+            'slices': { 'sst': 1 }
+        }
+        self.gNB = GNB(logger_queue, config, server_config, ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_array)
 
     def run(self):
         logger.debug("Starting GNB process")
@@ -216,7 +224,8 @@ def main():
             'amf': '8000',
             'imei': '356938035643803',
             'imeiSv': '4370816125816151',
-            'tac': '0001'
+            'tac': '0001',
+            'sst': 1
         }
 
         # Initialise ue_list with 1000 UEs
@@ -247,7 +256,7 @@ def main():
             ues_queue.put(ue)
 
         # Wait for UE to be added
-        time.sleep(10)
+        time.sleep(15)
         
     # End multi process
     logger.debug("Ending multi process")

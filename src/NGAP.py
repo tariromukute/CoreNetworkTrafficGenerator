@@ -6,7 +6,7 @@ import threading
 from SCTP import SCTPClient, SCTPServer
 from NAS import process_nas_procedure, RegistrationProc
 from pycrate_asn1dir import NGAP
-from binascii import unhexlify
+from binascii import unhexlify, hexlify
 from abc import ABC, ABCMeta, abstractmethod
 from pycrate_mobile.NAS import *
 from logging.handlers import QueueHandler
@@ -47,6 +47,13 @@ class GNB():
         self.nas_dl_queue = nas_dl_queue
         self.nas_ul_queue = nas_ul_queue
         self.ues_queue = ues_queue
+        self.mcc = client_config['mcc']
+        self.mnc = client_config['mnc']
+        self.nci = client_config['nci']
+        self.idLength = client_config['idLength']
+        self.tac = client_config['tac'].to_bytes(3, 'big')
+        self.slices = client_config['slices']
+        self.pLMNIdentity = plmn_str_to_buf(client_config['mcc'] + client_config['mnc'])
         # add a handler that uses the shared queue
         logger.addHandler(QueueHandler(logger_queue))
         # log all messages, debug and up
@@ -64,8 +71,9 @@ class GNB():
 
     def initiate(self) -> None:
         # Send NGSetupRequest
+        obj = {'plmn_identity': self.pLMNIdentity, 'tac': self.tac, 'nci': self.nci }
         ngSetupRequest = NGSetupProc()
-        ngSetupRequest.initiate()
+        ngSetupRequest.initiate(obj)
         nGSetupPDU_APER = ngSetupRequest.get_pdu().to_aper()
         logger.debug("Sending NGSetupRequest to 5G Core with size: %d", len(nGSetupPDU_APER))
         self.ngap_ul_queue.put(nGSetupPDU_APER)
@@ -129,7 +137,7 @@ class GNB():
                     logger.error("Error parsing NAS message: %s", err)
                     continue
                 amf_ue_ngap_id = self.get_ue(ran_ue_ngap_id).amf_ue_ngap_id
-                obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': Msg.to_bytes()}
+                obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': Msg.to_bytes(), 'plmn_identity': self.pLMNIdentity, 'tac': self.tac, 'nci': self.nci }
                 ngap_proc = self.select_ngap_ul_procedure(Msg._name)
                 ngap_pdu = ngap_proc.send(Msg.to_bytes(), obj)
                 if ngap_pdu:
@@ -290,14 +298,14 @@ class NGSetupProc(NonUEAssociatedNGAPProc):
     def __init__(self, data: bytes = None):
         super().__init__(data)
 
-    def initiate(self, data: bytes = None) -> None:
+    def initiate(self, obj, data: bytes = None) -> None:
         if data:
             self.PDU.from_aper(data)
         else:
             IEs = []
-            IEs.append({'id': 27, 'criticality': 'reject', 'value': ('GlobalRANNodeID', ('globalGNB-ID', {'pLMNIdentity': plmn_str_to_buf('99970'), 'gNB-ID': ('gNB-ID', (1, 32))}))})
+            IEs.append({'id': 27, 'criticality': 'reject', 'value': ('GlobalRANNodeID', ('globalGNB-ID', {'pLMNIdentity': obj['plmn_identity'], 'gNB-ID': ('gNB-ID', (1, 32))}))})
             IEs.append({'id': 82, 'criticality': 'ignore', 'value': ('RANNodeName', 'UERANSIM-gnb-208-95-1')})
-            IEs.append({'id': 102, 'criticality': 'reject', 'value': ('SupportedTAList', [{'tAC': b'\x00\x00\x01', 'broadcastPLMNList': [{'pLMNIdentity': plmn_str_to_buf('99970'), 'tAISliceSupportList': [{'s-NSSAI': {'sST': b'\x01' }}]}]}])})
+            IEs.append({'id': 102, 'criticality': 'reject', 'value': ('SupportedTAList', [{'tAC': obj['tac'], 'broadcastPLMNList': [{'pLMNIdentity': obj['plmn_identity'], 'tAISliceSupportList': [{'s-NSSAI': {'sST': b'\x01' }}]}]}])})
             IEs.append({'id': 21, 'criticality': 'ignore', 'value': ('PagingDRX', 'v128')})
             val = ('initiatingMessage', {'procedureCode': 21, 'criticality': 'reject', 'value': ('NGSetupRequest', {'protocolIEs': IEs})})
             self.PDU.set_val(val)
@@ -361,7 +369,7 @@ class NGInitialUEMessageProc(UEAssociatedNGAPProc):
         curTime = int(time.time()) + 2208988800 #1900 instead of 1970
         IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', id)}) # RAN-UE-NGAP-ID must be unique for each UE
         IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', nas_pdu) })
-        IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'tAC': b'\x00\x00\x01'}, 'timeStamp': struct.pack("!I",curTime)}))})
+        IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': obj['plmn_identity'], 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': obj['plmn_identity'], 'tAC': obj['tac']}, 'timeStamp': struct.pack("!I",curTime)}))})
         IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
         IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
         val = ('initiatingMessage', {'procedureCode': 15, 'criticality': 'ignore', 'value': ('InitialUEMessage', {'protocolIEs': IEs})})
@@ -378,7 +386,7 @@ class NGInitialUEMessageProc(UEAssociatedNGAPProc):
         curTime = int(time.time()) + 2208988800 #1900 instead of 1970
         IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', obj['ran_ue_ngap_id'])}) # RAN-UE-NGAP-ID must be unique for each UE
         IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', data) })
-        IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'tAC': b'\x00\x00\x01'}, 'timeStamp': struct.pack("!I",curTime)}))})
+        IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': obj['plmn_identity'], 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': obj['plmn_identity'], 'tAC': obj['tac']}, 'timeStamp': struct.pack("!I",curTime)}))})
         IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
         IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
         val = ('initiatingMessage', {'procedureCode': 15, 'criticality': 'ignore', 'value': ('InitialUEMessage', {'protocolIEs': IEs})})
@@ -483,7 +491,7 @@ class NGUplinkNASTransportProc(UEAssociatedNGAPProc):
             IEs.append({'id': 10, 'criticality': 'reject', 'value': ('AMF-UE-NGAP-ID', 1)})
             IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', 1)})
             IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', b'~\x00W-\x10\xb3\x98--KE\x8b\xa3:\xe5\t\xf5\x00A\x10\xc5')})
-            IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'tAC': b'\x00\x00\x01'}, 'timeStamp': struct.pack("!I",curTime)}))})
+            IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': obj['plmn_identity'], 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': obj['plmn_identity'], 'tAC': obj['tac']}, 'timeStamp': struct.pack("!I",curTime)}))})
             val = ('initiatingMessage', {'procedureCode': 46, 'criticality': 'ignore', 'value': ('UplinkNASTransport', {'protocolIEs': IEs})})
             self.PDU.set_val(val)
 
@@ -496,7 +504,7 @@ class NGUplinkNASTransportProc(UEAssociatedNGAPProc):
         IEs.append({'id': 10, 'criticality': 'reject', 'value': ('AMF-UE-NGAP-ID', amf_ue_ngap_id)})
         IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', ran_ue_ngap_id)})
         IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', nas_pdu)})
-        IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': plmn_str_to_buf('99970'), 'tAC': b'\x00\x00\x01'}, 'timeStamp': struct.pack("!I",curTime)}))})
+        IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': obj['plmn_identity'], 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': obj['plmn_identity'], 'tAC': obj['tac']}, 'timeStamp': struct.pack("!I",curTime)}))})
         val = ('initiatingMessage', {'procedureCode': 46, 'criticality': 'ignore', 'value': ('UplinkNASTransport', {'protocolIEs': IEs})})
         PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
         PDU.set_val(val)
@@ -515,7 +523,7 @@ class NGUplinkNASTransportProc(UEAssociatedNGAPProc):
         IEs.append({'id': 10, 'criticality': 'reject', 'value': ('AMF-UE-NGAP-ID', amf_ue_ngap_id)})
         IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', ran_ue_ngap_id)})
         IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', nas_pdu)})
-        IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': b'\x02\xf8Y', 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': b'\x02\xf8Y', 'tAC': b'\x00\xa0\x00'}, 'timeStamp': struct.pack("!I",curTime)}))})
+        IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': { 'pLMNIdentity': obj['plmn_identity'], 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': obj['plmn_identity'], 'tAC': obj['tac']}, 'timeStamp': struct.pack("!I",curTime)}))})
         val = ('initiatingMessage', {'procedureCode': 46, 'criticality': 'ignore', 'value': ('UplinkNASTransport', {'protocolIEs': IEs})})
         PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
         PDU.set_val(val)

@@ -58,6 +58,9 @@ class UE():
             self.imei = config['imei']
             self.imeiSv = config['imeiSv']
             self.tac = config['tac']
+            self.sst = config['sst']
+            sn_name = "5G:mnc{}.mcc{}.3gppnetwork.org".format(format(int(config['mnc']), '003d'), format(int(config['mcc']), '003d'))
+            self.sn_name = sn_name.encode()
             self.nas_key_set = set()
             self.amf_ue_ngap_id = None
             self.sqn = b'\x00' * 32
