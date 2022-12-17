@@ -1,8 +1,7 @@
 cffi==1.15.1
-cryptography==38.0.1
+cryptography==38.0.4
 CryptoMobile==0.3
-ntplib==0.4.0
 pycparser==2.21
 pycrate==0.5.5
-pycrypto==2.6.1
-pysctp==0.7.1
+pysctp==0.7.2
+PyYAML==6.0

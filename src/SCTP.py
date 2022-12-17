@@ -15,7 +15,7 @@ logger = logging.getLogger('__SCTPClient__')
 # Create SCTP Client class inheriting from Client Ctx class
 class SCTPClient():
     """ This class is a base class for all SCTP client contexts. """
-    def __init__(self, logger_queue, config, server_config, ngap_dl_queue, ngap_ul_queue):
+    def __init__(self, logger_queue, server_config, ngap_dl_queue, ngap_ul_queue):
         # Call parent class init
         # super().__init__(config)
         # self.logger = logging.getLogger('__SCTPClient__')
@@ -23,12 +23,12 @@ class SCTPClient():
         logger.addHandler(QueueHandler(logger_queue))
         # log all messages, debug and up
         logger.setLevel(logging.INFO)
-        self._config = config
         self._socket = self._load_socket()
         self.ngap_dl_queue = ngap_dl_queue
         self.ngap_ul_queue = ngap_ul_queue
-        self.server_config = server_config
-        self.connect(server_config)
+        # TODO: Allow connecting to multiple servers
+        self.server_config = server_config['amfConfigs'][0]
+        self.connect(server_config['amfConfigs'][0])
         # self._sctp_queue = self._load_sctp_queue()
         # self._thread = self._load_thread(self._thread_function)
         # self._listener_thread = self._load_listener(self._listener_thread_function)
@@ -42,7 +42,7 @@ class SCTPClient():
     def connect(self, server_config: dict) -> None:
         logger.debug("Connecting to 5G Core")
         logger.debug("Server config: {}".format(server_config))
-        self._connect(server_config['sctp']['address'], server_config['sctp']['port'])
+        self._connect(server_config['address'], server_config['port'])
 
     def disconnect(self) -> None:
         logger.debug("Disconnecting from 5G Core")

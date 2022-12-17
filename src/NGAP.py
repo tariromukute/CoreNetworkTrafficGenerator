@@ -41,21 +41,21 @@ def plmn_str_to_buf(s):
 # taC
 # sST
 class GNB():
-    def __init__(self, logger_queue, client_config: dict, server_config: dict,  ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ues) -> None:
+    def __init__(self, logger_queue, server_config: dict,  ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ues) -> None:
         self.ues = ues # [None for i in range(100)] # A ctypes array contain the UEs that have been initialized
         self.ngap_dl_queue = ngap_dl_queue
         self.ngap_ul_queue = ngap_ul_queue
         self.nas_dl_queue = nas_dl_queue
         self.nas_ul_queue = nas_ul_queue
         self.ues_queue = ues_queue
-        self.mcc = client_config['mcc']
-        self.mnc = client_config['mnc']
-        self.nci = client_config['nci']
-        self.idLength = client_config['idLength']
-        self.tac = client_config['tac'].to_bytes(3, 'big')
-        self.slices = client_config['slices']
-        self.pLMNIdentity = plmn_str_to_buf(client_config['mcc'] + client_config['mnc'])
-        self.tAISliceSupportList = [{ 'sST': int(a['sst']).to_bytes(1, 'big') } for a in client_config['slices']]
+        self.mcc = server_config['mcc']
+        self.mnc = server_config['mnc']
+        self.nci = server_config['nci']
+        self.idLength = server_config['idLength']
+        self.tac = server_config['tac'].to_bytes(3, 'big')
+        self.slices = server_config['slices']
+        self.pLMNIdentity = plmn_str_to_buf(server_config['mcc'] + server_config['mnc'])
+        self.tAISliceSupportList = [{ 'sST': int(a['sst']).to_bytes(1, 'big') } for a in server_config['slices']]
         # add a handler that uses the shared queue
         logger.addHandler(QueueHandler(logger_queue))
         # log all messages, debug and up

@@ -16,3 +16,4 @@ git submodule update
     - `pip install cryptography`
     - `sudo apt-get install build-essential`
     - `cd CryptoMobile && python3 setup.py install`
+- pyyaml `pip install pyyaml`

@@ -53,12 +53,11 @@ class UE():
             self.msin = config['supi'][-10:]
             self.key = config['key']
             self.op = config['op']
-            self.op_type = config['op_type']
+            self.op_type = config['opType']
             self.amf = config['amf']
             self.imei = config['imei']
             self.imeiSv = config['imeiSv']
-            self.tac = config['tac']
-            self.sst = config['sst']
+            self.nssai = [{ 'SST': int(a['sst']) } for a in config['defaultNssai']]
             sn_name = "5G:mnc{}.mcc{}.3gppnetwork.org".format(format(int(config['mnc']), '003d'), format(int(config['mcc']), '003d'))
             self.sn_name = sn_name.encode()
             self.nas_key_set = set()
