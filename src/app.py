@@ -3,6 +3,7 @@ import json
 import threading
 import time
 import array
+import os
 from UE import UE, FGMMState
 from NAS import NAS
 from SCTP import SCTPClient, SCTPServer
@@ -12,6 +13,7 @@ from multiprocessing import Process, Array
 from multiprocessing import Manager, current_process
 from logging.handlers import QueueHandler
 import logging
+from argparse import ArgumentParser
 
 logger = logging.getLogger('__app__')
 
@@ -55,14 +57,14 @@ class SCTPProcess(Process):
 
 # Logging process
 class LoggingProcess(Process):
-    def __init__(self, queue):
+    def __init__(self, queue, filepath=".", filename="core-tg.log", name="core-tg", level=logging.DEBUG, format="%(asctime)s : %(levelname)s:%(name)s:%(message)s"):
         Process.__init__(self)
         self.queue = queue
-        self._logger = self.generate_logger()
+        self._logger = self.generate_logger(filepath)
 
-    def generate_logger(self):
+    def generate_logger(self, path=".", filename="core-tg.log", name="core-tg", level=logging.DEBUG, format="%(asctime)s : %(levelname)s:%(name)s:%(message)s"):
         import logging
-        LOG_FILENAME = "core-tg.log"
+        LOG_FILENAME = "{}/{}".format(path, filename)
         FORMAT = "%(asctime)s : %(levelname)s:%(name)s:%(message)s"
         _logger = logging.getLogger()
         _logger.setLevel(logging.ERROR)
@@ -114,13 +116,20 @@ class LoggingProcess(Process):
 
 # Create Util process
 class UtilProcess(Process):
-    def __init__(self, logger_queue, ue_list):
+    def __init__(self, logger_queue, ue_list, ues_queue, ue_config, number, interval):
         Process.__init__(self)
         self.ue_list = ue_list
+        self.ues_queue = ues_queue
+        self.number = number
+        self.interval = interval
+        self.ue_config = ue_config
 
     def run(self):
         logger.debug("Starting util process")
         self._load_util_thread()
+        # Wait for GNB process to be ready before starting to add UEs
+        # time.sleep(5)
+        self._load_util_add_ue_thread()
 
     def _load_util_thread(self):
         util_thread = threading.Thread(target=self.util_process_function)
@@ -148,14 +157,30 @@ class UtilProcess(Process):
                 print('Whoops! Problem:', file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
 
+    def _load_util_add_ue_thread(self):
+        util_add_ue_thread = threading.Thread(target=self.util_add_ue_process_function)
+        util_add_ue_thread.start()
+        return util_add_ue_thread
+
+    def util_add_ue_process_function(self):
+        base_imsi = self.ue_config['supi'][:-10]
+        init_imsi = int(self.ue_config['supi'][-10:])
+        for i in range(0, self.number):
+            imsi = '{}{}'.format(base_imsi, format(init_imsi + i, '010d'))
+            config = self.ue_config
+            config['supi'] = imsi
+            ue = UE(config)
+            logger.debug("Adding to Queue UE: %s", ue)
+            self.ues_queue.put(ue)
+            if self.interval > 0:
+                time.sleep(self.interval)
+
 # Multi process class
 class MultiProcess:
     def __init__(self, logger_queue, client_config, server_config, ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_list):
-        self.logging = LoggingProcess(logger_queue)
         self.sctp = SCTPProcess(logger_queue, client_config, server_config, ngap_dl_queue, ngap_ul_queue)
         self.gNB = GNBProcess(logger_queue, client_config, server_config, ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_list)
         self.nas = NASProcess(logger_queue, nas_dl_queue, nas_ul_queue, ue_list)
-        self.util = UtilProcess(logger_queue, ue_list)
 
         # add a handler that uses the shared queue
         logger.addHandler(QueueHandler(logger_queue))
@@ -163,23 +188,30 @@ class MultiProcess:
         logger.setLevel(logging.INFO)
 
         # Set the processes to daemon to exit when main process exits
-        self.logging.daemon = True
         self.sctp.daemon = True
         self.gNB.daemon = True
         self.nas.daemon = True
-        self.util.daemon = True
         
     def run(self):
-        self.logging.start()
         self.sctp.start()
         self.gNB.start()
         self.nas.start()
-        self.util.start()
         logger.debug("Started processes")
 
+# Define struct for arguments
+class Arguments:
+    def __init__(self, verbose, debug, log, console, file, duration, interval, number):
+        self.verbose = verbose
+        self.debug = debug
+        self.log = log
+        self.console = console
+        self.duration = duration
+        self.interval = interval
+        self.number = number
+        self.file = file
 
 # Main function
-def main():
+def main(args: Arguments):
      # Read server configuration
     with open('server.json', 'r') as server_config_file:
         server_config = json.load(server_config_file)
@@ -201,6 +233,10 @@ def main():
 
         logger_queue = manager.Queue(-1)
 
+        # Start the logging process
+        logging = LoggingProcess(logger_queue, args.file)
+        logging.daemon = True
+        logging.start()
         # Create UE config
         # ue_config = {
         #     'supi': '208950000000031',
@@ -229,7 +265,7 @@ def main():
         }
 
         # Initialise ue_list with 1000 UEs
-        for i in range(1000):
+        for i in range(args.number + 1):
             ue_list.append(UE())
 
         # Create multi process
@@ -245,23 +281,42 @@ def main():
         # Initialise ue_list with 1000 UEs
         # for starting at 31
         # for i in range(31, 1031):
-        base_imsi = ue_config['supi'][:-10]
-        init_imsi = int(ue_config['supi'][-10:])
-        for i in range(0, 10):
-            imsi = '{}{}'.format(base_imsi, format(init_imsi + i, '010d'))
-            config = ue_config
-            config['supi'] = imsi
-            ue = UE(config)
-            logger.debug("Adding to Queue UE: %s", ue)
-            ues_queue.put(ue)
+        util = UtilProcess(logger_queue, ue_list, ues_queue, ue_config, args.number, args.interval)
+        util.daemon = True
+        util.start()
 
         # Wait for UE to be added
-        time.sleep(15)
+        time.sleep(args.duration - 5)
         
     # End multi process
     logger.debug("Ending multi process")
-    
+
 # Main
 if __name__ == "__main__":
+    # Get program arguments
+    parser = ArgumentParser(description = 'Run TRex client API and send DNS packet',
+        usage = """stl_dns_debug.py [options]""" )
+
+    parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
+    parser.add_argument('-d', '--debug', action='store_true', help='Debug output')
+    parser.add_argument('-l', '--log', action='store_true', help='Log output')
+    parser.add_argument('-c', '--console', action='store_true', help='Console output')
+    parser.add_argument('-f', '--file', type=str, default='.', help='Log file directory')
+    parser.add_argument('-t', '--duration', type=int, default=10, help='Duration of test in seconds, minimum 10 seconds')
+    parser.add_argument('-i', '--interval', type=float, default=0, help='Interval of adding UEs in seconds')
+    parser.add_argument('-n', '--number', type=int, default=1, help='Number of UEs to add')
+    
+    args = parser.parse_args()
+
+    if args.duration and args.duration < 10:
+        parser.error("Minimum duration is 10 seconds")
+
+    # Create file directory if it doesn't exist
+    if not os.path.exists(args.file):
+        os.makedirs(args.file)
+
+    # Create arguments object
+    arguments = Arguments(args.verbose, args.debug, args.log, args.console, args.file, args.duration, args.interval, args.number)
+
     # Run main
-    main()
+    main(arguments)
