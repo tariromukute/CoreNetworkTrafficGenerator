@@ -233,12 +233,13 @@ def main(args: Arguments):
 
         logger_queue = manager.Queue(-1)
 
+        init_imsi = int(ue_config['supi'][-10:])
         # Start the logging process
         logging = LoggingProcess(logger_queue, args.file)
         logging.daemon = True
         logging.start()
         # Initialise ue_list with 1000 UEs
-        for i in range(args.number + 1):
+        for i in range(init_imsi + args.number + 1):
             ue_list.append(UE())
 
         # Create multi process
@@ -273,8 +274,8 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--duration', type=int, default=10, help='Duration of test in seconds, minimum 10 seconds')
     parser.add_argument('-i', '--interval', type=float, default=0, help='Interval of adding UEs in seconds')
     parser.add_argument('-n', '--number', type=int, default=1, help='Number of UEs to add')
-    parser.add_argument('-u', '--ue_config_file', type=str, default='config/open5gs-ue.yaml', help='UE configuration file')
-    parser.add_argument('-g', '--gnb_config_file', type=str, default='config/open5gs-gnb.yaml', help='GNB configuration file')
+    parser.add_argument('-u', '--ue_config_file', type=str, default='src/config/open5gs-ue.yaml', help='UE configuration file')
+    parser.add_argument('-g', '--gnb_config_file', type=str, default='src/config/open5gs-gnb.yaml', help='GNB configuration file')
     
     args = parser.parse_args()
 
