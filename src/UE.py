@@ -46,6 +46,7 @@ class UE():
             self.ue_network_capability = None
             self.nas_proc = None
             self.state = FGMMState.NULL
+            self.op_type = 'OPC'
         else:   
             self.supi = config['supi']
             self.mcc = config['mcc']

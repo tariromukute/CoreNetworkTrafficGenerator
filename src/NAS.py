@@ -65,7 +65,8 @@ class AuthenticationProc(NASProc):
         abba = Msg['ABBA']['V'].get_val()
 
         Mil = Milenage(OP)
-        Mil.set_opc(OP)
+        if ue.op_type == 'OPC':
+            Mil.set_opc(OP)
         AK = Mil.f5star(key, rand)
 
         SQN = byte_xor(AK, sqn_xor_ak)
@@ -80,6 +81,7 @@ class AuthenticationProc(NASProc):
         IEs['RES'] = Res
         Msg = FGMMAuthenticationResponse(val=IEs)
         
+        # Note: See CryptoMobile.conv for documentation of this function and arguments
         # Get K_AUSF
         ue.k_ausf = conv_501_A2(CK, IK, ue.sn_name, sqn_xor_ak)
         # Get K_SEAF
