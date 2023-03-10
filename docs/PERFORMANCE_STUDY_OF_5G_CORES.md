@@ -447,10 +447,10 @@ We can set up freegc by following the instruction from the [open5gs installation
 # Replace 172.24.4.163 with the IP of the Open5gs VM
 # Cache the ansible_facts
 ANSIBLE_CACHE_PLUGIN=jsonfile ANSIBLE_CACHE_PLUGIN_CONNECTION=/tmp/ansible-cache \
-ansible all -i '172.24.4.163,' -u ubuntu -m setup
+ansible all -i '172.24.4.39,' -u ubuntu -m setup
 
 ANSIBLE_CACHE_PLUGIN=jsonfile ANSIBLE_CACHE_PLUGIN_CONNECTION=/tmp/ansible-cache \
-ansible all -i '172.24.4.163,' -u ubuntu -m include_role --args "name=olan_open5gs" -e user=ubuntu
+ansible all -i '172.24.4.39,' -u ubuntu -m include_role --args "name=olan_open5gs" -e user=ubuntu
 ```
 
 **Start the 5G Core**
