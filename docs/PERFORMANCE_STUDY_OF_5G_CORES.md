@@ -358,8 +358,7 @@ mkdir .results
 
 # Start Core Network and Traffic generator
 ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/oai.yml \
-    -e user=ubuntu -e duration=20 -e aduration=35 -e interval=0 \
-    -e tool=syscount -e ues=50
+    -e '{ user: ubuntu,  duration: 20, aduration: 35, interval: 0, tool_cmd: "syscount.py -d 20 -L -m -j", tool: syscount, ues: 0 }'
 ```
 
 Visualise the results by using [this notebook](https://github.com/tariromukute/opengilan/blob/main/notebooks/Report%20-%205G%20Core%20Networks%20copy.ipynb) 
@@ -489,6 +488,5 @@ mkdir .results
 
 # Start Core Network and Traffic generator
 ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.yml \
-    -e user=ubuntu -e duration=20 -e aduration=35 -e interval=0 \
-    -e tool=syscount -e ues=50
+    -e '{ user: ubuntu,  duration: 20, aduration: 35, interval: 0, tool_cmd: "syscount.py -d 20 -L -m -j", tool: syscount, ues: 0 }'
 ```
