@@ -1,0 +1,10 @@
+[10:11:31]
+t:syscalls:sys_exit_epoll_wait():u16:args->ret
+	COUNT      EVENT
+	1          args->ret = 3
+	1          args->ret = 4
+	1          args->ret = 5
+	2          args->ret = 6
+	5          args->ret = 2
+	84         args->ret = 0
+	136        args->ret = 1
