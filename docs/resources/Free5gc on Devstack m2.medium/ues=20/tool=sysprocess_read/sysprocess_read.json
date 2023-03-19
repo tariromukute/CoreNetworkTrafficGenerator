@@ -1,0 +1,10 @@
+{'time': '10:52:47', 'pid': 1813, 'comm': 'amf', 'count': 2431, 'time (ms)': 39.562516}
+{'time': '10:52:47', 'pid': 1804, 'comm': 'nrf', 'count': 1534, 'time (ms)': 17.931262}
+{'time': '10:52:47', 'pid': 1856, 'comm': 'udm', 'count': 2029, 'time (ms)': 12.201303}
+{'time': '10:52:47', 'pid': 1835, 'comm': 'udr', 'count': 2113, 'time (ms)': 10.446488}
+{'time': '10:52:47', 'pid': 1872, 'comm': 'ausf', 'count': 1022, 'time (ms)': 7.590181}
+{'time': '10:52:47', 'pid': 588, 'comm': 'mongod', 'count': 240, 'time (ms)': 4.439794}
+{'time': '10:52:47', 'pid': 1845, 'comm': 'pcf', 'count': 382, 'time (ms)': 1.389437}
+{'time': '10:52:47', 'pid': 1864, 'comm': 'nssf', 'count': 148, 'time (ms)': 0.676156}
+{'time': '10:52:47', 'pid': 332, 'comm': 'systemd-journal', 'count': 52, 'time (ms)': 0.339335}
+{'time': '10:52:47', 'pid': 586, 'comm': 'irqbalance', 'count': 9, 'time (ms)': 0.148597}

@@ -1,0 +1,4 @@
+{'time': '12:02:46', 'pid': 26542, 'comm': 'python3', 'count': 19, 'time (ms)': 19018.711023}
+{'time': '12:02:46', 'pid': 332, 'comm': 'systemd-journal', 'count': 7, 'time (ms)': 15487.321666}
+{'time': '12:02:46', 'pid': 363, 'comm': 'systemd-udevd', 'count': 17, 'time (ms)': 12.736878}
+{'time': '12:02:46', 'pid': 538, 'comm': 'systemd-network', 'count': 1, 'time (ms)': 0.004962}

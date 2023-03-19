@@ -1,0 +1,2 @@
+{'time': '10:02:47', 'pid': 5364, 'comm': 'python3', 'count': 4, 'time (ms)': 0.109206}
+{'time': '10:02:47', 'pid': 538, 'comm': 'systemd-network', 'count': 3, 'time (ms)': 0.071873}

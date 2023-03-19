@@ -1,0 +1,6 @@
+{'time': '16:48:13', 'pid': 596, 'comm': 'rsyslogd', 'count': 4, 'time (ms)': 1.151535}
+{'time': '16:48:13', 'pid': 1009, 'comm': 'nrf', 'count': 5, 'time (ms)': 0.222675}
+{'time': '16:48:13', 'pid': 1047, 'comm': 'pcf', 'count': 6, 'time (ms)': 0.18646}
+{'time': '16:48:13', 'pid': 1038, 'comm': 'udr', 'count': 5, 'time (ms)': 0.168087}
+{'time': '16:48:13', 'pid': 578, 'comm': 'accounts-daemon', 'count': 24, 'time (ms)': 0.064832}
+{'time': '16:48:13', 'pid': 590, 'comm': 'irqbalance', 'count': 2, 'time (ms)': 0.017792}

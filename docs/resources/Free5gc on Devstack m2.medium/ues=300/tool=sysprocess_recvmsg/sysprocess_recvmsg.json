@@ -1,0 +1,7 @@
+{'time': '12:31:06', 'pid': 1813, 'comm': 'amf', 'count': 220, 'time (ms)': 101346.364469}
+{'time': '12:31:06', 'pid': 588, 'comm': 'mongod', 'count': 2280, 'time (ms)': 90202.370538}
+{'time': '12:31:06', 'pid': 332, 'comm': 'systemd-journal', 'count': 4, 'time (ms)': 0.049221}
+{'time': '12:31:06', 'pid': 595, 'comm': 'rsyslogd', 'count': 4, 'time (ms)': 0.033742}
+{'time': '12:31:06', 'pid': 363, 'comm': 'systemd-udevd', 'count': 3, 'time (ms)': 0.021489}
+{'time': '12:31:06', 'pid': 538, 'comm': 'systemd-network', 'count': 2, 'time (ms)': 0.013004}
+{'time': '12:31:06', 'pid': 1, 'comm': 'systemd', 'count': 1, 'time (ms)': 0.012375}

@@ -1,0 +1,5 @@
+{'time': '10:54:27', 'pid': 588, 'comm': 'mongod', 'count': 172, 'time (ms)': 2.113294}
+{'time': '10:54:27', 'pid': 332, 'comm': 'systemd-journal', 'count': 36, 'time (ms)': 0.233724}
+{'time': '10:54:27', 'pid': 586, 'comm': 'irqbalance', 'count': 8, 'time (ms)': 0.094616}
+{'time': '10:54:27', 'pid': 363, 'comm': 'systemd-udevd', 'count': 2, 'time (ms)': 0.026682}
+{'time': '10:54:27', 'pid': 1, 'comm': 'systemd', 'count': 1, 'time (ms)': 0.016754}
