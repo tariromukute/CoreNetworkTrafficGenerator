@@ -1,0 +1,10 @@
+{'time': '19:05:40', 'pid': 589, 'comm': 'mongod', 'count': 161, 'time (ms)': 1.978996}
+{'time': '19:05:40', 'pid': 15457, 'comm': 'systemd-udevd', 'count': 26, 'time (ms)': 0.452158}
+{'time': '19:05:40', 'pid': 332, 'comm': 'systemd-journal', 'count': 37, 'time (ms)': 0.266913}
+{'time': '19:05:40', 'pid': 15458, 'comm': 'systemd-udevd', 'count': 26, 'time (ms)': 0.125274}
+{'time': '19:05:40', 'pid': 15459, 'comm': 'systemd-udevd', 'count': 26, 'time (ms)': 0.115282}
+{'time': '19:05:40', 'pid': 587, 'comm': 'irqbalance', 'count': 12, 'time (ms)': 0.109261}
+{'time': '19:05:40', 'pid': 618, 'comm': 'snapd', 'count': 10, 'time (ms)': 0.072515}
+{'time': '19:05:40', 'pid': 362, 'comm': 'systemd-udevd', 'count': 4, 'time (ms)': 0.069416}
+{'time': '19:05:40', 'pid': 15012, 'comm': 'open5gs-ausfd', 'count': 1, 'time (ms)': 0.023427}
+{'time': '19:05:40', 'pid': 15013, 'comm': 'open5gs-udmd', 'count': 1, 'time (ms)': 0.023006}

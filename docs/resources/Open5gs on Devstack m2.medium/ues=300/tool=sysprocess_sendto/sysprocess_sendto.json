@@ -1,0 +1,10 @@
+{'time': '16:32:51', 'pid': 60232, 'comm': 'open5gs-scpd', 'count': 17829, 'time (ms)': 384.957764}
+{'time': '16:32:51', 'pid': 60236, 'comm': 'open5gs-udmd', 'count': 6323, 'time (ms)': 81.994026}
+{'time': '16:32:51', 'pid': 60228, 'comm': 'open5gs-amfd', 'count': 3912, 'time (ms)': 62.714659}
+{'time': '16:32:51', 'pid': 60237, 'comm': 'open5gs-udrd', 'count': 3012, 'time (ms)': 40.455165}
+{'time': '16:32:51', 'pid': 60227, 'comm': 'open5gs-nrfd', 'count': 2420, 'time (ms)': 39.064171}
+{'time': '16:32:51', 'pid': 60234, 'comm': 'open5gs-ausfd', 'count': 2415, 'time (ms)': 29.17329}
+{'time': '16:32:51', 'pid': 60239, 'comm': 'open5gs-pcfd', 'count': 919, 'time (ms)': 14.081227}
+{'time': '16:32:51', 'pid': 60266, 'comm': 'open5gs-smfd', 'count': 6, 'time (ms)': 0.189561}
+{'time': '16:32:51', 'pid': 60235, 'comm': 'open5gs-sgwcd', 'count': 4, 'time (ms)': 0.13153}
+{'time': '16:32:51', 'pid': 60602, 'comm': 'python3', 'count': 4, 'time (ms)': 0.102472}

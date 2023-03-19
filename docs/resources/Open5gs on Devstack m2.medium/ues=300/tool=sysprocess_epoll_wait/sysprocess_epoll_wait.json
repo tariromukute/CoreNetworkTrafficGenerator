@@ -1,0 +1,10 @@
+{'time': '16:11:24', 'pid': 56287, 'comm': 'python3', 'count': 19, 'time (ms)': 19018.916088}
+{'time': '16:11:24', 'pid': 332, 'comm': 'systemd-journal', 'count': 7, 'time (ms)': 15471.483402}
+{'time': '16:11:24', 'pid': 55936, 'comm': 'open5gs-amfd', 'count': 7599, 'time (ms)': 15018.533002}
+{'time': '16:11:24', 'pid': 55939, 'comm': 'open5gs-sgwud', 'count': 6, 'time (ms)': 14500.616354}
+{'time': '16:11:24', 'pid': 55941, 'comm': 'open5gs-sgwcd', 'count': 7, 'time (ms)': 14500.488598}
+{'time': '16:11:24', 'pid': 55968, 'comm': 'open5gs-smfd', 'count': 10, 'time (ms)': 11499.70779}
+{'time': '16:11:24', 'pid': 55937, 'comm': 'open5gs-upfd', 'count': 3, 'time (ms)': 10995.90025}
+{'time': '16:11:24', 'pid': 55980, 'comm': 'open5gs-nrfd', 'count': 7575, 'time (ms)': 10674.436448}
+{'time': '16:11:24', 'pid': 55942, 'comm': 'open5gs-ausfd', 'count': 3904, 'time (ms)': 10401.826181}
+{'time': '16:11:24', 'pid': 55947, 'comm': 'open5gs-nssfd', 'count': 5, 'time (ms)': 10011.447705}

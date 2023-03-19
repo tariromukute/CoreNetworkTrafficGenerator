@@ -1,0 +1,9 @@
+{'time': '07:08:36', 'pid': 590, 'comm': 'mongod', 'count': 7852, 'time (ms)': 40411.693738}
+{'time': '07:08:36', 'pid': 4422, 'comm': 'open5gs-mmed', 'count': 191, 'time (ms)': 19918.958827}
+{'time': '07:08:36', 'pid': 4408, 'comm': 'open5gs-pcrfd', 'count': 191, 'time (ms)': 19914.487585}
+{'time': '07:08:36', 'pid': 4409, 'comm': 'open5gs-smfd', 'count': 191, 'time (ms)': 19914.484416}
+{'time': '07:08:36', 'pid': 4411, 'comm': 'open5gs-hssd', 'count': 191, 'time (ms)': 19914.232158}
+{'time': '07:08:36', 'pid': 4359, 'comm': 'open5gs-amfd', 'count': 1819, 'time (ms)': 16.460131}
+{'time': '07:08:36', 'pid': 332, 'comm': 'systemd-journal', 'count': 4, 'time (ms)': 0.036554}
+{'time': '07:08:36', 'pid': 539, 'comm': 'systemd-network', 'count': 6, 'time (ms)': 0.032959}
+{'time': '07:08:36', 'pid': 617, 'comm': 'rsyslogd', 'count': 4, 'time (ms)': 0.029878}
