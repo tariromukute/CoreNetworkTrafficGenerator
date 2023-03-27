@@ -1,5 +1,5 @@
-{'time': '10:27:47', 'pid': 588, 'comm': 'mongod', 'count': 176, 'time (ms)': 2.300782}
-{'time': '10:27:47', 'pid': 332, 'comm': 'systemd-journal', 'count': 36, 'time (ms)': 0.290376}
-{'time': '10:27:47', 'pid': 586, 'comm': 'irqbalance', 'count': 4, 'time (ms)': 0.058612}
-{'time': '10:27:47', 'pid': 1, 'comm': 'systemd', 'count': 1, 'time (ms)': 0.031148}
-{'time': '10:27:47', 'pid': 363, 'comm': 'systemd-udevd', 'count': 2, 'time (ms)': 0.028724}
+{'time': '14:27:24', 'pid': 595, 'comm': 'mongod', 'count': 182, 'time (ms)': 2.420493}
+{'time': '14:27:24', 'pid': 332, 'comm': 'systemd-journal', 'count': 36, 'time (ms)': 0.311689}
+{'time': '14:27:24', 'pid': 593, 'comm': 'irqbalance', 'count': 10, 'time (ms)': 0.079044}
+{'time': '14:27:24', 'pid': 364, 'comm': 'systemd-udevd', 'count': 2, 'time (ms)': 0.027781}
+{'time': '14:27:24', 'pid': 1, 'comm': 'systemd', 'count': 1, 'time (ms)': 0.013106}

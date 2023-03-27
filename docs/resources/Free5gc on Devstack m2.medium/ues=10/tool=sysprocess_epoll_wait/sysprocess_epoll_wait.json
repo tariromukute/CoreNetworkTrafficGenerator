@@ -1,4 +1,4 @@
-{'time': '10:16:08', 'pid': 7725, 'comm': 'python3', 'count': 19, 'time (ms)': 19020.332845}
-{'time': '10:16:08', 'pid': 332, 'comm': 'systemd-journal', 'count': 7, 'time (ms)': 15364.793453}
-{'time': '10:16:08', 'pid': 538, 'comm': 'systemd-network', 'count': 3, 'time (ms)': 8191.819865}
-{'time': '10:16:08', 'pid': 363, 'comm': 'systemd-udevd', 'count': 7, 'time (ms)': 2.499912}
+{'time': '14:15:52', 'pid': 43918, 'comm': 'python3', 'count': 19, 'time (ms)': 19020.207478}
+{'time': '14:15:52', 'pid': 332, 'comm': 'systemd-journal', 'count': 8, 'time (ms)': 17995.311622}
+{'time': '14:15:52', 'pid': 545, 'comm': 'systemd-network', 'count': 3, 'time (ms)': 7679.298701}
+{'time': '14:15:52', 'pid': 364, 'comm': 'systemd-udevd', 'count': 7, 'time (ms)': 10.326153}

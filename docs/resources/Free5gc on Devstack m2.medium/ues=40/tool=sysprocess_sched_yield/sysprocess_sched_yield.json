@@ -1,8 +1,7 @@
-{'time': '14:41:12', 'pid': 1015, 'comm': 'amf', 'count': 859, 'time (ms)': 19.382216}
-{'time': '14:41:12', 'pid': 1009, 'comm': 'nrf', 'count': 703, 'time (ms)': 9.475857}
-{'time': '14:41:12', 'pid': 592, 'comm': 'mongod', 'count': 1852, 'time (ms)': 8.730217}
-{'time': '14:41:12', 'pid': 1076, 'comm': 'ausf', 'count': 97, 'time (ms)': 7.991961}
-{'time': '14:41:12', 'pid': 1058, 'comm': 'udm', 'count': 122, 'time (ms)': 2.78132}
-{'time': '14:41:12', 'pid': 1038, 'comm': 'udr', 'count': 56, 'time (ms)': 0.665347}
-{'time': '14:41:12', 'pid': 1067, 'comm': 'nssf', 'count': 1, 'time (ms)': 0.167833}
-{'time': '14:41:12', 'pid': 1047, 'comm': 'pcf', 'count': 6, 'time (ms)': 0.03183}
+{'time': '10:32:12', 'pid': 1092, 'comm': 'amf', 'count': 1391, 'time (ms)': 13.278668}
+{'time': '10:32:12', 'pid': 1086, 'comm': 'nrf', 'count': 433, 'time (ms)': 9.005572}
+{'time': '10:32:12', 'pid': 1104, 'comm': 'udr', 'count': 145, 'time (ms)': 6.262089}
+{'time': '10:32:12', 'pid': 595, 'comm': 'mongod', 'count': 852, 'time (ms)': 6.21953}
+{'time': '10:32:12', 'pid': 1108, 'comm': 'udm', 'count': 143, 'time (ms)': 2.151919}
+{'time': '10:32:12', 'pid': 1112, 'comm': 'ausf', 'count': 55, 'time (ms)': 0.776862}
+{'time': '10:32:12', 'pid': 1106, 'comm': 'pcf', 'count': 3, 'time (ms)': 0.543436}

@@ -1,7 +1,7 @@
-{'time': '09:47:47', 'pid': 588, 'comm': 'mongod', 'count': 907, 'time (ms)': 208277.857101}
-{'time': '09:47:47', 'pid': 1835, 'comm': 'udr', 'count': 407, 'time (ms)': 50526.880698}
-{'time': '09:47:47', 'pid': 1845, 'comm': 'pcf', 'count': 459, 'time (ms)': 50083.264212}
-{'time': '09:47:47', 'pid': 1804, 'comm': 'nrf', 'count': 128, 'time (ms)': 48993.653818}
-{'time': '09:47:47', 'pid': 457, 'comm': 'multipathd', 'count': 59, 'time (ms)': 19001.839054}
-{'time': '09:47:47', 'pid': 1813, 'comm': 'amf', 'count': 21, 'time (ms)': 16154.478985}
-{'time': '09:47:47', 'pid': 595, 'comm': 'rsyslogd', 'count': 11, 'time (ms)': 15014.776175}
+{'time': '09:13:11', 'pid': 595, 'comm': 'mongod', 'count': 869, 'time (ms)': 208934.696456}
+{'time': '09:13:11', 'pid': 1086, 'comm': 'nrf', 'count': 152, 'time (ms)': 58030.794237}
+{'time': '09:13:11', 'pid': 1104, 'comm': 'udr', 'count': 155, 'time (ms)': 49003.017925}
+{'time': '09:13:11', 'pid': 1106, 'comm': 'pcf', 'count': 145, 'time (ms)': 48998.149204}
+{'time': '09:13:11', 'pid': 460, 'comm': 'multipathd', 'count': 59, 'time (ms)': 19001.650284}
+{'time': '09:13:11', 'pid': 1092, 'comm': 'amf', 'count': 21, 'time (ms)': 16118.931766}
+{'time': '09:13:11', 'pid': 604, 'comm': 'rsyslogd', 'count': 11, 'time (ms)': 15015.363445}

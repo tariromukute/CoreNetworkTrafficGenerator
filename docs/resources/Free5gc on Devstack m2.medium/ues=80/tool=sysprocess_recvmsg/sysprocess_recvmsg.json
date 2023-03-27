@@ -1,5 +1,4 @@
-{'time': '15:21:17', 'pid': 592, 'comm': 'mongod', 'count': 1344, 'time (ms)': 80450.394245}
-{'time': '15:21:17', 'pid': 1015, 'comm': 'amf', 'count': 176, 'time (ms)': 49688.44842}
-{'time': '15:21:17', 'pid': 331, 'comm': 'systemd-journal', 'count': 4, 'time (ms)': 0.045199}
-{'time': '15:21:17', 'pid': 596, 'comm': 'rsyslogd', 'count': 4, 'time (ms)': 0.035229}
-{'time': '15:21:17', 'pid': 540, 'comm': 'systemd-network', 'count': 2, 'time (ms)': 0.022647}
+{'time': '11:52:57', 'pid': 595, 'comm': 'mongod', 'count': 1356, 'time (ms)': 76004.182005}
+{'time': '11:52:57', 'pid': 1092, 'comm': 'amf', 'count': 137, 'time (ms)': 48000.395075}
+{'time': '11:52:57', 'pid': 332, 'comm': 'systemd-journal', 'count': 4, 'time (ms)': 0.04474}
+{'time': '11:52:57', 'pid': 604, 'comm': 'rsyslogd', 'count': 4, 'time (ms)': 0.029621}

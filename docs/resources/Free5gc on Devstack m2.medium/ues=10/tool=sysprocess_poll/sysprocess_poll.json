@@ -1,3 +1,3 @@
-{'time': '10:21:07', 'pid': 576, 'comm': 'accounts-daemon', 'count': 20, 'time (ms)': 15995.604683}
-{'time': '10:21:07', 'pid': 595, 'comm': 'rsyslogd', 'count': 3, 'time (ms)': 15015.427216}
-{'time': '10:21:07', 'pid': 586, 'comm': 'irqbalance', 'count': 1, 'time (ms)': 9991.418887}
+{'time': '14:20:49', 'pid': 583, 'comm': 'accounts-daemon', 'count': 20, 'time (ms)': 17307.263365}
+{'time': '14:20:49', 'pid': 604, 'comm': 'rsyslogd', 'count': 3, 'time (ms)': 15013.593506}
+{'time': '14:20:49', 'pid': 593, 'comm': 'irqbalance', 'count': 1, 'time (ms)': 9998.119266}

@@ -1,8 +1,9 @@
-{'time': '11:24:27', 'pid': 1804, 'comm': 'nrf', 'count': 1144, 'time (ms)': 19.144369}
-{'time': '11:24:27', 'pid': 1813, 'comm': 'amf', 'count': 651, 'time (ms)': 9.147748}
-{'time': '11:24:27', 'pid': 588, 'comm': 'mongod', 'count': 2041, 'time (ms)': 7.663118}
-{'time': '11:24:27', 'pid': 1856, 'comm': 'udm', 'count': 157, 'time (ms)': 5.480491}
-{'time': '11:24:27', 'pid': 1835, 'comm': 'udr', 'count': 95, 'time (ms)': 4.852735}
-{'time': '11:24:27', 'pid': 1872, 'comm': 'ausf', 'count': 171, 'time (ms)': 1.897903}
-{'time': '11:24:27', 'pid': 1864, 'comm': 'nssf', 'count': 4, 'time (ms)': 0.244691}
-{'time': '11:24:27', 'pid': 1845, 'comm': 'pcf', 'count': 6, 'time (ms)': 0.10451}
+{'time': '11:03:30', 'pid': 1108, 'comm': 'udm', 'count': 203, 'time (ms)': 12.305169}
+{'time': '11:03:30', 'pid': 1092, 'comm': 'amf', 'count': 725, 'time (ms)': 8.949613}
+{'time': '11:03:30', 'pid': 595, 'comm': 'mongod', 'count': 2062, 'time (ms)': 6.445238}
+{'time': '11:03:30', 'pid': 1086, 'comm': 'nrf', 'count': 234, 'time (ms)': 5.959536}
+{'time': '11:03:30', 'pid': 1104, 'comm': 'udr', 'count': 252, 'time (ms)': 3.525684}
+{'time': '11:03:30', 'pid': 1112, 'comm': 'ausf', 'count': 42, 'time (ms)': 0.287549}
+{'time': '11:03:30', 'pid': 1110, 'comm': 'nssf', 'count': 2, 'time (ms)': 0.014686}
+{'time': '11:03:30', 'pid': 1106, 'comm': 'pcf', 'count': 5, 'time (ms)': 0.014548}
+{'time': '11:03:30', 'pid': 1102, 'comm': 'smf', 'count': 1, 'time (ms)': 0.004862}

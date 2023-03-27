@@ -1,5 +1,1 @@
-{'time': '12:16:06', 'pid': 580, 'comm': 'dbus-daemon', 'count': 8, 'time (ms)': 0.12206}
-{'time': '12:16:06', 'pid': 29321, 'comm': 'python3', 'count': 4, 'time (ms)': 0.116449}
-{'time': '12:16:06', 'pid': 29457, 'comm': 'packagekitd', 'count': 7, 'time (ms)': 0.101676}
-{'time': '12:16:06', 'pid': 29454, 'comm': '[unknown]', 'count': 4, 'time (ms)': 0.032678}
-{'time': '12:16:06', 'pid': 1, 'comm': 'systemd', 'count': 1, 'time (ms)': 0.020614}
+{'time': '13:07:07', 'pid': 40879, 'comm': 'python3', 'count': 4, 'time (ms)': 0.095402}

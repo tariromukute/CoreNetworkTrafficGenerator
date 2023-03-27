@@ -1,5 +1,6 @@
-{'time': '10:01:07', 'pid': 588, 'comm': 'mongod', 'count': 182, 'time (ms)': 2.582612}
-{'time': '10:01:07', 'pid': 332, 'comm': 'systemd-journal', 'count': 36, 'time (ms)': 0.269861}
-{'time': '10:01:07', 'pid': 586, 'comm': 'irqbalance', 'count': 8, 'time (ms)': 0.099149}
-{'time': '10:01:07', 'pid': 363, 'comm': 'systemd-udevd', 'count': 2, 'time (ms)': 0.040018}
-{'time': '10:01:07', 'pid': 1, 'comm': 'systemd', 'count': 1, 'time (ms)': 0.033258}
+{'time': '09:26:21', 'pid': 595, 'comm': 'mongod', 'count': 182, 'time (ms)': 2.166802}
+{'time': '09:26:21', 'pid': 332, 'comm': 'systemd-journal', 'count': 36, 'time (ms)': 0.267484}
+{'time': '09:26:21', 'pid': 364, 'comm': 'systemd-udevd', 'count': 2, 'time (ms)': 0.060493}
+{'time': '09:26:21', 'pid': 593, 'comm': 'irqbalance', 'count': 4, 'time (ms)': 0.054412}
+{'time': '09:26:21', 'pid': 1, 'comm': 'systemd', 'count': 2, 'time (ms)': 0.033413}
+{'time': '09:26:21', 'pid': 508, 'comm': 'systemd-timesyn', 'count': 2, 'time (ms)': 0.028021}
