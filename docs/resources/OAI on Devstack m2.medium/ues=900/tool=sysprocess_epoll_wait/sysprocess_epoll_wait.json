@@ -1,0 +1,10 @@
+{'time': '21:34:51', 'pid': 60507, 'comm': 'oai_nrf', 'count': 58, 'time (ms)': 39325.993798}
+{'time': '21:34:51', 'pid': 915372, 'comm': 'oai_udr', 'count': 10302, 'time (ms)': 26178.997834}
+{'time': '21:34:51', 'pid': 60936, 'comm': 'oai_ausf', 'count': 5148, 'time (ms)': 23163.384688}
+{'time': '21:34:51', 'pid': 60827, 'comm': 'oai_udm', 'count': 5148, 'time (ms)': 22426.255051}
+{'time': '21:34:51', 'pid': 329, 'comm': 'systemd-journal', 'count': 69, 'time (ms)': 19460.955365}
+{'time': '21:34:51', 'pid': 60527, 'comm': 'mysqld', 'count': 20, 'time (ms)': 19021.711892}
+{'time': '21:34:51', 'pid': 975629, 'comm': 'python3', 'count': 19, 'time (ms)': 19017.689454}
+{'time': '21:34:51', 'pid': 604, 'comm': 'systemd-logind', 'count': 850, 'time (ms)': 17906.992092}
+{'time': '21:34:51', 'pid': 589, 'comm': 'dbus-daemon', 'count': 190, 'time (ms)': 17886.037478}
+{'time': '21:34:51', 'pid': 1150, 'comm': 'systemd', 'count': 143, 'time (ms)': 17736.472856}

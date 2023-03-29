@@ -282,7 +282,7 @@ ansible all -i '172.24.4.3,' -u ubuntu -m include_role --args "name=olan_oai_cn5
 
 **Set up connection between OAI and 5G traffic generator**
 
-On the OAI VM
+On the Host
 
 ```bash
 router="router1"
@@ -297,6 +297,13 @@ openstack router set ${router} \
 openstack port set ${oai_port_id} --allowed-address ip-address=48.0.0.0/16
 ```
 
+On the OAI VM
+
+```bash
+sudo sysctl net.ipv4.conf.all.forwarding=1
+sudo iptables -P FORWARD ACCEPT
+```
+
 On the traffic generator VM
 
 ```bash
@@ -308,7 +315,7 @@ ip route add 48.0.0.0/16 via 10.0.0.89
 
 ```bash
 cd oai-cn5g-fed/docker-compose/
-docker compose -f docker-compose-basic-nrf-1.yaml up -d
+docker compose -f docker-compose-basic-nrf.yaml up -d
 
 # Confirm all services are healthy. This may take time
 docker ps

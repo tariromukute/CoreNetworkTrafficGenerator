@@ -24,7 +24,7 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/oai-1.yml 
     -e '{ user: ubuntu,  duration: 20, aduration: 35, interval: 0, tool_cmd: "syscount.py -d 20 -L -m -j", tool: syscount, ues: 0 }'
 ```
 
-![Syscalls across the system (by latency)](./assets/open5gs/syscount_fig_m2.medium.jpeg "Syscalls across the system (by latency)")
+![Syscalls across the system (by latency)](./assets/oai/syscount_fig_m2.medium.jpeg "Syscalls across the system (by latency)")
 <b>Fig.1 - Syscalls across the system (by latency)</b>
 
 We ran the same too on an idle `m1.large` instance and got more or less the same results. The details of the flavous are:
@@ -44,11 +44,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
     -e '{ user: ubuntu,  duration: 20, aduration: 35, interval: 0, tool_cmd: "syscount.py -d 20 -L -P -m -j", tool: sysprocess, ues: 0 }'
 ```
 
-![Processes making syscall on system (by latency)](./assets/open5gs/sysprocess_fig_m2.medium.jpeg "Processes making syscall on system (by latency)")
+![Processes making syscall on system (by latency)](./assets/oai/sysprocess_fig_m2.medium.jpeg "Processes making syscall on system (by latency)")
 
 <b>Fig.2 - Processes making syscall on system (by latency)</b>
 
-![Processes making syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_fig_m2.medium.jpeg "Processes making syscall on system (by number of calls)")
+![Processes making syscall on system (by number of calls)](./assets/oai/sysprocess_count_fig_m2.medium.jpeg "Processes making syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making syscall on system (by number of calls)</b>
 
@@ -63,11 +63,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
     -e '{ user: ubuntu,  duration: 20, aduration: 35, interval: 0, tool_cmd: "syscount.py --syscall futex -d 20 -L -P -m -j", tool: sysprocess_futex, ues: 0 }'
 ```
 
-![Processes making futex syscall on idle system (by latency)](./assets/open5gs/sysprocess_futex_fig_m2.medium.jpeg "Processes making futex syscall on system (by latency)")
+![Processes making futex syscall on idle system (by latency)](./assets/oai/sysprocess_futex_fig_m2.medium.jpeg "Processes making futex syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making futex syscall on system (by latency) - 20 secs</b>
 
-![Processes making futex syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_futex_fig_m2.medium.jpeg "Processes making futex syscall on system (by number of calls)")
+![Processes making futex syscall on system (by number of calls)](./assets/oai/sysprocess_count_futex_fig_m2.medium.jpeg "Processes making futex syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making futex syscall on system (by number of calls) - 20 secss</b>
 </details>
@@ -93,11 +93,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 
 <details><summary><b>Click to see results for processes making epoll_wait system calls</b></summary>
 
-![Processes making epoll_wait syscall on idle system (by latency)](./assets/open5gs/sysprocess_epoll_wait_fig_m2.medium.jpeg "Processes making epoll_wait syscall on idle system (by latency)")
+![Processes making epoll_wait syscall on idle system (by latency)](./assets/oai/sysprocess_epoll_wait_fig_m2.medium.jpeg "Processes making epoll_wait syscall on idle system (by latency)")
 
 <b>Fig.3.1 - Processes making epoll_wait syscall on system (by latency) - 20 secs</b>
 
-![Processes making epoll_wait syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_epoll_wait_fig_m2.medium.jpeg "Processes making epoll_wait syscall on system (by number of calls)")
+![Processes making epoll_wait syscall on system (by number of calls)](./assets/oai/sysprocess_count_epoll_wait_fig_m2.medium.jpeg "Processes making epoll_wait syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making epoll_wait syscall on system (by number of calls) - 20 secss</b>
 
@@ -230,11 +230,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 ```
 <details><summary><b>Click to see results for processes making recvmsg system calls</b></summary>
 
-![Processes making recvmsg syscall on idle system (by latency)](./assets/open5gs/sysprocess_recvmsg_fig_m2.medium.jpeg "Processes making recvmsg syscall on system (by latency)")
+![Processes making recvmsg syscall on idle system (by latency)](./assets/oai/sysprocess_recvmsg_fig_m2.medium.jpeg "Processes making recvmsg syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making recvmsg syscall on system (by latency) - 20 secs</b>
 
-![Processes making recvmsg syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_recvmsg_fig_m2.medium.jpeg "Processes making recvmsg syscall on system (by number of calls)")
+![Processes making recvmsg syscall on system (by number of calls)](./assets/oai/sysprocess_count_recvmsg_fig_m2.medium.jpeg "Processes making recvmsg syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making recvmsg syscall on system (by number of calls) - 20 secss</b>
 
@@ -258,11 +258,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 
 <details><summary><b>Click to see results for processes making clock_nanosleep system calls</b></summary>
 
-![Processes making clock_nanosleep syscall on idle system (by latency)](./assets/open5gs/sysprocess_clock_nanosleep_fig_m2.medium.jpeg "Processes making clock_nanosleep syscall on system (by latency)")
+![Processes making clock_nanosleep syscall on idle system (by latency)](./assets/oai/sysprocess_clock_nanosleep_fig_m2.medium.jpeg "Processes making clock_nanosleep syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making clock_nanosleep syscall on system (by latency) - 20 secs</b>
 
-![Processes making clock_nanosleep syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_clock_nanosleep_fig_m2.medium.jpeg "Processes making clock_nanosleep syscall on system (by number of calls)")
+![Processes making clock_nanosleep syscall on system (by number of calls)](./assets/oai/sysprocess_count_clock_nanosleep_fig_m2.medium.jpeg "Processes making clock_nanosleep syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making clock_nanosleep syscall on system (by number of calls) - 20 secss</b>
 
@@ -276,11 +276,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 ```
 <details><summary><b>Click to see results for processes making poll system calls</b></summary>
 
-![Processes making poll syscall on idle system (by latency)](./assets/open5gs/sysprocess_poll_fig_m2.medium.jpeg "Processes making poll syscall on system (by latency)")
+![Processes making poll syscall on idle system (by latency)](./assets/oai/sysprocess_poll_fig_m2.medium.jpeg "Processes making poll syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making poll syscall on system (by latency) - 20 secs</b>
 
-![Processes making poll syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_poll_fig_m2.medium.jpeg "Processes making poll syscall on system (by number of calls)")
+![Processes making poll syscall on system (by number of calls)](./assets/oai/sysprocess_count_poll_fig_m2.medium.jpeg "Processes making poll syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making poll syscall on system (by number of calls) - 20 secss</b>
 
@@ -294,11 +294,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 ```
 <details><summary><b>Click to see results for processes making select system calls</b></summary>
 
-![Processes making select syscall on idle system (by latency)](./assets/open5gs/sysprocess_select_fig_m2.medium.jpeg "Processes making select syscall on system (by latency)")
+![Processes making select syscall on idle system (by latency)](./assets/oai/sysprocess_select_fig_m2.medium.jpeg "Processes making select syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making select syscall on system (by latency) - 20 secs</b>
 
-![Processes making select syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_select_fig_m2.medium.jpeg "Processes making select syscall on system (by number of calls)")
+![Processes making select syscall on system (by number of calls)](./assets/oai/sysprocess_count_select_fig_m2.medium.jpeg "Processes making select syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making select syscall on system (by number of calls) - 20 secss</b>
 
@@ -313,11 +313,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 
 <details><summary><b>Click to see results for processes making ppoll system calls</b></summary>
 
-![Processes making ppoll syscall on idle system (by latency)](./assets/open5gs/sysprocess_ppoll_fig_m2.medium.jpeg "Processes making ppoll syscall on system (by latency)")
+![Processes making ppoll syscall on idle system (by latency)](./assets/oai/sysprocess_ppoll_fig_m2.medium.jpeg "Processes making ppoll syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making ppoll syscall on system (by latency) - 20 secs</b>
 
-![Processes making ppoll syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_ppoll_fig_m2.medium.jpeg "Processes making ppoll syscall on system (by number of calls)")
+![Processes making ppoll syscall on system (by number of calls)](./assets/oai/sysprocess_count_ppoll_fig_m2.medium.jpeg "Processes making ppoll syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making ppoll syscall on system (by number of calls) - 20 secss</b>
 
@@ -331,11 +331,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 ```
 <details><summary><b>Click to see results for processes making read system calls</b></summary>
 
-![Processes making read syscall on idle system (by latency)](./assets/open5gs/sysprocess_read_fig_m2.medium.jpeg "Processes making read syscall on system (by latency)")
+![Processes making read syscall on idle system (by latency)](./assets/oai/sysprocess_read_fig_m2.medium.jpeg "Processes making read syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making read syscall on system (by latency) - 20 secs</b>
 
-![Processes making read syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_read_fig_m2.medium.jpeg "Processes making read syscall on system (by number of calls)")
+![Processes making read syscall on system (by number of calls)](./assets/oai/sysprocess_count_read_fig_m2.medium.jpeg "Processes making read syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making read syscall on system (by number of calls) - 20 secss</b>
 
@@ -349,11 +349,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 ```
 <details><summary><b>Click to see results for processes making openat system calls</b></summary>
 
-![Processes making openat syscall on idle system (by latency)](./assets/open5gs/sysprocess_openat_fig_m2.medium.jpeg "Processes making openat syscall on system (by latency)")
+![Processes making openat syscall on idle system (by latency)](./assets/oai/sysprocess_openat_fig_m2.medium.jpeg "Processes making openat syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making openat syscall on system (by latency) - 20 secs</b>
 
-![Processes making openat syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_openat_fig_m2.medium.jpeg "Processes making openat syscall on system (by number of calls)")
+![Processes making openat syscall on system (by number of calls)](./assets/oai/sysprocess_count_openat_fig_m2.medium.jpeg "Processes making openat syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making openat syscall on system (by number of calls) - 20 secss</b>
 
@@ -367,11 +367,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 ```
 <details><summary><b>Click to see results for processes making sendto system calls</b></summary>
 
-![Processes making sendto syscall on idle system (by latency)](./assets/open5gs/sysprocess_sendto_fig_m2.medium.jpeg "Processes making sendto syscall on system (by latency)")
+![Processes making sendto syscall on idle system (by latency)](./assets/oai/sysprocess_sendto_fig_m2.medium.jpeg "Processes making sendto syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making sendto syscall on system (by latency) - 20 secs</b>
 
-![Processes making sendto syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_sendto_fig_m2.medium.jpeg "Processes making sendto syscall on system (by number of calls)")
+![Processes making sendto syscall on system (by number of calls)](./assets/oai/sysprocess_count_sendto_fig_m2.medium.jpeg "Processes making sendto syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making sendto syscall on system (by number of calls) - 20 secss</b>
 
@@ -386,11 +386,11 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 
 <details><summary><b>Click to see results for processes making sched_yield system calls</b></summary>
 
-![Processes making sched_yield syscall on idle system (by latency)](./assets/open5gs/sysprocess_sched_yield_fig_m2.medium.jpeg "Processes making sched_yield syscall on system (by latency)")
+![Processes making sched_yield syscall on idle system (by latency)](./assets/oai/sysprocess_sched_yield_fig_m2.medium.jpeg "Processes making sched_yield syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making sched_yield syscall on system (by latency) - 20 secs</b>
 
-![Processes making sched_yield syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_sched_yield_fig_m2.medium.jpeg "Processes making sched_yield syscall on system (by number of calls)")
+![Processes making sched_yield syscall on system (by number of calls)](./assets/oai/sysprocess_count_sched_yield_fig_m2.medium.jpeg "Processes making sched_yield syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making sched_yield syscall on system (by number of calls) - 20 secss</b>
 
@@ -405,13 +405,70 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 
 <details><summary><b>Click to see results for processes making recvfrom system calls</b></summary>
 
-![Processes making recvfrom syscall on idle system (by latency)](./assets/open5gs/sysprocess_recvfrom_fig_m2.medium.jpeg "Processes making recvfrom syscall on system (by latency)")
+![Processes making recvfrom syscall on idle system (by latency)](./assets/oai/sysprocess_recvfrom_fig_m2.medium.jpeg "Processes making recvfrom syscall on system (by latency)")
 
 <b>Fig.3.1 - Processes making recvfrom syscall on system (by latency) - 20 secs</b>
 
-![Processes making recvfrom syscall on system (by number of calls)](./assets/open5gs/sysprocess_count_recvfrom_fig_m2.medium.jpeg "Processes making recvfrom syscall on system (by number of calls)")
+![Processes making recvfrom syscall on system (by number of calls)](./assets/oai/sysprocess_count_recvfrom_fig_m2.medium.jpeg "Processes making recvfrom syscall on system (by number of calls)")
 
 <b>Fig.2 - Processes making recvfrom syscall on system (by number of calls) - 20 secss</b>
+
+</details>
+
+**io_getevents**
+
+```bash
+ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.yml \
+    -e '{ user: ubuntu,  duration: 20, aduration: 35, interval: 0, tool_cmd: "syscount.py --syscall io_getevents -d 20 -L -P -m -j", tool: sysprocess_io_getevents, ues: 0 }'
+```
+
+<details><summary><b>Click to see results for processes making io_getevents system calls</b></summary>
+
+![Processes making io_getevents syscall on idle system (by latency)](./assets/oai/sysprocess_io_getevents_fig_m2.medium.jpeg "Processes making io_getevents syscall on system (by latency)")
+
+<b>Fig.3.1 - Processes making io_getevents syscall on system (by latency) - 20 secs</b>
+
+![Processes making io_getevents syscall on system (by number of calls)](./assets/oai/sysprocess_count_io_getevents_fig_m2.medium.jpeg "Processes making io_getevents syscall on system (by number of calls)")
+
+<b>Fig.2 - Processes making io_getevents syscall on system (by number of calls) - 20 secss</b>
+
+</details>
+
+**epoll_pwait**
+
+```bash
+ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.yml \
+    -e '{ user: ubuntu,  duration: 20, aduration: 35, interval: 0, tool_cmd: "syscount.py --syscall epoll_pwait -d 20 -L -P -m -j", tool: sysprocess_epoll_pwait, ues: 0 }'
+```
+
+<details><summary><b>Click to see results for processes making epoll_pwait system calls</b></summary>
+
+![Processes making epoll_pwait syscall on idle system (by latency)](./assets/oai/sysprocess_epoll_pwait_fig_m2.medium.jpeg "Processes making epoll_pwait syscall on system (by latency)")
+
+<b>Fig.3.1 - Processes making epoll_pwait syscall on system (by latency) - 20 secs</b>
+
+![Processes making epoll_pwait syscall on system (by number of calls)](./assets/oai/sysprocess_count_epoll_pwait_fig_m2.medium.jpeg "Processes making epoll_pwait syscall on system (by number of calls)")
+
+<b>Fig.2 - Processes making epoll_pwait syscall on system (by number of calls) - 20 secss</b>
+
+</details>
+
+**rt_sigtimedwait**
+
+```bash
+ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.yml \
+    -e '{ user: ubuntu,  duration: 20, aduration: 35, interval: 0, tool_cmd: "syscount.py --syscall rt_sigtimedwait -d 20 -L -P -m -j", tool: sysprocess_rt_sigtimedwait, ues: 0 }'
+```
+
+<details><summary><b>Click to see results for processes making rt_sigtimedwait system calls</b></summary>
+
+![Processes making rt_sigtimedwait syscall on idle system (by latency)](./assets/oai/sysprocess_rt_sigtimedwait_fig_m2.medium.jpeg "Processes making rt_sigtimedwait syscall on system (by latency)")
+
+<b>Fig.3.1 - Processes making rt_sigtimedwait syscall on system (by latency) - 20 secs</b>
+
+![Processes making rt_sigtimedwait syscall on system (by number of calls)](./assets/oai/sysprocess_count_rt_sigtimedwait_fig_m2.medium.jpeg "Processes making rt_sigtimedwait syscall on system (by number of calls)")
+
+<b>Fig.2 - Processes making rt_sigtimedwait syscall on system (by number of calls) - 20 secss</b>
 
 </details>
 

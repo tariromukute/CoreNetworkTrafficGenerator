@@ -1,0 +1,10 @@
+{'time': '17:19:50', 'pid': 691, 'comm': 'dockerd', 'count': 122, 'time (ms)': 3641.644782}
+{'time': '17:19:50', 'pid': 1, 'comm': 'systemd', 'count': 5598, 'time (ms)': 23.141955}
+{'time': '17:19:50', 'pid': 1150, 'comm': 'systemd', 'count': 5899, 'time (ms)': 20.99403}
+{'time': '17:19:50', 'pid': 540805, 'comm': '[unknown]', 'count': 16, 'time (ms)': 4.356951}
+{'time': '17:19:50', 'pid': 541074, 'comm': '[unknown]', 'count': 97, 'time (ms)': 1.960087}
+{'time': '17:19:50', 'pid': 541167, 'comm': '[unknown]', 'count': 20, 'time (ms)': 1.784754}
+{'time': '17:19:50', 'pid': 540806, 'comm': '[unknown]', 'count': 5, 'time (ms)': 1.719449}
+{'time': '17:19:50', 'pid': 329, 'comm': 'systemd-journal', 'count': 184, 'time (ms)': 1.642471}
+{'time': '17:19:50', 'pid': 607, 'comm': 'udisksd', 'count': 171, 'time (ms)': 1.418146}
+{'time': '17:19:50', 'pid': 60403, 'comm': 'containerd-shim', 'count': 22, 'time (ms)': 1.054538}

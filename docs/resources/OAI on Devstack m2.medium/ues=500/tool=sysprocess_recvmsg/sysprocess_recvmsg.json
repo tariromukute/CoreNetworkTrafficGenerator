@@ -1,0 +1,10 @@
+{'time': '19:18:04', 'pid': 61027, 'comm': 'oai_amf', 'count': 1945, 'time (ms)': 17.747779}
+{'time': '19:18:04', 'pid': 604, 'comm': 'systemd-logind', 'count': 1382, 'time (ms)': 15.409935}
+{'time': '19:18:04', 'pid': 589, 'comm': 'dbus-daemon', 'count': 310, 'time (ms)': 2.36404}
+{'time': '19:18:04', 'pid': 691, 'comm': 'dockerd', 'count': 90, 'time (ms)': 0.880393}
+{'time': '19:18:04', 'pid': 329, 'comm': 'systemd-journal', 'count': 26, 'time (ms)': 0.23854}
+{'time': '19:18:04', 'pid': 600, 'comm': 'rsyslogd', 'count': 26, 'time (ms)': 0.17311}
+{'time': '19:18:04', 'pid': 742741, 'comm': '[unknown]', 'count': 4, 'time (ms)': 0.034873}
+{'time': '19:18:04', 'pid': 543, 'comm': 'systemd-network', 'count': 8, 'time (ms)': 0.034559}
+{'time': '19:18:04', 'pid': 742478, 'comm': '[unknown]', 'count': 4, 'time (ms)': 0.015269}
+{'time': '19:18:04', 'pid': 1, 'comm': 'systemd', 'count': 1, 'time (ms)': 0.005795}

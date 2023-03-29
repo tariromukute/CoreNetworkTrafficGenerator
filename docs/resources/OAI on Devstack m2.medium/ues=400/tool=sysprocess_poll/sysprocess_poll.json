@@ -1,0 +1,10 @@
+{'time': '18:15:15', 'pid': 607, 'comm': 'udisksd', 'count': 188, 'time (ms)': 34018.915473}
+{'time': '18:15:15', 'pid': 582, 'comm': 'accounts-daemon', 'count': 98, 'time (ms)': 17285.168327}
+{'time': '18:15:15', 'pid': 600, 'comm': 'rsyslogd', 'count': 37, 'time (ms)': 17126.184142}
+{'time': '18:15:15', 'pid': 593, 'comm': 'irqbalance', 'count': 1, 'time (ms)': 10002.767966}
+{'time': '18:15:15', 'pid': 61027, 'comm': 'oai_amf', 'count': 4800, 'time (ms)': 6942.646468}
+{'time': '18:15:15', 'pid': 60936, 'comm': 'oai_ausf', 'count': 4812, 'time (ms)': 6275.930041}
+{'time': '18:15:15', 'pid': 60827, 'comm': 'oai_udm', 'count': 9552, 'time (ms)': 4825.351504}
+{'time': '18:15:15', 'pid': 60527, 'comm': 'mysqld', 'count': 1, 'time (ms)': 87.121032}
+{'time': '18:15:15', 'pid': 61216, 'comm': 'oai_spgwu', 'count': 12, 'time (ms)': 1.539832}
+{'time': '18:15:15', 'pid': 568811, 'comm': 'oai_udr', 'count': 12, 'time (ms)': 0.54254}

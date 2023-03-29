@@ -1,0 +1,10 @@
+{'time': '14:07:51', 'pid': 214580, 'comm': '[unknown]', 'count': 6226, 'time (ms)': 432.882253}
+{'time': '14:07:51', 'pid': 214320, 'comm': '[unknown]', 'count': 6226, 'time (ms)': 292.562124}
+{'time': '14:07:51', 'pid': 214558, 'comm': '[unknown]', 'count': 18, 'time (ms)': 21.983132}
+{'time': '14:07:51', 'pid': 214640, 'comm': '[unknown]', 'count': 18, 'time (ms)': 21.207498}
+{'time': '14:07:51', 'pid': 214660, 'comm': '[unknown]', 'count': 18, 'time (ms)': 20.516664}
+{'time': '14:07:51', 'pid': 214582, 'comm': '[unknown]', 'count': 18, 'time (ms)': 20.132258}
+{'time': '14:07:51', 'pid': 214300, 'comm': '[unknown]', 'count': 18, 'time (ms)': 19.829769}
+{'time': '14:07:51', 'pid': 214379, 'comm': '[unknown]', 'count': 18, 'time (ms)': 19.24554}
+{'time': '14:07:51', 'pid': 214581, 'comm': '[unknown]', 'count': 18, 'time (ms)': 17.153426}
+{'time': '14:07:51', 'pid': 214399, 'comm': '[unknown]', 'count': 18, 'time (ms)': 15.736476}
