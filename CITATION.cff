@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: 5G Core Network Traffic Generator
+message: Please cite this software using these metadata.
+type: software
+authors:
+  - given-names: Tariro
+    family-names: Mukute
+    email: tariromukute@gmail.com
+url: https://github.com/tariromukute/core-tg
+version: 0.1.0
