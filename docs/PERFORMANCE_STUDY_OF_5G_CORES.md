@@ -302,6 +302,8 @@ On the OAI VM
 ```bash
 sudo sysctl net.ipv4.conf.all.forwarding=1
 sudo iptables -P FORWARD ACCEPT
+# Enable the proxy arp for ARP request from the querying external host
+sysctl -w net.ipv4.conf.all.proxy_arp=1
 ```
 
 On the traffic generator VM
