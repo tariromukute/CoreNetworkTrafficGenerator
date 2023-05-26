@@ -139,7 +139,6 @@ class GNB():
             if not self.nas_ul_queue.empty():
                 data, ue = self.nas_ul_queue.get()
                 ran_ue_ngap_id = int(ue.supi[-10:])
-                PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                 Msg, err = parse_NAS5G(data)
                 if err:
                     logger.error("Error parsing NAS message: %s", err)

@@ -225,10 +225,19 @@ class RegistrationAcceptProc():
         Msg, err = parse_NAS5G(data)
         if not err:
             ue.state = FGMMState.REGISTERED
-            return None, ue
+            IEs = {}
+            IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 67 }
+            # IEs['SORTransContainer'] = { 'ListInd': }
+            Msg = FGMMRegistrationComplete(val=IEs)
+            SecMsg = SecProtNASMessageProc().create_req()
+            SecMsg['NASMessage'].set_val(Msg.to_bytes())
+            SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
+            SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=1, seqnoff=0, bearer=1)
+            return SecMsg.to_bytes(), ue
         else:
             logger.error('Error parsing NAS message: %s', err)
             return None, ue
+
     
 # Function to process NAS procedure
 def process_nas_procedure(data: bytes, ue: UE) -> bytes:
