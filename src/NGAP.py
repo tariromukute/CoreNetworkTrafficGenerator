@@ -55,6 +55,7 @@ class GNB():
         self.tac = server_config['tac'].to_bytes(3, 'big')
         self.slices = server_config['slices']
         self.pLMNIdentity = plmn_str_to_buf(server_config['mcc'] + server_config['mnc'])
+        # Foe each slice, create a list of TAI Slice Support. sd is optional
         self.tAISliceSupportList = []
         for a in server_config['slices']:
             tAISliceSupport = {}
@@ -62,6 +63,7 @@ class GNB():
             if 'sd' in a:
                 tAISliceSupport['sD'] = int(a['sd']).to_bytes(3, 'big')
             self.tAISliceSupportList.append(tAISliceSupport)
+
         # add a handler that uses the shared queue
         logger.addHandler(QueueHandler(logger_queue))
         # log all messages, debug and up

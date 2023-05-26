@@ -1,0 +1,3 @@
+{'time': '21:49:38', 'pid': 1000811, 'comm': 'python3', 'count': 1, 'time (ms)': 20016.360759}
+{'time': '21:49:38', 'pid': 61027, 'comm': 'oai_amf', 'count': 1737, 'time (ms)': 16586.258611}
+{'time': '21:49:38', 'pid': 1000805, 'comm': 'python3', 'count': 3, 'time (ms)': 15012.576533}

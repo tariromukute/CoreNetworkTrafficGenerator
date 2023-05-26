@@ -1,0 +1,10 @@
+{'time': '18:54:58', 'pid': 12520, 'comm': 'fwupd', 'count': 13, 'time (ms)': 34017.584382}
+{'time': '18:54:58', 'pid': 577, 'comm': 'accounts-daemon', 'count': 20, 'time (ms)': 17829.499529}
+{'time': '18:54:58', 'pid': 616, 'comm': 'rsyslogd', 'count': 3, 'time (ms)': 15012.789841}
+{'time': '18:54:58', 'pid': 587, 'comm': 'irqbalance', 'count': 1, 'time (ms)': 9997.704533}
+{'time': '18:54:58', 'pid': 12755, 'comm': 'open5gs-udrd', 'count': 2786, 'time (ms)': 919.096868}
+{'time': '18:54:58', 'pid': 12756, 'comm': 'open5gs-pcfd', 'count': 1394, 'time (ms)': 260.272594}
+{'time': '18:54:58', 'pid': 12733, 'comm': 'open5gs-amfd', 'count': 19731, 'time (ms)': 29.39946}
+{'time': '18:54:58', 'pid': 12735, 'comm': 'open5gs-scpd', 'count': 13153, 'time (ms)': 26.530687}
+{'time': '18:54:58', 'pid': 12754, 'comm': 'open5gs-udmd', 'count': 5247, 'time (ms)': 10.588312}
+{'time': '18:54:58', 'pid': 12747, 'comm': 'open5gs-ausfd', 'count': 3929, 'time (ms)': 6.589733}

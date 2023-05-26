@@ -1,0 +1,10 @@
+{'time': '21:23:46', 'syscall': 'futex', 'count': 114931, 'time (ms)': 1389339.321354}
+{'time': '21:23:46', 'syscall': 'epoll_wait', 'count': 28605, 'time (ms)': 238172.760511}
+{'time': '21:23:46', 'syscall': 'io_getevents', 'count': 460, 'time (ms)': 194899.929277}
+{'time': '21:23:46', 'syscall': 'epoll_pwait', 'count': 7628, 'time (ms)': 178554.054295}
+{'time': '21:23:46', 'syscall': 'poll', 'count': 27418, 'time (ms)': 107987.574204}
+{'time': '21:23:46', 'syscall': 'read', 'count': 532530, 'time (ms)': 88735.386973}
+{'time': '21:23:46', 'syscall': 'select', 'count': 1673, 'time (ms)': 51596.753466}
+{'time': '21:23:46', 'syscall': 'ppoll', 'count': 2995, 'time (ms)': 23979.295806}
+{'time': '21:23:46', 'syscall': 'nanosleep', 'count': 11463, 'time (ms)': 21419.762807}
+{'time': '21:23:46', 'syscall': 'recvfrom', 'count': 20813, 'time (ms)': 21004.747113}

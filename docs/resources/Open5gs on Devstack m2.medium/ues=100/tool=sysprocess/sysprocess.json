@@ -1,0 +1,10 @@
+{'time': '14:35:50', 'pid': 590, 'comm': 'mongod', 'count': 6971, 'time (ms)': 269663.249288}
+{'time': '14:35:50', 'pid': 37503, 'comm': 'open5gs-smfd', 'count': 463, 'time (ms)': 145383.520462}
+{'time': '14:35:50', 'pid': 37504, 'comm': 'open5gs-hssd', 'count': 426, 'time (ms)': 134003.850087}
+{'time': '14:35:50', 'pid': 37502, 'comm': 'open5gs-mmed', 'count': 426, 'time (ms)': 133996.250505}
+{'time': '14:35:50', 'pid': 37494, 'comm': 'open5gs-pcrfd', 'count': 463, 'time (ms)': 133891.756964}
+{'time': '14:35:50', 'pid': 457, 'comm': 'multipathd', 'count': 81, 'time (ms)': 53002.9121}
+{'time': '14:35:50', 'pid': 617, 'comm': 'rsyslogd', 'count': 22, 'time (ms)': 30030.613717}
+{'time': '14:35:50', 'pid': 37835, 'comm': 'python3', 'count': 60, 'time (ms)': 20011.568602}
+{'time': '14:35:50', 'pid': 37831, 'comm': 'python3', 'count': 39, 'time (ms)': 19020.605976}
+{'time': '14:35:50', 'pid': 579, 'comm': 'accounts-daemon', 'count': 80, 'time (ms)': 18953.701157}

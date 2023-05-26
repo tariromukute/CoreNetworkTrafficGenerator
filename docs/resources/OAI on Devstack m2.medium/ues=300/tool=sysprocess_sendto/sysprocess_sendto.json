@@ -1,0 +1,10 @@
+{'time': '17:23:31', 'pid': 60827, 'comm': 'oai_udm', 'count': 1796, 'time (ms)': 171.634506}
+{'time': '17:23:31', 'pid': 64020, 'comm': 'oai_udr', 'count': 1198, 'time (ms)': 134.400608}
+{'time': '17:23:31', 'pid': 60936, 'comm': 'oai_ausf', 'count': 1198, 'time (ms)': 60.084433}
+{'time': '17:23:31', 'pid': 60527, 'comm': 'mysqld', 'count': 1490, 'time (ms)': 35.000348}
+{'time': '17:23:31', 'pid': 61027, 'comm': 'oai_amf', 'count': 598, 'time (ms)': 32.552945}
+{'time': '17:23:31', 'pid': 60507, 'comm': 'oai_nrf', 'count': 10, 'time (ms)': 0.531683}
+{'time': '17:23:31', 'pid': 61120, 'comm': 'oai_smf', 'count': 4, 'time (ms)': 0.223182}
+{'time': '17:23:31', 'pid': 547381, 'comm': '[unknown]', 'count': 1, 'time (ms)': 0.183575}
+{'time': '17:23:31', 'pid': 61216, 'comm': 'oai_spgwu', 'count': 4, 'time (ms)': 0.175732}
+{'time': '17:23:31', 'pid': 547087, 'comm': 'python3', 'count': 4, 'time (ms)': 0.090317}

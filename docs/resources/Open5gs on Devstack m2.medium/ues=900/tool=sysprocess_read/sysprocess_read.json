@@ -1,0 +1,10 @@
+{'time': '10:30:46', 'pid': 590, 'comm': 'mongod', 'count': 240, 'time (ms)': 3.631103}
+{'time': '10:30:46', 'pid': 332, 'comm': 'systemd-journal', 'count': 52, 'time (ms)': 0.362106}
+{'time': '10:30:46', 'pid': 589, 'comm': 'irqbalance', 'count': 9, 'time (ms)': 0.168623}
+{'time': '10:30:46', 'pid': 579, 'comm': 'accounts-daemon', 'count': 16, 'time (ms)': 0.046341}
+{'time': '10:30:46', 'pid': 363, 'comm': 'systemd-udevd', 'count': 10, 'time (ms)': 0.029745}
+{'time': '10:30:46', 'pid': 615, 'comm': 'node', 'count': 4, 'time (ms)': 0.021036}
+{'time': '10:30:46', 'pid': 22416, 'comm': 'open5gs-udmd', 'count': 1, 'time (ms)': 0.009747}
+{'time': '10:30:46', 'pid': 22415, 'comm': 'open5gs-udrd', 'count': 1, 'time (ms)': 0.009349}
+{'time': '10:30:46', 'pid': 22423, 'comm': 'open5gs-amfd', 'count': 1, 'time (ms)': 0.008686}
+{'time': '10:30:46', 'pid': 22418, 'comm': 'open5gs-ausfd', 'count': 1, 'time (ms)': 0.007719}

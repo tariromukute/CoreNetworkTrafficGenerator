@@ -1,0 +1,7 @@
+{'time': '16:08:43', 'pid': 590, 'comm': 'mongod', 'count': 2353, 'time (ms)': 208933.494538}
+{'time': '16:08:43', 'pid': 55431, 'comm': 'open5gs-mmed', 'count': 246, 'time (ms)': 114019.082049}
+{'time': '16:08:43', 'pid': 55437, 'comm': 'open5gs-smfd', 'count': 234, 'time (ms)': 114014.120686}
+{'time': '16:08:43', 'pid': 55436, 'comm': 'open5gs-hssd', 'count': 234, 'time (ms)': 114013.730085}
+{'time': '16:08:43', 'pid': 55432, 'comm': 'open5gs-pcrfd', 'count': 234, 'time (ms)': 114013.003577}
+{'time': '16:08:43', 'pid': 457, 'comm': 'multipathd', 'count': 59, 'time (ms)': 19001.728741}
+{'time': '16:08:43', 'pid': 617, 'comm': 'rsyslogd', 'count': 11, 'time (ms)': 15009.611567}

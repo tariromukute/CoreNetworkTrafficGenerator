@@ -1,0 +1,10 @@
+{'time': '20:50:29', 'pid': 691, 'comm': 'dockerd', 'count': 117, 'time (ms)': 4309.892599}
+{'time': '20:50:29', 'pid': 1, 'comm': 'systemd', 'count': 5019, 'time (ms)': 25.55995}
+{'time': '20:50:29', 'pid': 1150, 'comm': 'systemd', 'count': 5104, 'time (ms)': 20.994535}
+{'time': '20:50:29', 'pid': 900604, 'comm': '[unknown]', 'count': 152, 'time (ms)': 3.975875}
+{'time': '20:50:29', 'pid': 900341, 'comm': '[unknown]', 'count': 152, 'time (ms)': 3.953171}
+{'time': '20:50:29', 'pid': 900344, 'comm': '[unknown]', 'count': 150, 'time (ms)': 3.874984}
+{'time': '20:50:29', 'pid': 900154, 'comm': '[unknown]', 'count': 16, 'time (ms)': 3.1794}
+{'time': '20:50:29', 'pid': 900185, 'comm': '[unknown]', 'count': 5, 'time (ms)': 2.255252}
+{'time': '20:50:29', 'pid': 900607, 'comm': '[unknown]', 'count': 150, 'time (ms)': 2.130841}
+{'time': '20:50:29', 'pid': 900338, 'comm': '[unknown]', 'count': 5, 'time (ms)': 2.115039}

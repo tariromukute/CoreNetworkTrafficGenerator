@@ -1,0 +1,10 @@
+{'time': '18:48:30', 'pid': 692131, 'comm': '[unknown]', 'count': 6226, 'time (ms)': 561.311843}
+{'time': '18:48:30', 'pid': 691839, 'comm': '[unknown]', 'count': 4830, 'time (ms)': 236.394986}
+{'time': '18:48:30', 'pid': 691, 'comm': 'dockerd', 'count': 1817, 'time (ms)': 200.731313}
+{'time': '18:48:30', 'pid': 60527, 'comm': 'mysqld', 'count': 588, 'time (ms)': 75.332873}
+{'time': '18:48:30', 'pid': 568811, 'comm': 'oai_udr', 'count': 2363, 'time (ms)': 33.942918}
+{'time': '18:48:30', 'pid': 692110, 'comm': '[unknown]', 'count': 18, 'time (ms)': 25.074756}
+{'time': '18:48:30', 'pid': 692214, 'comm': '[unknown]', 'count': 18, 'time (ms)': 24.293931}
+{'time': '18:48:30', 'pid': 692169, 'comm': '[unknown]', 'count': 18, 'time (ms)': 23.134786}
+{'time': '18:48:30', 'pid': 692080, 'comm': '[unknown]', 'count': 18, 'time (ms)': 20.367448}
+{'time': '18:48:30', 'pid': 692253, 'comm': '[unknown]', 'count': 18, 'time (ms)': 20.152382}

@@ -1,0 +1,8 @@
+[16:35:31]
+t:syscalls:sys_enter_epoll_wait():u16:args->timeout
+	COUNT      EVENT
+	4          args->timeout = 5
+	37         args->timeout = 1
+	40         args->timeout = 1000
+	226        args->timeout = 0
+	10762      args->timeout = 65535

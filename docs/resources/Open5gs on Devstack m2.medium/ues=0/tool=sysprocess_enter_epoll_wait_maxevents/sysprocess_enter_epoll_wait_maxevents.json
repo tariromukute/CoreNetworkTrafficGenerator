@@ -1,0 +1,10 @@
+[10:30:33]
+t:syscalls:sys_enter_epoll_wait():u16:args->maxevents
+	COUNT      EVENT
+	1          args->maxevents = 111
+	6          args->maxevents = 25
+	10         args->maxevents = 51
+	14         args->maxevents = 1024
+	16         args->maxevents = 10
+	20         args->maxevents = 2
+	189        args->maxevents = 16384

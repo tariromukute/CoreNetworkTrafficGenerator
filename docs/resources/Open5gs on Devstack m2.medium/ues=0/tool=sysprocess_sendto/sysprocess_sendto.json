@@ -1,0 +1,10 @@
+{'time': '09:52:42', 'pid': 11919, 'comm': 'open5gs-scpd', 'count': 52, 'time (ms)': 1.148783}
+{'time': '09:52:42', 'pid': 11964, 'comm': 'open5gs-nrfd', 'count': 18, 'time (ms)': 0.377699}
+{'time': '09:52:42', 'pid': 11941, 'comm': 'open5gs-smfd', 'count': 6, 'time (ms)': 0.150069}
+{'time': '09:52:42', 'pid': 12274, 'comm': 'python3', 'count': 4, 'time (ms)': 0.119476}
+{'time': '09:52:42', 'pid': 11910, 'comm': 'open5gs-pcfd', 'count': 4, 'time (ms)': 0.119205}
+{'time': '09:52:42', 'pid': 11916, 'comm': 'open5gs-bsfd', 'count': 4, 'time (ms)': 0.097661}
+{'time': '09:52:42', 'pid': 11897, 'comm': 'open5gs-amfd', 'count': 4, 'time (ms)': 0.094302}
+{'time': '09:52:42', 'pid': 11911, 'comm': 'open5gs-sgwcd', 'count': 4, 'time (ms)': 0.092473}
+{'time': '09:52:42', 'pid': 11920, 'comm': 'open5gs-udmd', 'count': 4, 'time (ms)': 0.092105}
+{'time': '09:52:42', 'pid': 11917, 'comm': 'open5gs-nssfd', 'count': 4, 'time (ms)': 0.07576}

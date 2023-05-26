@@ -1,0 +1,10 @@
+{'time': '19:36:33', 'pid': 568811, 'comm': 'oai_udr', 'count': 37480, 'time (ms)': 26152.429263}
+{'time': '19:36:33', 'pid': 60936, 'comm': 'oai_ausf', 'count': 25614, 'time (ms)': 19927.446177}
+{'time': '19:36:33', 'pid': 60827, 'comm': 'oai_udm', 'count': 25394, 'time (ms)': 19917.522955}
+{'time': '19:36:33', 'pid': 60507, 'comm': 'oai_nrf', 'count': 19734, 'time (ms)': 19886.393737}
+{'time': '19:36:33', 'pid': 774289, 'comm': '[unknown]', 'count': 199287, 'time (ms)': 1500.305446}
+{'time': '19:36:33', 'pid': 774020, 'comm': '[unknown]', 'count': 199222, 'time (ms)': 196.964763}
+{'time': '19:36:33', 'pid': 774322, 'comm': '[unknown]', 'count': 35, 'time (ms)': 151.619441}
+{'time': '19:36:33', 'pid': 607, 'comm': 'udisksd', 'count': 484, 'time (ms)': 131.383567}
+{'time': '19:36:33', 'pid': 774516, 'comm': '[unknown]', 'count': 35, 'time (ms)': 94.56183}
+{'time': '19:36:33', 'pid': 774340, 'comm': '[unknown]', 'count': 26, 'time (ms)': 94.529188}
