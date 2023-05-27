@@ -97,7 +97,7 @@ class AuthenticationProc(NASProc):
         ue.set_k_nas_int(k_nas_int)
         ue.k_nas_int = ue.k_nas_int[16:]
         # Set state
-        ue.state = FGMMState.AUTHENTICATED_INITIATED
+        ue.set_state(FGMMState.AUTHENTICATED_INITIATED)
         return Msg.to_bytes(), ue
 
     def send(self, data: bytes) -> int:
@@ -196,7 +196,7 @@ class SecurityModeProc(NASProc):
         SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
         SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=1, seqnoff=0, bearer=1)
         # Set state
-        ue.state = FGMMState.SECURITY_MODE_INITIATED
+        ue.set_state(FGMMState.SECURITY_MODE_INITIATED)
         return SecMsg.to_bytes(), ue
 
     def verify_security_capabilities(self, msg) -> bool:
@@ -216,7 +216,7 @@ class RegistrationProc(NASProc):
         IEs['5GSID'] = { 'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': { 'PLMN': ue.mcc + ue.mnc, 'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin) } }
         IEs['UESecCap'] = { '5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0, '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0, '5G-IA6': 0, '5G-IA7': 0, 'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0, 'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0 }
         Msg = FGMMRegistrationRequest(val=IEs)
-        ue.state = FGMMState.REGISTERED_INITIATED
+        ue.set_state(FGMMState.REGISTERED_INITIATED)
         return Msg.to_bytes(), ue
 
 class RegistrationAcceptProc():
@@ -224,7 +224,7 @@ class RegistrationAcceptProc():
     def receive(self, data: bytes, ue: UE) -> bytes:
         Msg, err = parse_NAS5G(data)
         if not err:
-            ue.state = FGMMState.REGISTERED
+            ue.set_state(FGMMState.REGISTERED)
             IEs = {}
             IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 67 }
             # IEs['SORTransContainer'] = { 'ListInd': }
@@ -255,7 +255,8 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
     NAS_PDU, err = parse_NAS5G(data)
     if err:
         logger.error('Error parsing NAS message: %s', err)
-        return b''
+        print("Error")
+        return b'', ue
     if NAS_PDU._name == '5GMMAuthenticationRequest':
         tx_nas_pdu, ue = AuthenticationProc().receive(data, ue)
         logger.debug("Sending authentication response for UE: %s", ue)
@@ -273,8 +274,8 @@ def process_nas_procedure(data: bytes, ue: UE) -> bytes:
             tx_nas_pdu, ue = RegistrationAcceptProc().receive(ra, ue)
             logger.debug("Sending registration complete for UE: %s", ue)
             return tx_nas_pdu, ue
-
-    return None
+        
+    return None, ue
 
 class NAS():
     

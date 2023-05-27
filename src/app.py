@@ -4,6 +4,7 @@ import threading
 import time
 import array
 import os
+import sys, traceback
 import yaml
 from UE import UE, FGMMState
 from NAS import NAS
@@ -116,6 +117,7 @@ class UtilProcess(Process):
         self.number = number
         self.interval = interval
         self.ue_config = ue_config
+        self.start_time = None
 
     def run(self):
         logger.debug("Starting util process")
@@ -144,13 +146,22 @@ class UtilProcess(Process):
                 # Get FGMMState names
                 fgmm_state_names = [FGMMState(i).name for i in range(FGMMState.FGMM_STATE_MAX)]
                 logger.info("UE state count: %s", dict(zip(fgmm_state_names, ue_state_count)))
+                # If all the UEs have registered exit
+                if ue_state_count[FGMMState.REGISTERED] >= self.number:
+                    # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
+                    latest_time = self.start_time
+                    for ue in self.ue_list:
+                        if ue.supi:
+                            latest_time = ue.state_time if latest_time < ue.state_time else latest_time
+                    print("Registered {} UEs in {}".format(self.number, latest_time - self.start_time))
+                    sys.exit(0)
                 time.sleep(1)
             except Exception:
-                import sys, traceback
                 print('Whoops! Problem:', file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
 
     def _load_util_add_ue_thread(self):
+        self.start_time = time.time()
         util_add_ue_thread = threading.Thread(target=self.util_add_ue_process_function)
         util_add_ue_thread.start()
         return util_add_ue_thread
@@ -238,7 +249,7 @@ def main(args: Arguments):
         logging = LoggingProcess(logger_queue, args.file)
         logging.daemon = True
         logging.start()
-        # Initialise ue_list with 1000 UEs
+        # If the imsi doesn't start from 0, the list will be larger than needed
         for i in range(init_imsi + args.number + 1):
             ue_list.append(UE())
 

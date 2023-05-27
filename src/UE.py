@@ -1,5 +1,6 @@
 from enum import IntEnum
 from binascii import unhexlify, hexlify
+import time
 
 # Define enum
 class FGMMState(IntEnum):
@@ -47,6 +48,7 @@ class UE():
             self.nas_proc = None
             self.state = FGMMState.NULL
             self.op_type = 'OPC'
+            self.state_time = time.time()
         else:   
             self.supi = config['supi']
             self.mcc = config['mcc']
@@ -58,7 +60,7 @@ class UE():
             self.amf = config['amf']
             self.imei = config['imei']
             self.imeiSv = config['imeiSv']
-            self.nssai = [{ 'SST': int(a['sst']) } for a in config['defaultNssai']]
+            self.nssai = [{ 'SST': int(a['sst']), 'SD': int(a['sd']) } for a in config['defaultNssai']]
             sn_name = "5G:mnc{}.mcc{}.3gppnetwork.org".format(format(int(config['mnc']), '003d'), format(int(config['mcc']), '003d'))
             self.sn_name = sn_name.encode()
             self.nas_key_set = set()
@@ -83,6 +85,7 @@ class UE():
             self.nas_proc = None
             self.nas_pdu = None
             self.state = FGMMState.NULL
+            self.state_time = time.time()
     
     def initiate(self):
         """ Initiate the UE. """
@@ -111,6 +114,10 @@ class UE():
 
     def set_k_nas_int(self, k_nas_int):
         self.k_nas_int = k_nas_int
+
+    def set_state(self, state):
+        self.state_time = time.time()
+        self.state = state
         
     # Print object
     def __str__(self) -> str:

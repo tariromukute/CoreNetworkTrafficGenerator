@@ -1,0 +1,22 @@
+#include <net/sctp/structs.h>
+#include <net/sctp/sctp.h>
+#ifndef BPFTRACE_HAVE_BTF
+#include <linux/socket.h>
+#include <net/sock.h>
+#else
+#include <sys/socket.h>
+#endif
+
+kprobe:sctp_transport_update_rto { 
+    $tp = (struct sctp_transport *)arg0;
+    $saddr = ntop(0);
+    if ($tp->ipaddr.sa.sa_family == AF_INET) {
+        $sk = $tp->ipaddr.v4;
+        $saddr = ntop(AF_INET, $sk.sin_addr.s_addr);
+    } else {
+        // AF_INET6
+        $sk6 = $tp->ipaddr.v6;
+        $saddr = ntop(AF_INET6, $sk6.sin6_addr.in6_u.u6_addr8);
+    }
+    @rtt[$saddr] = hist(arg1); 
+}

@@ -11,13 +11,13 @@ gtpIp: 10.0.0.16    # gNB's local IP address for N3 Interface (Usually same with
 
 # List of AMF address information
 amfConfigs:
-  - address: 10.0.0.33
+  - address: 10.0.0.48
     port: 38412
 
 # List of supported S-NSSAIs by this gNB
 slices:
-  - sst: 0x1
-    sd: 0x010203
+  - sst: 1
+    sd: 010203
 
 # Indicates whether or not SCTP stream number errors should be ignored.
 ignoreStreamIds: true
