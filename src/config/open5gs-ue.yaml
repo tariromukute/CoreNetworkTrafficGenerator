@@ -50,7 +50,6 @@ configuredNssai:
 # Default Configured NSSAI for this UE
 defaultNssai:
   - sst: 1
-    sd: 1
 
 # Supported integrity algorithms by this UE
 integrity:

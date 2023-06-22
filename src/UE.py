@@ -25,31 +25,25 @@ class UE():
 
     def __init__(self, config = None) -> None:
         """ Initiate the UE. """
-        # if config is None set all values to None
+        # Set several instance variables to None
+        self.ue_capabilities = self.ue_security_capabilities = self.ue_network_capability = \
+            self.nas_proc = self.nas_pdu = None
+        
+        # Set values for empty variables to all zeros in bytes
+        empty_values = ['k_nas_int', 'k_nas_enc', 'k_amf', 'k_ausf', 'k_seaf', 'sqn', 'autn',
+                        'mac_a', 'mac_s', 'xres_star', 'xres', 'res_star', 'res', 'rand']
+        for var_name in empty_values:
+            setattr(self, var_name, b'\x00' * 32)
+        
+        # Initialize other variables to default values or values from config
+        self.nas_key_set, self.amf_ue_ngap_id = set(), None
         if config is None:
-            self.supi = None
-            self.amf_ue_ngap_id = None
-            # initialise to zero in bytes
-            self.k_nas_int = b'\x00' * 32
-            self.k_nas_enc = b'\x00' * 32
-            self.k_amf = b'\x00' * 32
-            self.k_ausf = b'\x00' * 32
-            self.k_seaf = b'\x00' * 32
-            self.k_nas_int = b'\x00' * 32
-            self.k_nas_enc = b'\x00' * 32
-            self.mac_a = b'\x00' * 32
-            self.mac_s = b'\x00' * 32
-            self.xres_star = b'\x00' * 32
-            self.xres = b'\x00' * 32
-            self.res_star = b'\x00' * 32
-            self.ue_capabilities = None
-            self.ue_security_capabilities = None
-            self.ue_network_capability = None
-            self.nas_proc = None
+            # If config is None, set some variables to None and others to default values
+            self.supi = self.amf_ue_ngap_id = None
             self.state = FGMMState.NULL
-            self.op_type = 'OPC'
-            self.state_time = time.time()
-        else:   
+            self.op_type, self.state_time = 'OPC', time.time()
+        else:
+            # Otherwise, set variables based on values from config
             self.supi = config['supi']
             self.mcc = config['mcc']
             self.mnc = config['mnc']
@@ -60,53 +54,18 @@ class UE():
             self.amf = config['amf']
             self.imei = config['imei']
             self.imeiSv = config['imeiSv']
-            self.nssai = [{ 'SST': int(a['sst']), 'SD': int(a['sd']) } for a in config['defaultNssai']]
-            sn_name = "5G:mnc{}.mcc{}.3gppnetwork.org".format(format(int(config['mnc']), '003d'), format(int(config['mcc']), '003d'))
+            sn_name = "5G:mnc{:03d}.mcc{:03d}.3gppnetwork.org".format(int(config['mnc']), int(config['mcc']))
             self.sn_name = sn_name.encode()
-            self.nas_key_set = set()
-            self.amf_ue_ngap_id = None
-            self.sqn = b'\x00' * 32
-            self.rand = b'\x00' * 32
-            self.autn = b'\x00' * 32
-            self.res = b'\x00' * 32
-            self.k_amf = b'\x00' * 32
-            self.k_ausf = b'\x00' * 32
-            self.k_seaf = b'\x00' * 32
-            self.k_nas_int = b'\x00' * 32
-            self.k_nas_enc = b'\x00' * 32
-            self.mac_a = b'\x00' * 32
-            self.mac_s = b'\x00' * 32
-            self.xres_star = b'\x00' * 32
-            self.xres = b'\x00' * 32
-            self.res_star = b'\x00' * 32
-            self.ue_capabilities = None
-            self.ue_security_capabilities = None
-            self.ue_network_capability = None
-            self.nas_proc = None
-            self.nas_pdu = None
-            self.state = FGMMState.NULL
-            self.state_time = time.time()
-    
-    def initiate(self):
-        """ Initiate the UE. """
-        # Create NAS Registration Request
-        self.nas_proc = 'REGISTRATION_REQUEST'
-
-        tx_nas_pduprocess_nas_procedure(None, self)
-
-    def process(self, data: bytes) -> bytes:
-        """ Process the NAS message. """
-        return process_nas_procedure(data, self)
+            self.nssai = [{'SST': int(a['sst']), 'SD': int(a['sd'])} 
+             if 'sd' in a else {'SST': int(a['sst'])}  # Create dictionaries for each item in defaultNssai list
+             for a in config['defaultNssai']]
+            self.state, self.state_time = FGMMState.NULL, time.time()
 
     def send(self, data: bytes) -> bytes:
         # Put data on quene
         if data:
             # Send object with data and supi
             self._nas_queue.put((data, self.supi))
-
-    def recv(self, data: bytes) -> bytes:
-        """ Receive data from the socket. """
-        pass
 
     def set_nas_queue(self, nas_queue):
         """ Set the NAS queue. """
