@@ -1,15 +1,17 @@
+from multiprocessing import current_process
 import struct
 import time
 from UE import UE
 import logging
 import threading
-from SCTP import SCTPClient, SCTPServer
+from SCTP import SCTPClient
 from NAS import process_nas_procedure, RegistrationProc
 from pycrate_asn1dir import NGAP
 from binascii import unhexlify, hexlify
 from abc import ABC, ABCMeta, abstractmethod
 from pycrate_mobile.NAS import *
 from logging.handlers import QueueHandler
+from sctp_test import FiveGCoreSCTPClient
 # import queue
 
 from Proc import Proc
@@ -41,10 +43,9 @@ def plmn_str_to_buf(s):
 # taC
 # sST
 class GNB():
-    def __init__(self, logger_queue, server_config: dict,  ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ues) -> None:
+    def __init__(self, sctp: SCTPClient, logger_queue, server_config: dict, nas_dl_queue, nas_ul_queue, ues_queue, ues) -> None:
         self.ues = ues # [None for i in range(100)] # A ctypes array contain the UEs that have been initialized
-        self.ngap_dl_queue = ngap_dl_queue
-        self.ngap_ul_queue = ngap_ul_queue
+        self.sctp = sctp
         self.nas_dl_queue = nas_dl_queue
         self.nas_ul_queue = nas_ul_queue
         self.ues_queue = ues_queue
@@ -81,12 +82,15 @@ class GNB():
 
     def initiate(self) -> None:
         # Send NGSetupRequest
-        obj = {'plmn_identity': self.pLMNIdentity, 'tac': self.tac, 'nci': self.nci, 'tai_slice_support_list': self.tAISliceSupportList }
-        ngSetupRequest = NGSetupProc()
-        ngSetupRequest.initiate(obj)
-        nGSetupPDU_APER = ngSetupRequest.get_pdu().to_aper()
-        logger.debug("Sending NGSetupRequest to 5G Core with size: %d", len(nGSetupPDU_APER))
-        self.ngap_ul_queue.put(nGSetupPDU_APER)
+        obj = {'plmn_identity': self.pLMNIdentity,
+                'tac': self.tac,
+                'nci': self.nci,
+                'tai_slice_support_list': self.tAISliceSupportList}
+        ng_setup_request = NGSetupProc()
+        ng_setup_request.initiate(obj)
+        ng_setup_pdu_aper = ng_setup_request.get_pdu().to_aper()
+        logger.debug("Sending NGSetupRequest to 5G Core with size: %d", len(ng_setup_pdu_aper))
+        self.sctp.send(ng_setup_pdu_aper)
     
     def select_ngap_dl_procedure(self, procedure_code: int) -> Proc:
         return NGAPProcDispatcher[procedure_code](self)
@@ -110,9 +114,10 @@ class GNB():
             It will then select the appropriate NGAP procedure to handle the message. Where the procedure
             returns an NAS PDU, it will be put in the queue to be sent to the UE
         """
+        
         while True:
-            if not self.ngap_dl_queue.empty():
-                data = self.ngap_dl_queue.get()
+            data = self.sctp.recv()
+            if data:
                 PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                 PDU.from_aper(data)
                 procedureCode = PDU.get_val()[1]['procedureCode']
@@ -121,7 +126,7 @@ class GNB():
                 if ue:
                     self.ues[int(ue.supi[-10:])] = ue
                 if ngap_pdu:
-                    self.ngap_ul_queue.put(ngap_pdu)
+                    self.sctp.send(ngap_pdu)
                 if nas_pdu:
                     self.nas_dl_queue.put((nas_pdu, ue))
     
@@ -146,12 +151,16 @@ class GNB():
                     logger.error("Error parsing NAS message: %s", err)
                     continue
                 amf_ue_ngap_id = self.get_ue(ran_ue_ngap_id).amf_ue_ngap_id
-                obj = {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id, 'nas_pdu': Msg.to_bytes(), 'plmn_identity': self.pLMNIdentity, 'tac': self.tac, 'nci': self.nci }
+                obj = {'amf_ue_ngap_id': amf_ue_ngap_id,
+                       'ran_ue_ngap_id': ran_ue_ngap_id,
+                       'nas_pdu': Msg.to_bytes(),
+                       'plmn_identity': self.pLMNIdentity,
+                       'tac': self.tac,
+                       'nci': self.nci}
                 ngap_proc = self.select_ngap_ul_procedure(Msg._name)
                 ngap_pdu = ngap_proc.send(Msg.to_bytes(), obj)
                 if ngap_pdu:
-                    # logging.info("Sent NAS message to 5G Core with size: %d", len(ngap_pdu))
-                    self.ngap_ul_queue.put(ngap_pdu, block=False)
+                     self.sctp.send(ngap_pdu)
     
     def _load_ues_thread(self, ues_thread_function):
         """ Load the thread that will handle new UEs being added to gNB """
@@ -164,6 +173,8 @@ class GNB():
         
             It will then initiate the UE to start the registration procedure
         """
+        process = current_process()
+
         while True:
             if not self.ues_queue.empty():
                 ue = self.ues_queue.get()
@@ -172,19 +183,19 @@ class GNB():
                 # if self.ues[ran_ue_ngap_id]:
                 #     continue
                 self.ues[ran_ue_ngap_id] = ue
-                logger.debug("Registering UE: %s", ue)
+                logger.debug("%s - registering UE: %s", process.name, ue)
                 self.nas_dl_queue.put((None, ue))
 
     def get_ue(self, ran_ue_ngap_id):
         return self.ues[ran_ue_ngap_id]
 
-    def get_ran_ue_ngap_id(self, ue):
+    def get_ran_ue_ngap_id(self, ue) -> None:
         for ran_ue_ngap_id, ue in self.ues.items():
             if ue == ue:
                 return ran_ue_ngap_id
         return None
     
-    def remove_ue(self, ran_ue_ngap_id):
+    def remove_ue(self, ran_ue_ngap_id) -> None:
         del self.ues[ran_ue_ngap_id]
 
     def get_ues(self):

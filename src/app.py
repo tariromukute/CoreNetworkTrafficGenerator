@@ -10,7 +10,7 @@ from NAS import NAS
 from SCTP import SCTPClient
 from NGAP import GNB
 
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Manager, cpu_count, active_children
 from logging.handlers import QueueHandler
 import logging
 import yaml
@@ -20,14 +20,11 @@ logger = logging.getLogger('__app__')
 
 # Multi process class
 class MultiProcess:
-    def __init__(self, logger_queue, server_config, ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_list):
-        self.sctp_client = SCTPClient(
-            logger_queue, server_config, ngap_dl_queue, ngap_ul_queue)
-        self.gnb = GNB(logger_queue, server_config, ngap_dl_queue,
-                       ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_list)
+    def __init__(self, logger_queue, server_config, nas_dl_queue, nas_ul_queue, ues_queue, ue_list):
+        sctp_client = SCTPClient(logger_queue, server_config)
+        self.gnb = GNB(sctp_client, logger_queue, server_config, nas_dl_queue, nas_ul_queue, ues_queue, ue_list)
         self.nas = NAS(logger_queue, nas_dl_queue, nas_ul_queue, ue_list)
         self.processes = [
-            Process(target=self.sctp_client.run),
             Process(target=self.gnb.run),
             Process(target=self.nas.run),
         ]
@@ -154,8 +151,6 @@ def main(args: Arguments):
 
     manager = Manager()
     # create the shared queue
-    ngap_dl_queue = manager.Queue()
-    ngap_ul_queue = manager.Queue()
     nas_dl_queue = manager.Queue()
     nas_ul_queue = manager.Queue()
     ues_queue = manager.Queue()
@@ -182,7 +177,7 @@ def main(args: Arguments):
 
     # Create multi process
     multi_process = MultiProcess(
-        logger_queue, server_config, ngap_dl_queue, ngap_ul_queue, nas_dl_queue, nas_ul_queue, ues_queue, ue_list)
+        logger_queue, server_config, nas_dl_queue, nas_ul_queue, ues_queue, ue_list)
     multi_process.run()
 
     # Wait for GNB to be ready
@@ -193,7 +188,7 @@ def main(args: Arguments):
         ue_list, ues_queue, ue_config, args.number, args.interval))
     util.daemon = True
     util.start()
-
+     
     # Wait for UE to be added
     time.sleep(args.duration - 5)
 
