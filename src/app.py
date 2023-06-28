@@ -87,14 +87,14 @@ def util_add_ue_process(ue_list, ues_queue, ue_config, number, interval):
     while True:
         try:
             # Create array of size 10
-            ue_state_count = array.array('i', [0] * 10)
+            ue_state_count = [0] * 10
             for ue in ue_list:
-                if ue.supi:
-                    if ue.state < FGMMState.FGMM_STATE_MAX:
+                if ue.supi and ue.state < FGMMState.FGMM_STATE_MAX:
+                    try:
                         ue_state_count[ue.state] += 1
-                    else:
-                        logging.error(
-                            "UE: %s has unknown state: %s", ue.supi, ue.state)
+                    except IndexError:
+                        logging.error("UE: %s has unknown state: %s", ue.supi, ue.state)
+            
             # Get FGMMState names
             fgmm_state_names = [
                 FGMMState(i).name for i in range(FGMMState.FGMM_STATE_MAX)]
