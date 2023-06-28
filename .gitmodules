@@ -1,3 +1,6 @@
 [submodule "CryptoMobile"]
 	path = CryptoMobile
 	url = https://github.com/P1sec/CryptoMobile.git
+[submodule "pycrate"]
+	path = pycrate
+	url = https://github.com/tariromukute/pycrate.git
