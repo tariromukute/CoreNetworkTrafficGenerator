@@ -1,5 +1,5 @@
 # IMSI number of the UE. IMSI = [MCC|MNC|MSISDN] (In total 15 digits)
-supi: '999700000000001'
+supi: '999700000000002'
 # Mobile Country Code value of HPLMN
 mcc: '999'
 # Mobile Network Code value of HPLMN (2 or 3 digits)
@@ -50,7 +50,6 @@ configuredNssai:
 # Default Configured NSSAI for this UE
 defaultNssai:
   - sst: 1
-    sd: 1
 
 # Supported integrity algorithms by this UE
 integrity:

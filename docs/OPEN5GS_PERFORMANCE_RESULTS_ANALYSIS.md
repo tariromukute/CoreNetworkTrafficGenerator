@@ -58,6 +58,8 @@ The open5gs has a lot of futex system calls. Once one the reasons for high futex
 
 We can get further details on the futex syscalls by tracing how they are being produced and the return value. This can tell us the source of the futex syscalls and the state of the syscalls when they return `trace.py -U -a 'r::sys_futex "%d", retval'`. One of the sources of futex calls is when locks are being used. The high futex calls my indicate lock contention. We get statistics on mutex locks by tracing the mutex events `klockstat.py -d 20`. We count mutex-related events in pthreads `funccount.py u:pthread:*mutex* -d 20` to get an idea of how often the mutex are being called. We use the bcc tool `deadlock.py` to get an idea of potential deadlocks from the locks. Lastly we get further insights by looking at the code path that leads to futex syscalls per process `stackcount.py -f -PU -D 20 futex > futex_codepath.txt` and further draw flame graphs for the code paths `./FlameGraph/flamegraph.pl --color=java --title='Futex syscalss code path Flame Graph' < futex_codepath.txt > futex_codepath.svg`
 
+These require that we enable kprobes during installation see [Github comment](https://github.com/iovisor/bcc/issues/4563#issuecomment-1504470066)
+
 <details><summary><b>Click to see results for processes making futex system calls</b></summary>
 
 ```bash
@@ -105,9 +107,14 @@ ansible all -i inventory.ini -u ubuntu -m include_tasks -a file=plays/open5gs.ym
 
 </details>
 
-To understand `sudo python3 tplist.py | grep epoll_wait` and then `sudo python3 tplist.py -v syscalls:sys_enter_epoll_wait`
+Get more insights on usage of epoll_wait:
+- To get tracepoints available for epoll_wait: `sudo python3 tplist.py | grep epoll_wait`
+- Discover format for the entrypoint: `sudo python3 tplist.py -v syscalls:sys_enter_epoll_wait`
+- Discover format for the exit: `sudo python3 tplist.py -v syscalls:sys_exit_epoll_wait`
 
 `sudo python3 argdist.py -C 't:syscalls:sys_exit_epoll_wait():u16:args->ret' -i 5 -d 5`
+
+However to compare the maxevents and the ready file descriptors we use a tool [epolldiff.bt]()
 
 <details><summary>Click to see results for further investigating the epoll_wait syscalls</summary>
 
