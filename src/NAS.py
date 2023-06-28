@@ -1,16 +1,15 @@
 import logging
 import threading
 from binascii import unhexlify, hexlify
-from pycrate_mobile import *
-from pycrate_mobile.NAS import *
+# from pycrate_mobile.NAS import *
 from UE import UE, FGMMState
-from abc import ABC, ABCMeta, abstractmethod
+from abc import ABCMeta
 from CryptoMobile.Milenage import Milenage
 from CryptoMobile.Milenage import make_OPc
 from CryptoMobile.conv import *
-from CryptoMobile.ECIES import *
-from pycrate_mobile.TS24501_IE import *
-from pycrate_mobile.TS24008_IE import encode_bcd
+# from CryptoMobile.ECIES import *
+# from pycrate_mobile.TS24501_IE import *
+# from pycrate_mobile.TS24008_IE import encode_bcd
 
 from logging.handlers import QueueHandler
 

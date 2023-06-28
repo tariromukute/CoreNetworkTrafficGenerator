@@ -4,11 +4,10 @@ from UE import UE
 import logging
 import threading
 from SCTP import SCTPClient, SCTPServer
-from NAS import process_nas_procedure, RegistrationProc
 from pycrate_asn1dir import NGAP
 from binascii import unhexlify, hexlify
 from abc import ABC, ABCMeta, abstractmethod
-from pycrate_mobile.NAS import *
+# from pycrate_mobile.NAS import *
 from logging.handlers import QueueHandler
 # import queue
 

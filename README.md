@@ -35,3 +35,10 @@ python3 src/app.py -t 20 -i 0 -n 1 -f /tmp/core-tg -u src/config/open5gs-ue.yaml
 ```
 
 For a tutorial on how to run or test the traffic generator with open source 5G networks see the [Performance study of Open Source 5G Core networks](docs/PERFORMANCE_STUDY_OF_5G_CORES.md) under docs folder.
+
+```bash
+python3 -m cProfile -o perf_ngap.prof src/perf_ngap.py
+python3 -m snakeviz perf_ngap.prof -s
+
+py-spy record -o mandelbrot-profile_3.svg -- python3 src/perf_ngap.py
+```
