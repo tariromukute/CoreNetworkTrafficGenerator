@@ -18,3 +18,14 @@ tariromukute@Tariros-MacBook-Pro cn-tg % python3 tests/perf/struct_6.py
 tariromukute@Tariros-MacBook-Pro cn-tg % python3 tests/perf/struct_7.py
 9.448569165997469
 ```
+
+When pass arg
+
+```
+tariromukute@Tariros-MacBook-Pro cn-tg % python3 tests/perf/struct_args_1.py
+27.627659833000507
+tariromukute@Tariros-MacBook-Pro cn-tg % python3 tests/perf/struct_args_2.py
+18.568473999999696
+tariromukute@Tariros-MacBook-Pro cn-tg % python3 tests/perf/struct_args_3.py
+18.5329356250003
+```
