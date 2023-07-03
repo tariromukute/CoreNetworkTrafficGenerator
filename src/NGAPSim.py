@@ -74,7 +74,7 @@ class GNB():
         logger.debug("Starting gNB")
         self.ngap_dl_thread = self._load_ngap_dl_thread(self._ngap_dl_thread_function)
         self.nas_dl_thread = self._load_nas_ul_thread(self._nas_ul_thread_function)
-        self.ues_thread = self._load_ues_thread(self._ues_thread_function)
+        # self.ues_thread = self._load_ues_thread(self._ues_thread_function)
         # Wait for SCTP to be connected
         time.sleep(2)
         self.initiate()
@@ -127,7 +127,7 @@ class GNB():
                 if ngap_pdu:
                     self.sctp.send(ngap_pdu)
                 if nas_pdu:
-                    self.nas_dl_queue.put((nas_pdu, ue))
+                    self.nas_dl_queue.put((nas_pdu, int(ue.supi[-10:])))
     
     def _load_nas_ul_thread(self, nas_ul_thread_function):
         """ Load the thread that will handle NAS UpLink messages from UE """
@@ -143,13 +143,14 @@ class GNB():
         """
         while True:
             if not self.nas_ul_queue.empty():
-                data, ue = self.nas_ul_queue.get()
-                ran_ue_ngap_id = int(ue.supi[-10:])
+                data, ran_ue_ngap_id = self.nas_ul_queue.get()
+                # ran_ue_ngap_id = int(ue.supi[-10:])
                 Msg, err = parse_NAS5G(data)
                 if err:
                     logger.error("Error parsing NAS message: %s", err)
                     continue
                 amf_ue_ngap_id = self.get_ue(ran_ue_ngap_id).amf_ue_ngap_id
+                # amf_ue_ngap_id = ran_ue_ngap_id
                 obj = {'amf_ue_ngap_id': amf_ue_ngap_id,
                        'ran_ue_ngap_id': ran_ue_ngap_id,
                        'nas_pdu': Msg.to_bytes(),
@@ -183,7 +184,7 @@ class GNB():
                 #     continue
                 self.ues[ran_ue_ngap_id] = ue
                 logger.debug("%s - registering UE: %s", process.name, ue)
-                self.nas_dl_queue.put((None, ue))
+                self.nas_dl_queue.put((None, ran_ue_ngap_id))
 
     def get_ue(self, ran_ue_ngap_id):
         return self.ues[ran_ue_ngap_id]
