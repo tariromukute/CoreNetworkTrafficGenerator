@@ -19,7 +19,7 @@ class NGAP:
         # self.rcv_ue_data_thread = self.load_rcv_ue_data_thread(self.rcv_ue_data_thread_function)
         self.send_ue_data_thread = self.load_send_ue_data_thread(self.send_ue_data_thread_function)
         while not NGAP.exit_flag:
-            data = self.ue_to_ngap.recv()
+            data = self.ngap_to_ue.recv()
             if data == 'DONE':
                 self.ue_to_ngap.close()
                 NGAP.exit_flag = True
@@ -44,7 +44,7 @@ class UE:
     def run(self):
         self.send_ngap_data_thread = self.load_send_ngap_data_thread(self.send_ngap_data_thread_function)
         while not UE.exit_flag:
-            data = self.ngap_to_ue.recv()
+            data = self.ue_to_ngap.recv()
             if data == 'DONE':
                 self.ngap_to_ue.close()
                 UE.exit_flag = True
@@ -61,16 +61,16 @@ class UE:
 
 if __name__=='__main__':
     for count in [10**4, 10**5, 10**6]:
-        ngap_to_ue, ue_to_ngap = Pipe()
+        ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
         ngap = NGAP(count, ngap_to_ue, ue_to_ngap)
         ue = UE(count, ngap_to_ue, ue_to_ngap)
         _start = time.time()
         ngap_p = Process(target=ngap.run)
-        ngap_p.daemon = True
+        ngap_p.daemon = False
         ngap_p.start()     # Launch the reader process
 
         ue_p = Process(target=ue.run)
-        ue_p.daemon = True
+        ue_p.daemon = False
         ue_p.start()     # Launch the reader process
         
         ngap_p.join()

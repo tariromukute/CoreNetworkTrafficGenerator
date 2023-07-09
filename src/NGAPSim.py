@@ -198,14 +198,14 @@ class GNB():
             and put the NGAP message in the queue to be sent to 5G Core
         """
         while True:
-            data, ran_ue_ngap_id = self.ue_to_ngap.recv()
+            data, ran_ue_ngap_id = self.ngap_to_ue.recv()
             if data:
                 # ran_ue_ngap_id = int(ue.supi[-10:])
                 Msg, err = parse_NAS5G(data)
                 if err:
                     logger.error("Error parsing NAS message: %s", err)
                     continue
-                amf_ue_ngap_id = self.get_ue(ran_ue_ngap_id).get('amf_ue_ngap_id')
+                amf_ue_ngap_id = self.ues.get(ran_ue_ngap_id)
                 PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                 IEs = []
                 curTime = int(time.time()) + 2208988800 #1900 instead of 1970

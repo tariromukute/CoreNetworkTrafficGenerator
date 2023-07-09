@@ -128,16 +128,15 @@ def main(args: Arguments):
         except yaml.YAMLError as exc:
             print(exc)
 
-    ngap_to_ue, ue_to_ngap = Pipe()
+    ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
    
     # Create multi process
     multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, ue_config, args.interval, args.number)
     multi_process.run()
     
-
     while True:
         # Check if all child processes have terminated
-        if len(active_children()) == 1: # If only the manager is left
+        if len(active_children()) == 0:
             print("Exiting......")
             break
         # Wait for a short time before checking again

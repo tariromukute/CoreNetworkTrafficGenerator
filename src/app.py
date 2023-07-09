@@ -21,7 +21,7 @@ logger = logging.getLogger('__app__')
 # Multi process class
 class MultiProcess:
     def __init__(self, logger_queue, server_config, nas_dl_queue, nas_ul_queue, ues_queue, ue_list):
-        sctp_client = SCTPClient(logger_queue, server_config)
+        sctp_client = SCTPClient(server_config)
         self.gnb = GNB(sctp_client, logger_queue, server_config, nas_dl_queue, nas_ul_queue, ues_queue, ue_list)
         self.nas = NAS(logger_queue, nas_dl_queue, nas_ul_queue, ue_list)
         self.processes = [

@@ -380,6 +380,7 @@ class UESim:
     def _load_ngap_to_ue_thread(self):
         """ Load the thread that will handle NAS DownLink messages from gNB """
         ngap_to_ue_thread = threading.Thread(target=self._ngap_to_ue_thread_function)
+        ngap_to_ue_thread.daemon = True
         ngap_to_ue_thread.start()
         return ngap_to_ue_thread
 
@@ -391,7 +392,7 @@ class UESim:
             that will be read by the gNB thread.
         """
         while not UESim.exit_flag:
-            data, ueId = self.ngap_to_ue.recv()
+            data, ueId = self.ue_to_ngap.recv()
             if data:
                 tx_nas_pdu, ue = self.dispatcher(data, ueId)
                 self.ue_list[int(ue.supi[-10:])] = ue
@@ -400,7 +401,7 @@ class UESim:
                     self.ue_to_ngap.send((tx_nas_pdu, ueId))
 
     def init(self):
-        for ue in self.ue_list:
+        for supi, ue in self.ue_list.items():
             if (ue):
                 tx_nas_pdu, ue_ = ue.next_action(None, )
                 self.ue_list[int(ue.supi[-10:])] = ue
@@ -432,7 +433,7 @@ class UESim:
             try:
                 # Create array of size 10
                 ue_state_count = [0] * 10
-                for ue in self.ue_list:
+                for supi, ue in self.ue_list.items():
                     if ue and ue.supi and ue.state < FGMMState.FGMM_STATE_MAX:
                         try:
                             ue_state_count[ue.state] += 1
@@ -447,7 +448,7 @@ class UESim:
                 if ue_state_count[FGMMState.REGISTERED] >= self.number:
                     # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
                     latest_time = start_time
-                    for ue in self.ue_list:
+                    for supi, ue in self.ue_list.items():
                         if ue and ue.supi:
                             latest_time = ue.state_time if latest_time < ue.state_time else latest_time
 
@@ -466,6 +467,7 @@ class UESim:
         # Wait for GNB to be ready
         time.sleep(5)
         self.init()
-        self._load_ngap_to_ue_thread()
-        # self._load_stats_thread()
+        self.ngap_to_ue_thread = self._load_ngap_to_ue_thread()
         self.print_stats_process()
+        self.ngap_to_ue.close()
+        sys.exit(0)
