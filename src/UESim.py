@@ -38,8 +38,6 @@ class FGMMState(IntEnum):
     # Last state indicate number of states
     FGMM_STATE_MAX = 10
 
-# TODO: complete and incoperate the validator
-
 def security_prot_encrypt(ue, Msg):
     IEs = {}
     IEs['5GMMHeaderSec'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 4 }
@@ -63,36 +61,6 @@ def security_prot_decrypt(Msg, ue):
         return Msg
     else:
         return Msg
-    
-def validator(PrevMsgSent, MsgRecvd):
-    """
-        Checks the last message sent against the message received to see if it is the expected response.
-        It logs the mismatch if any is detected
-    """
-    PrevMsgSent, err = parse_NAS5G(PrevMsgSent)
-    if err:
-        logging.error(f"Failed to parse the UE's previous message")
-        return
-    PrevMsgSentDict = PrevMsgSent.get_val_d()
-    MsgRecvdDict = MsgRecvd.get_val_d()
-    if PrevMsgSent.__class__.__name__ == 'FGMMRegistrationRequest':
-        if MsgRecvd.__class__.__name__ != 'FGMMRegistrationAccept':
-            logging.error(
-                f"Expected FGMMRegistrationAccept but got {MsgRecvd.__class__.__name__}")
-        elif '5GSRegResult' not in MsgRecvdDict:
-            logging.error(
-                "FGMMRegistrationAccept did not contain 5GSRegResult")
-        elif MsgRecvdDict['5GSRegResult']['V'] != 310:
-            logging.error(
-                "FGMMRegistrationAccept contained incorrect 5GSRegResult Value")
-    elif PrevMsgSent.__class__.__name__ == 'FGMMMODeregistrationRequest':
-        if MsgRecvd.__class__.__name__ != 'FGMMMODeregistrationComplete':
-            logging.error(
-                f"Expected FGMMMODeregistrationComplete but got {MsgRecvd.__class__.__name__}")
-        elif '5GMMCause' in MsgRecvdDict:
-            logging.error(
-                f"FGMMMODeregistrationComplete contained RejectionCause: {MsgRecvdDict['RejectionCause']}")
-
 
 def registration_request(ue, IEs, Msg=None):
     IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
@@ -217,7 +185,44 @@ response_mapper = {
     '5GMMSecurityModeCommand': security_mode_complete
 }
 
+# TODO: complete and incoperate the validator    
+def validator(PrevMsgBytesSent, MsgRecvd):
+    """
+        Checks the last message sent against the message received to see if it is the expected response.
+        It logs the mismatch if any is detected
+    """
+    PrevMsgSent, err = parse_NAS5G(PrevMsgSent)
+    if err:
+        logging.error(f"Failed to parse the UE's previous message")
+        return
+    PrevMsgSentDict = PrevMsgSent.get_val_d()
+    MsgRecvdDict = MsgRecvd.get_val_d()
 
+    # Check if the received message doesn't have a response mapped
+    if not MsgRecvd.__class__.__name__ in response_mapper:
+        # This is not an error, log for info purposes
+        logging.info(f"Received {MsgRecvd.__class__.__name__} a message without a response mapped to it")
+
+    if PrevMsgSent.__class__.__name__ == 'FGMMRegistrationRequest':
+        if MsgRecvd.__class__.__name__ != 'FGMMRegistrationAccept':
+            logging.error(
+                f"Expected FGMMRegistrationAccept but got {MsgRecvd.__class__.__name__}")
+        elif '5GSRegResult' not in MsgRecvdDict:
+            logging.error(
+                "FGMMRegistrationAccept did not contain 5GSRegResult")
+        elif MsgRecvdDict['5GSRegResult']['V'] != 310:
+            logging.error(
+                "FGMMRegistrationAccept contained incorrect 5GSRegResult Value")
+    elif PrevMsgSent.__class__.__name__ == 'FGMMMODeregistrationRequest':
+        if MsgRecvd.__class__.__name__ != 'FGMMMODeregistrationComplete':
+            logging.error(
+                f"Expected FGMMMODeregistrationComplete but got {MsgRecvd.__class__.__name__}")
+        elif '5GMMCause' in MsgRecvdDict:
+            logging.error(
+                f"FGMMMODeregistrationComplete contained RejectionCause: {MsgRecvdDict['RejectionCause']}")
+
+
+validate = False
 class UE:
     def __init__(self, config=None):
         """
@@ -234,7 +239,7 @@ class UE:
 
         # Set several instance variables to None
         self.ue_capabilities = self.ue_security_capabilities = self.ue_network_capability = None
-        self.Msg = None
+        self.MsgBytes = None
         # Set values for empty variables to all zeros in bytes
         empty_values = ['k_nas_int', 'k_nas_enc', 'k_amf', 'k_ausf', 'k_seaf', 'sqn', 'autn',
                         'mac_a', 'mac_s', 'xres_star', 'xres', 'res_star', 'res', 'rand']
@@ -291,9 +296,10 @@ class UE:
             The function corresponding to the action to be processed next.
         """
 
+        if validate:
+            validator(self.MsgBytes, Msg)
         # Get the action function corresponding to the given response
         IEs = {}
-        # IEs['NAS_KSI'] = self.common_ies['NAS_KSI']
         action_func = None
         if Msg and type:
             action_func = response_mapper.get(type)
@@ -314,8 +320,8 @@ class UE:
 
         # Call the action function and return its result
         Msg = action_func(self, IEs, Msg)
-        self.Msg = Msg.to_bytes()
-        return self.Msg, self
+        self.MsgBytes = Msg.to_bytes()
+        return self.MsgBytes, self
 
     def create_common_ies(self):
         IEs = {}
@@ -344,7 +350,8 @@ logger = logging.getLogger(__name__)
 class UESim:
     exit_flag = False
 
-    def __init__(self, ngap_to_ue, ue_to_ngap, ue_config, interval, number):
+    def __init__(self, ngap_to_ue, ue_to_ngap, ue_config, interval, number, validate=False):
+        validate = validate
         self.ngap_to_ue = ngap_to_ue
         self.ue_to_ngap = ue_to_ngap
         self.ue_list = {}

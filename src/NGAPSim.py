@@ -120,7 +120,6 @@ class GNB():
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue
         self.ue_to_ngap = ue_to_ngap
-        self.common_ies = []
         self.mcc = server_config['mcc']
         self.mnc = server_config['mnc']
         self.nci = server_config['nci']
@@ -176,6 +175,7 @@ class GNB():
                 procedureCode = PDU.get_val()[1]['procedureCode']
                 procedure_func = downlink_mapper.get(procedureCode)
                 if not procedure_func:
+                    logger.info(f"Received downlink procedure {procedureCode} without handler mapped to it")
                     continue
                 ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
                 if ue_:
