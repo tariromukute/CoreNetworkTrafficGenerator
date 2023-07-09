@@ -12,10 +12,7 @@ logger = logging.getLogger('__SCTPClient__')
 
 class SCTPClient():
     """ This class is a base class for all SCTP client contexts. """
-    def __init__(self, logger_queue, server_config):
-        logger = logging.getLogger('__SCTPClient__')
-        logger.addHandler(QueueHandler(logger_queue))
-        logger.setLevel(logging.INFO)
+    def __init__(self, server_config):
         self.__socket = self._load_socket()
         # TODO: Allow connecting to multiple servers
         self.server_config = server_config['amfConfigs'][0]

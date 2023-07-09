@@ -115,12 +115,11 @@ ue_uplink_mapper = {
 
 
 class GNB():
-    def __init__(self, sctp: SCTPClient, logger_queue, server_config: dict, nas_dl_queue, nas_ul_queue, ues_queue, ues) -> None:
-        self.ues = ues # [None for i in range(100)] # A ctypes array contain the UEs that have been initialized
+    def __init__(self, sctp: SCTPClient, server_config: dict, ngap_to_ue, ue_to_ngap) -> None:
+        self.ues = {} # key -> ran_ue_ngap_id = ue.supi[-10:], value -> amf_ue_ngap_id assigned by core network
         self.sctp = sctp
-        self.nas_dl_queue = nas_dl_queue
-        self.nas_ul_queue = nas_ul_queue
-        self.ues_queue = ues_queue
+        self.ngap_to_ue = ngap_to_ue
+        self.ue_to_ngap = ue_to_ngap
         self.common_ies = []
         self.mcc = server_config['mcc']
         self.mnc = server_config['mnc']
@@ -138,16 +137,11 @@ class GNB():
                 tAISliceSupport['sD'] = int(a['sd']).to_bytes(3, 'big')
             self.tai_slice_support_list.append(tAISliceSupport)
 
-        # add a handler that uses the shared queue
-        logger.addHandler(QueueHandler(logger_queue))
-        # log all messages, debug and up
-        logger.setLevel(logging.INFO)
-
     def run(self) -> None:
         """ Run the gNB """
         logger.debug("Starting gNB")
-        self.ngap_dl_thread = self._load_ngap_dl_thread(self._ngap_dl_thread_function)
-        self.nas_dl_thread = self._load_nas_ul_thread(self._nas_ul_thread_function)
+        self.ngap_to_ue_thread = self._load_ngap_to_ue_thread(self._ngap_to_ue_thread_function)
+        self.nas_dl_thread = self._load_ue_to_ngap_thread(self._ue_to_ngap_thread_function)
         # Wait for SCTP to be connected
         time.sleep(2)
         self.initiate()
@@ -161,13 +155,13 @@ class GNB():
         logger.debug("Sending NGSetupRequest to 5G Core with size: %d", len(ng_setup_pdu_aper))
         self.sctp.send(ng_setup_pdu_aper)
     
-    def _load_ngap_dl_thread(self, ngap_dl_thread_function):
+    def _load_ngap_to_ue_thread(self, ngap_to_ue_thread_function):
         """ Load the thread that will handle NGAP DownLink messages from 5G Core """
-        ngap_dl_thread = threading.Thread(target=ngap_dl_thread_function)
-        ngap_dl_thread.start()
-        return ngap_dl_thread
+        ngap_to_ue_thread = threading.Thread(target=ngap_to_ue_thread_function)
+        ngap_to_ue_thread.start()
+        return ngap_to_ue_thread
 
-    def _ngap_dl_thread_function(self) -> None:
+    def _ngap_to_ue_thread_function(self) -> None:
         """ This thread function will read from queue and handle NGAP DownLink messages from 5G Core 
         
             It will then select the appropriate NGAP procedure to handle the message. Where the procedure
@@ -184,37 +178,34 @@ class GNB():
                 if not procedure_func:
                     continue
                 ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
-                ue = None
                 if ue_:
-                    ue = self.get_ue(ue_['ran_ue_ngap_id'])
-                    ue.amf_ue_ngap_id = ue_['amf_ue_ngap_id']
-                    self.ues[int(ue.supi[-10:])] = ue
+                    self.ues[ue_['ran_ue_ngap_id']] = ue_['amf_ue_ngap_id']
                 if ngap_pdu:
                     self.sctp.send(ngap_pdu.to_aper())
                 if nas_pdu:
-                    self.nas_dl_queue.put((nas_pdu, int(ue.supi[-10:])))
+                    self.ngap_to_ue.send((nas_pdu, ue_['ran_ue_ngap_id']))
     
-    def _load_nas_ul_thread(self, nas_ul_thread_function):
+    def _load_ue_to_ngap_thread(self, ue_to_ngap_thread_function):
         """ Load the thread that will handle NAS UpLink messages from UE """
-        nas_ul_thread = threading.Thread(target=nas_ul_thread_function)
-        nas_ul_thread.start()
-        return nas_ul_thread
+        ue_to_ngap_thread = threading.Thread(target=ue_to_ngap_thread_function)
+        ue_to_ngap_thread.start()
+        return ue_to_ngap_thread
 
-    def _nas_ul_thread_function(self) -> None:
+    def _ue_to_ngap_thread_function(self) -> None:
         """ This thread function will read from queue NAS UpLink messages from UE 
 
             It will then select the appropriate NGAP procedure to put the NAS message in
             and put the NGAP message in the queue to be sent to 5G Core
         """
         while True:
-            if not self.nas_ul_queue.empty():
-                data, ran_ue_ngap_id = self.nas_ul_queue.get()
+            data, ran_ue_ngap_id = self.ue_to_ngap.recv()
+            if data:
                 # ran_ue_ngap_id = int(ue.supi[-10:])
                 Msg, err = parse_NAS5G(data)
                 if err:
                     logger.error("Error parsing NAS message: %s", err)
                     continue
-                amf_ue_ngap_id = self.get_ue(ran_ue_ngap_id).amf_ue_ngap_id
+                amf_ue_ngap_id = self.get_ue(ran_ue_ngap_id).get('amf_ue_ngap_id')
                 PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                 IEs = []
                 curTime = int(time.time()) + 2208988800 #1900 instead of 1970

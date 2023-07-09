@@ -344,10 +344,10 @@ logger = logging.getLogger(__name__)
 class UESim:
     exit_flag = False
 
-    def __init__(self, nas_dl_queue, nas_ul_queue, ue_list, ue_config, interval, number):
-        self.nas_dl_queue = nas_dl_queue
-        self.nas_ul_queue = nas_ul_queue
-        self.ue_list = ue_list
+    def __init__(self, ngap_to_ue, ue_to_ngap, ue_config, interval, number):
+        self.ngap_to_ue = ngap_to_ue
+        self.ue_to_ngap = ue_to_ngap
+        self.ue_list = {}
         self.number = number
         self.interval = interval
         self.ue_config = ue_config
@@ -377,13 +377,13 @@ class UESim:
         return None, ue_
     
 
-    def _load_nas_dl_thread(self):
+    def _load_ngap_to_ue_thread(self):
         """ Load the thread that will handle NAS DownLink messages from gNB """
-        nas_dl_thread = threading.Thread(target=self._nas_dl_thread_function)
-        nas_dl_thread.start()
-        return nas_dl_thread
+        ngap_to_ue_thread = threading.Thread(target=self._ngap_to_ue_thread_function)
+        ngap_to_ue_thread.start()
+        return ngap_to_ue_thread
 
-    def _nas_dl_thread_function(self):
+    def _ngap_to_ue_thread_function(self):
         """ Thread function that will handle NAS DownLink messages from gNB 
 
             It will select the NAS procedure to be executed based on the NAS message type.
@@ -391,20 +391,20 @@ class UESim:
             that will be read by the gNB thread.
         """
         while not UESim.exit_flag:
-            if not self.nas_dl_queue.empty():
-                data, ueId = self.nas_dl_queue.get()
+            data, ueId = self.ngap_to_ue.recv()
+            if data:
                 tx_nas_pdu, ue = self.dispatcher(data, ueId)
                 self.ue_list[int(ue.supi[-10:])] = ue
 
                 if tx_nas_pdu:
-                    self.nas_ul_queue.put((tx_nas_pdu, ueId))
+                    self.ue_to_ngap.send((tx_nas_pdu, ueId))
 
     def init(self):
         for ue in self.ue_list:
             if (ue):
                 tx_nas_pdu, ue_ = ue.next_action(None, )
                 self.ue_list[int(ue.supi[-10:])] = ue
-                self.nas_ul_queue.put(
+                self.ue_to_ngap.send(
                     (tx_nas_pdu, int(ue.supi[-10:])))
     
     def create_ues(self):
@@ -413,15 +413,16 @@ class UESim:
         init_imsi = int(init_imsi)
         for i in range(0, init_imsi + self.number):
             if (i < init_imsi):
-                self.ue_list.append(None)
-            else:
-                imsi = '{}{}'.format(base_imsi, format(i, '010d'))
-                config = self.ue_config
-                config['supi'] = imsi
-                ue = UE(config)
-                self.ue_list.append(ue)
-                if self.interval > 0:
-                    time.sleep(self.interval)
+                # self.ue_list.append(None)
+                continue
+            # else:
+            imsi = '{}{}'.format(base_imsi, format(i, '010d'))
+            config = self.ue_config
+            config['supi'] = imsi
+            ue = UE(config)
+            self.ue_list[i] = ue
+            if self.interval > 0:
+                time.sleep(self.interval)
 
     def print_stats_process(self):
         start_time = time.time()
@@ -465,6 +466,6 @@ class UESim:
         # Wait for GNB to be ready
         time.sleep(5)
         self.init()
-        self._load_nas_dl_thread()
+        self._load_ngap_to_ue_thread()
         # self._load_stats_thread()
         self.print_stats_process()

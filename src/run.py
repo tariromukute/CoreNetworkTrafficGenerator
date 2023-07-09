@@ -9,7 +9,7 @@ from UESim import UE, UESim, FGMMState
 from SCTP import SCTPClient
 from NGAPSim import GNB
 
-from multiprocessing import Process, Manager, cpu_count, active_children
+from multiprocessing import Process, Manager, cpu_count, active_children, Pipe
 from logging.handlers import QueueHandler
 import logging
 import yaml
@@ -19,10 +19,10 @@ logger = logging.getLogger('__app__')
 
 # Multi process class
 class MultiProcess:
-    def __init__(self, logger_queue, server_config, nas_dl_queue, nas_ul_queue, ues_queue, ue_list, ue_config, interval, ue_number):
-        sctp_client = SCTPClient(logger_queue, server_config)
-        self.gnb = GNB(sctp_client, logger_queue, server_config, nas_dl_queue, nas_ul_queue, ues_queue, ue_list)
-        self.ueSim = UESim(nas_dl_queue, nas_ul_queue, ue_list, ue_config, interval, ue_number)
+    def __init__(self, server_config, ngap_to_ue, ue_to_ngap, ue_config, interval, number):
+        sctp_client = SCTPClient(server_config)
+        self.gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap)
+        self.ueSim = UESim(ngap_to_ue, ue_to_ngap, ue_config, interval, number)
         self.processes = [
             Process(target=self.gnb.run),
             Process(target=self.ueSim.run),
@@ -128,20 +128,10 @@ def main(args: Arguments):
         except yaml.YAMLError as exc:
             print(exc)
 
-    manager = Manager()
-    # create the shared queue
-    nas_dl_queue = manager.Queue()
-    nas_ul_queue = manager.Queue()
-    ues_queue = manager.Queue()
-    # Create ctype array of object to store UEs
-    ue_list = manager.list()
-
-
-    logger_queue = manager.Queue(-1)
+    ngap_to_ue, ue_to_ngap = Pipe()
    
     # Create multi process
-    multi_process = MultiProcess(
-        logger_queue, server_config, nas_dl_queue, nas_ul_queue, ues_queue, ue_list, ue_config, args.interval, args.number)
+    multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, ue_config, args.interval, args.number)
     multi_process.run()
     
 
@@ -149,9 +139,6 @@ def main(args: Arguments):
         # Check if all child processes have terminated
         if len(active_children()) == 1: # If only the manager is left
             print("Exiting......")
-            logger_queue.put(None)
-            logger.removeHandler(logger_queue)
-            manager.shutdown()
             break
         # Wait for a short time before checking again
         time.sleep(1)
