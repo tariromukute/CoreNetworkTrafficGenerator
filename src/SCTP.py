@@ -1,12 +1,6 @@
 import socket
-import threading
-import binascii
 import logging
 import sctp
-
-from logging.handlers import QueueHandler
-
-from Ctx import ClientCtx, ServerCtx
 
 logger = logging.getLogger('__SCTPClient__')
 

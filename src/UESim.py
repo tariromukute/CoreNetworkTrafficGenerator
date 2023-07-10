@@ -1,5 +1,3 @@
-import math
-import random
 from enum import IntEnum
 import sys
 import time
@@ -15,9 +13,7 @@ from pycrate_mobile.NAS5G import parse_NAS5G
 from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
 
-# logger = logging.getLogger('__UESim__')
-# logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('__UESim__')
 
 def byte_xor(ba1, ba2):
     """ XOR two byte strings """
@@ -334,6 +330,7 @@ class UE:
 
         # Call the procedure function and return its result
         Msg = action_func(self, IEs, Msg)
+        logger.debug("UE {} change to state {}".format(self.supi, FGMMState(self.state).name))
         self.MsgInBytes = Msg.to_bytes() if Msg != None else None 
         return self.MsgInBytes, self
 
@@ -473,7 +470,7 @@ class UESim:
                 # Get FGMMState names
                 fgmm_state_names = [
                     FGMMState(i).name for i in range(FGMMState.FGMM_STATE_MAX)]
-                logger.info(f"UE state count: {dict(zip(fgmm_state_names, ue_state_count))}")
+                logger.info(f"{dict(zip(fgmm_state_names, ue_state_count))}")
                 # If all the UEs have registered exit
                 if ue_state_count[FGMMState.DEREGISTERED] >= self.number:
                     # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered

@@ -1,19 +1,10 @@
-from multiprocessing import current_process
 import struct
 import time
-from UE import UE
 import logging
 import threading
 from SCTP import SCTPClient
-from NAS import process_nas_procedure, RegistrationProc
 from pycrate_asn1dir import NGAP
-from binascii import unhexlify, hexlify
-from abc import ABC, ABCMeta, abstractmethod
-from pycrate_mobile.NAS import *
-from logging.handlers import QueueHandler
-# import queue
-
-from Proc import Proc
+from pycrate_mobile.NAS import parse_NAS5G
 
 logger = logging.getLogger('__NGAPSim__')
 

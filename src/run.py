@@ -118,12 +118,10 @@ def main(args: Arguments):
 parser = ArgumentParser(description='Run 5G Core traffic generator')
 parser.add_argument('-i', '--interval', type=float, default=0,
                     help='Interval of adding UEs in seconds')
-parser.add_argument('-n', '--number', type=int, default=1,
-                    help='Number of UEs to add')
 parser.add_argument('-u', '--ue_config_file', type=str,
-                    default='src/config/open5gs-ue.yaml', help='UE configuration file')
+                    default='./config/open5gs-ue.yaml', help='UE configuration file')
 parser.add_argument('-g', '--gnb_config_file', type=str,
-                    default='src/config/open5gs-gnb.yaml', help='GNB configuration file')
+                    default='./config/open5gs-gnb.yaml', help='GNB configuration file')
 parser.add_argument('-f', '--file', type=str, default='.',
                     help='Log file directory')
 parser.add_argument('-v', '--verbose', action='count', default=0, 
