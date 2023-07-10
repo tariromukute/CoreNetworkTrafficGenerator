@@ -203,19 +203,32 @@ def validator(PrevMsgBytesSent, MsgRecvd):
         logger.info(f"Received {MsgRecvd._name} a message without a response mapped to it")
 
     if PrevMsgSent._name == '5GMMRegistrationRequest':
-        if MsgRecvd._name != '5GMMAuthenticationRequest':
+        """ General Registration procedure 3GPP TS 23.502 4.2.2.2.2
+
+        Depending on the parameter provided and whether it's moving from an old AMF, the next
+        message from the CN is either Identity Request (5GMMIdentityRequest) or Authentication request
+        (5GMMAuthenticationRequest)
+        """
+        if MsgRecvd._name == '5GMMAuthenticationRequest':
+            if 'AUTN' not in MsgRecvdDict:
+                logging.error(
+                    "5GMMAuthenticationRequest did not contain AUTN")
+        # TODO: Add elif for 5GMMIdentityRequest
+        else:
             logging.error(
                 f"Expected 5GMMAuthenticationRequest but got {MsgRecvd._name}")
-        elif 'AUTN' not in MsgRecvdDict:
-            logging.error(
-                "5GMMAuthenticationRequest did not contain AUTN")
     elif PrevMsgSent._name == '5GMMMODeregistrationRequest':
-        if MsgRecvd._name != '5GMMMODeregistrationAccept':
+        """ UE-initiated Deregistration procedure 3GPP TS 23.502 4.2.2.3.2
+        
+        The next message from the CN should be De-registration Accept (5GMMMODeregistrationAccept)
+        """
+        if MsgRecvd._name == '5GMMMODeregistrationAccept':
+            if '5GMMCause' in MsgRecvdDict:
+                logging.error(
+                    f"5GMMMODeregistrationComplete contained RejectionCause: {MsgRecvdDict['RejectionCause']}")
+        else:
             logging.error(
                 f"Expected 5GMMMODeregistrationAccept but got {MsgRecvd._name}")
-        elif '5GMMCause' in MsgRecvdDict:
-            logging.error(
-                f"5GMMMODeregistrationComplete contained RejectionCause: {MsgRecvdDict['RejectionCause']}")
 
 
 g_validate = False
