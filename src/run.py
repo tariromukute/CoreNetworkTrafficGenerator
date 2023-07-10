@@ -19,10 +19,10 @@ logger = logging.getLogger('__app__')
 
 # Multi process class
 class MultiProcess:
-    def __init__(self, server_config, ngap_to_ue, ue_to_ngap, ue_config, interval, validate = False):
+    def __init__(self, server_config, ngap_to_ue, ue_to_ngap, ue_config, interval, verbose):
         sctp_client = SCTPClient(server_config)
-        self.gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap, validate)
-        self.ueSim = UESim(ngap_to_ue, ue_to_ngap, ue_config, interval, validate)
+        self.gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap, verbose)
+        self.ueSim = UESim(ngap_to_ue, ue_to_ngap, ue_config, interval, verbose)
         self.processes = [
             Process(target=self.gnb.run),
             Process(target=self.ueSim.run),
@@ -44,32 +44,6 @@ class MultiProcess:
     def stop(self):
         for process in self.processes:
             process.terminate()
-
-
-# Logging process
-class LoggingProcess(Process):
-    def __init__(self, queue, filepath=".", filename="core-tg.log", name="core-tg", level=logging.DEBUG):
-        Process.__init__(self)
-        self.queue = queue
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(level)
-
-        formatter = logging.Formatter(
-            '%(asctime)s : %(levelname)s:%(name)s:%(message)s')
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setFormatter(formatter)
-        file_handler = logging.FileHandler(f"{filepath}/{filename}")
-        file_handler.setFormatter(formatter)
-
-        self.logger.addHandler(console_handler)
-        self.logger.addHandler(file_handler)
-
-    def run(self):
-        while True:
-            record = self.queue.get()
-            if record is None:
-                break
-            self.logger.handle(record)
 
 # Define struct for arguments
 import os
@@ -99,16 +73,14 @@ signal.signal(signal.SIGCHLD, sigchld_handler)
 
 
 class Arguments:
-    def __init__(self, verbose, debug, log, console, file, interval, ue_config_file, gnb_config_file, validate):
-        self.verbose = verbose
-        self.debug = debug
+    def __init__(self, log, console, file, interval, ue_config_file, gnb_config_file, verbose):
         self.log = log
         self.console = console
         self.interval = interval
         self.file = file
         self.ue_config_file = ue_config_file
         self.gnb_config_file = gnb_config_file
-        self.validate = validate
+        self.verbose = verbose
 
 
 # Main function
@@ -130,7 +102,7 @@ def main(args: Arguments):
     ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
    
     # Create multi process
-    multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, ue_config, args.interval, args.validate)
+    multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, ue_config, args.interval, args.verbose)
     multi_process.run()
     
     while True:
@@ -154,10 +126,10 @@ parser.add_argument('-g', '--gnb_config_file', type=str,
                     default='src/config/open5gs-gnb.yaml', help='GNB configuration file')
 parser.add_argument('-f', '--file', type=str, default='.',
                     help='Log file directory')
-parser.add_argument('-d', '--validate', action='store_true', default=False,
-                    help='Validate responses to received by UEs')
+parser.add_argument('-v', '--verbose', action='count', default=0, 
+                    help='Increase verbosity (can be specified multiple times)')
 args = parser.parse_args()
 
-arguments = Arguments(False, False, False, False, '.',
-                      args.interval, args.ue_config_file, args.gnb_config_file, args.validate)
+arguments = Arguments(False, False, '.',
+                      args.interval, args.ue_config_file, args.gnb_config_file, args.verbose)
 main(arguments)

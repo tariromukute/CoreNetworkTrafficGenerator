@@ -15,7 +15,7 @@ from logging.handlers import QueueHandler
 
 from Proc import Proc
 
-logger = logging.getLogger('__NGAP__')
+logger = logging.getLogger('__NGAPSim__')
 
 def plmn_buf_to_str(buf):
     d = []
@@ -115,12 +115,22 @@ ue_uplink_mapper = {
 
 
 class GNB():
-    def __init__(self, sctp: SCTPClient, server_config: dict, ngap_to_ue, ue_to_ngap, validate) -> None:
+    def __init__(self, sctp: SCTPClient, server_config: dict, ngap_to_ue, ue_to_ngap, verbose) -> None:
+        global logger
+        # Set logging level based on the verbose argument
+        if verbose == 0:
+            logging.basicConfig(level=logging.ERROR)
+        elif verbose == 1:
+            logging.basicConfig(level=logging.WARNING)
+        elif verbose == 2:
+            logging.basicConfig(level=logging.INFO)
+        else:
+            logging.basicConfig(level=logging.DEBUG)
         self.ues = {} # key -> ran_ue_ngap_id = ue.supi[-10:], value -> amf_ue_ngap_id assigned by core network
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue
         self.ue_to_ngap = ue_to_ngap
-        self.validate = validate
+        self.verbose = verbose
         self.mcc = server_config['mcc']
         self.mnc = server_config['mnc']
         self.nci = server_config['nci']
@@ -152,7 +162,6 @@ class GNB():
         PDU = PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
         ng_setup_request(PDU, IEs, self)
         ng_setup_pdu_aper = PDU.to_aper()
-        logger.debug("Sending NGSetupRequest to 5G Core with size: %d", len(ng_setup_pdu_aper))
         self.sctp.send(ng_setup_pdu_aper)
     
     def _load_ngap_to_ue_thread(self, ngap_to_ue_thread_function):

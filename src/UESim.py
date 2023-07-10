@@ -16,7 +16,7 @@ from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
 
 # logger = logging.getLogger('__UESim__')
-logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
+# logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def byte_xor(ba1, ba2):
@@ -95,9 +95,12 @@ def mo_deregistration_request(ue, IEs, Msg=None):
     IEs['5GSID'] = {'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': {'PLMN': ue.mcc + ue.mnc,
                                                                            'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin)}}
     Msg = FGMMMODeregistrationRequest(val=IEs)
-    ue.set_state(FGMMState.DEREGISTERED)
+    ue.set_state(FGMMState.DEREGISTERED_INITIATED)
     return Msg
 
+def deregistration_complete(ue, IEs, Msg=None):
+    ue.set_state(FGMMState.DEREGISTERED)
+    return None
 
 def authentication_response(ue, IEs, Msg):
     # Msg, err = parse_NAS_MO(data)
@@ -180,7 +183,8 @@ request_mapper = {
 response_mapper = {
     '5GMMAuthenticationRequest': authentication_response,
     '5GMMRegistrationAccept': registration_complete,
-    '5GMMSecurityModeCommand': security_mode_complete
+    '5GMMSecurityModeCommand': security_mode_complete,
+    '5GMMMODeregistrationAccept': deregistration_complete
 }
 
 # TODO: complete and incoperate the validator    
@@ -188,7 +192,7 @@ def validator(PrevMsgBytesSent, MsgRecvd):
     """
         Checks the last message sent against the message received to see if it is the expected response.
         It logs the mismatch if any is detected
-    """  
+    """
     PrevMsgSent, err = parse_NAS5G(PrevMsgBytesSent)
     if err:
         logger.error(f"Failed to parse the UE's previous message {PrevMsgSent}")
@@ -231,7 +235,7 @@ def validator(PrevMsgBytesSent, MsgRecvd):
                 f"Expected 5GMMMODeregistrationAccept but got {MsgRecvd._name}")
 
 
-g_validate = False
+g_verbose = 0
 class UE:
     def __init__(self, config=None):
         """
@@ -244,6 +248,7 @@ class UE:
         Returns:
             None
         """
+        global logger
         self.common_ies = self.create_common_ies()
 
         # Set several instance variables to None
@@ -304,8 +309,7 @@ class UE:
         Returns:
             The function corresponding to the procedure to be processed next.
         """
-
-        if g_validate and Msg is not None:
+        if g_verbose >= 3 and Msg is not None:
             validator(self.MsgInBytes, Msg)
 
         # Get the procedure function corresponding to the given response
@@ -330,7 +334,7 @@ class UE:
 
         # Call the procedure function and return its result
         Msg = action_func(self, IEs, Msg)
-        self.MsgInBytes = Msg.to_bytes()
+        self.MsgInBytes = Msg.to_bytes() if Msg != None else None 
         return self.MsgInBytes, self
 
     def create_common_ies(self):
@@ -357,15 +361,25 @@ class UE:
 class UESim:
     exit_flag = False
 
-    def __init__(self, ngap_to_ue, ue_to_ngap, ue_profiles, interval, validate=False):
-        global g_validate
-        g_validate = validate
+    def __init__(self, ngap_to_ue, ue_to_ngap, ue_profiles, interval, verbose):
+        global g_verbose
+        g_verbose = verbose
         self.ngap_to_ue = ngap_to_ue
         self.ue_to_ngap = ue_to_ngap
         self.ue_list = {}
         self.number = 0
         self.interval = interval
         self.ue_profiles = ue_profiles
+        global logger
+        # Set logging level based on the verbose argument
+        if verbose == 0:
+            logging.basicConfig(level=logging.ERROR)
+        elif verbose == 1:
+            logging.basicConfig(level=logging.WARNING)
+        elif verbose == 2:
+            logging.basicConfig(level=logging.INFO)
+        else:
+            logging.basicConfig(level=logging.DEBUG)
 
     def dispatcher(self, data: bytes, ueId):
         Msg, err = parse_NAS5G(data)
@@ -459,16 +473,16 @@ class UESim:
                 # Get FGMMState names
                 fgmm_state_names = [
                     FGMMState(i).name for i in range(FGMMState.FGMM_STATE_MAX)]
-                print(f"UE state count: {dict(zip(fgmm_state_names, ue_state_count))}")
+                logger.info(f"UE state count: {dict(zip(fgmm_state_names, ue_state_count))}")
                 # If all the UEs have registered exit
-                if ue_state_count[FGMMState.REGISTERED] >= self.number:
+                if ue_state_count[FGMMState.DEREGISTERED] >= self.number:
                     # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
                     latest_time = start_time
                     for supi, ue in self.ue_list.items():
                         if ue and ue.supi:
                             latest_time = ue.state_time if latest_time < ue.state_time else latest_time
 
-                    logger.info(f"Registered {self.number} UEs in {latest_time - start_time}")
+                    print(f"Registered {self.number} UEs in {latest_time - start_time}")
                     
                     # Tell parent process to exit
                     UESim.exit_flag = True
