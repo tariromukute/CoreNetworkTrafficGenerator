@@ -6,7 +6,7 @@ ue_profiles:
     # Mobile Network Code value of HPLMN (2 or 3 digits)
     mnc: '70'
     # Number of UEs to simulate
-    count: 900
+    count: 1
     # Procedures: a list of UE initiated messages that trigger a given procedure
     procedures:
       - 5GMMRegistrationRequest

@@ -89,17 +89,13 @@ def registration_complete(ue, IEs, Msg=None):
 
 
 def mo_deregistration_request(ue, IEs, Msg=None):
-    IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
+    IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 69}
     IEs['NAS_KSI'] = {'TSC': 0, 'Value': 7}
-    IEs['5GSRegType'] = {'FOR': 1, 'Value': 1}
+    IEs['DeregistrationType'] = {'SwitchOff': 0, 'ReregistrationRequired': 0, 'AccessType': 1 }
     IEs['5GSID'] = {'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': {'PLMN': ue.mcc + ue.mnc,
                                                                            'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin)}}
-    IEs['UESecCap'] = {'5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0,
-                       '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0, '5G-IA6': 0, '5G-IA7': 0,
-                       'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0,
-                       'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0}
     Msg = FGMMMODeregistrationRequest(val=IEs)
-    ue.set_state(FGMMState.REGISTERED_INITIATED)
+    ue.set_state(FGMMState.DEREGISTERED)
     return Msg
 
 
@@ -207,19 +203,16 @@ def validator(PrevMsgBytesSent, MsgRecvd):
         logger.info(f"Received {MsgRecvd._name} a message without a response mapped to it")
 
     if PrevMsgSent._name == '5GMMRegistrationRequest':
-        if MsgRecvd._name != '5GMMRegistrationAccept':
+        if MsgRecvd._name != '5GMMAuthenticationRequest':
             logging.error(
-                f"Expected 5GMMRegistrationAccept but got {MsgRecvd._name}")
-        elif '5GSRegResult' not in MsgRecvdDict:
+                f"Expected 5GMMAuthenticationRequest but got {MsgRecvd._name}")
+        elif 'AUTN' not in MsgRecvdDict:
             logging.error(
-                "5GMMRegistrationAccept did not contain 5GSRegResult")
-        elif MsgRecvdDict['5GSRegResult']['V'] != 310:
-            logging.error(
-                "5GMMRegistrationAccept contained incorrect 5GSRegResult Value")
+                "5GMMAuthenticationRequest did not contain AUTN")
     elif PrevMsgSent._name == '5GMMMODeregistrationRequest':
-        if MsgRecvd._name != '5GMMMODeregistrationComplete':
+        if MsgRecvd._name != '5GMMMODeregistrationAccept':
             logging.error(
-                f"Expected 5GMMMODeregistrationComplete but got {MsgRecvd._name}")
+                f"Expected 5GMMMODeregistrationAccept but got {MsgRecvd._name}")
         elif '5GMMCause' in MsgRecvdDict:
             logging.error(
                 f"5GMMMODeregistrationComplete contained RejectionCause: {MsgRecvdDict['RejectionCause']}")
