@@ -19,10 +19,10 @@ logger = logging.getLogger('__app__')
 
 # Multi process class
 class MultiProcess:
-    def __init__(self, server_config, ngap_to_ue, ue_to_ngap, ue_config, interval, number):
+    def __init__(self, server_config, ngap_to_ue, ue_to_ngap, ue_config, interval, validate = False):
         sctp_client = SCTPClient(server_config)
-        self.gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap)
-        self.ueSim = UESim(ngap_to_ue, ue_to_ngap, ue_config, interval, number)
+        self.gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap, validate)
+        self.ueSim = UESim(ngap_to_ue, ue_to_ngap, ue_config, interval, validate)
         self.processes = [
             Process(target=self.gnb.run),
             Process(target=self.ueSim.run),
@@ -99,17 +99,16 @@ signal.signal(signal.SIGCHLD, sigchld_handler)
 
 
 class Arguments:
-    def __init__(self, verbose, debug, log, console, file, duration, interval, number, ue_config_file, gnb_config_file):
+    def __init__(self, verbose, debug, log, console, file, interval, ue_config_file, gnb_config_file, validate):
         self.verbose = verbose
         self.debug = debug
         self.log = log
         self.console = console
-        self.duration = duration
         self.interval = interval
-        self.number = number
         self.file = file
         self.ue_config_file = ue_config_file
         self.gnb_config_file = gnb_config_file
+        self.validate = validate
 
 
 # Main function
@@ -131,7 +130,7 @@ def main(args: Arguments):
     ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
    
     # Create multi process
-    multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, ue_config, args.interval, args.number)
+    multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, ue_config, args.interval, args.validate)
     multi_process.run()
     
     while True:
@@ -144,9 +143,7 @@ def main(args: Arguments):
 
 
 # Define parser arguments
-parser = ArgumentParser(description='Run TRex client API and send DNS packet')
-parser.add_argument('-t', '--duration', type=int, default=10,
-                    help='Duration of test in seconds, minimum 10 seconds')
+parser = ArgumentParser(description='Run 5G Core traffic generator')
 parser.add_argument('-i', '--interval', type=float, default=0,
                     help='Interval of adding UEs in seconds')
 parser.add_argument('-n', '--number', type=int, default=1,
@@ -157,11 +154,10 @@ parser.add_argument('-g', '--gnb_config_file', type=str,
                     default='src/config/open5gs-gnb.yaml', help='GNB configuration file')
 parser.add_argument('-f', '--file', type=str, default='.',
                     help='Log file directory')
+parser.add_argument('-d', '--validate', action='store_true', default=False,
+                    help='Validate responses to received by UEs')
 args = parser.parse_args()
 
-if args.duration and args.duration < 10:
-    parser.error("Minimum duration is 10 seconds")
-
-arguments = Arguments(False, False, False, False, '.', args.duration,
-                      args.interval, args.number, args.ue_config_file, args.gnb_config_file)
+arguments = Arguments(False, False, False, False, '.',
+                      args.interval, args.ue_config_file, args.gnb_config_file, args.validate)
 main(arguments)

@@ -15,7 +15,9 @@ from pycrate_mobile.NAS5G import parse_NAS5G
 from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
 
-logger = logging.getLogger('__UESim__')
+# logger = logging.getLogger('__UESim__')
+logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def byte_xor(ba1, ba2):
     """ XOR two byte strings """
@@ -190,39 +192,40 @@ def validator(PrevMsgBytesSent, MsgRecvd):
     """
         Checks the last message sent against the message received to see if it is the expected response.
         It logs the mismatch if any is detected
-    """
-    PrevMsgSent, err = parse_NAS5G(PrevMsgSent)
+    """  
+    PrevMsgSent, err = parse_NAS5G(PrevMsgBytesSent)
     if err:
-        logging.error(f"Failed to parse the UE's previous message")
+        logger.error(f"Failed to parse the UE's previous message {PrevMsgSent}")
         return
+
     PrevMsgSentDict = PrevMsgSent.get_val_d()
     MsgRecvdDict = MsgRecvd.get_val_d()
 
     # Check if the received message doesn't have a response mapped
-    if not MsgRecvd.__class__.__name__ in response_mapper:
+    if not MsgRecvd._name in response_mapper:
         # This is not an error, log for info purposes
-        logging.info(f"Received {MsgRecvd.__class__.__name__} a message without a response mapped to it")
+        logger.info(f"Received {MsgRecvd._name} a message without a response mapped to it")
 
-    if PrevMsgSent.__class__.__name__ == 'FGMMRegistrationRequest':
-        if MsgRecvd.__class__.__name__ != 'FGMMRegistrationAccept':
+    if PrevMsgSent._name == '5GMMRegistrationRequest':
+        if MsgRecvd._name != '5GMMRegistrationAccept':
             logging.error(
-                f"Expected FGMMRegistrationAccept but got {MsgRecvd.__class__.__name__}")
+                f"Expected 5GMMRegistrationAccept but got {MsgRecvd._name}")
         elif '5GSRegResult' not in MsgRecvdDict:
             logging.error(
-                "FGMMRegistrationAccept did not contain 5GSRegResult")
+                "5GMMRegistrationAccept did not contain 5GSRegResult")
         elif MsgRecvdDict['5GSRegResult']['V'] != 310:
             logging.error(
-                "FGMMRegistrationAccept contained incorrect 5GSRegResult Value")
-    elif PrevMsgSent.__class__.__name__ == 'FGMMMODeregistrationRequest':
-        if MsgRecvd.__class__.__name__ != 'FGMMMODeregistrationComplete':
+                "5GMMRegistrationAccept contained incorrect 5GSRegResult Value")
+    elif PrevMsgSent._name == '5GMMMODeregistrationRequest':
+        if MsgRecvd._name != '5GMMMODeregistrationComplete':
             logging.error(
-                f"Expected FGMMMODeregistrationComplete but got {MsgRecvd.__class__.__name__}")
+                f"Expected 5GMMMODeregistrationComplete but got {MsgRecvd._name}")
         elif '5GMMCause' in MsgRecvdDict:
             logging.error(
-                f"FGMMMODeregistrationComplete contained RejectionCause: {MsgRecvdDict['RejectionCause']}")
+                f"5GMMMODeregistrationComplete contained RejectionCause: {MsgRecvdDict['RejectionCause']}")
 
 
-validate = False
+g_validate = False
 class UE:
     def __init__(self, config=None):
         """
@@ -239,7 +242,7 @@ class UE:
 
         # Set several instance variables to None
         self.ue_capabilities = self.ue_security_capabilities = self.ue_network_capability = None
-        self.MsgBytes = None
+        self.MsgInBytes = None
         # Set values for empty variables to all zeros in bytes
         empty_values = ['k_nas_int', 'k_nas_enc', 'k_amf', 'k_ausf', 'k_seaf', 'sqn', 'autn',
                         'mac_a', 'mac_s', 'xres_star', 'xres', 'res_star', 'res', 'rand']
@@ -247,17 +250,17 @@ class UE:
             setattr(self, var_name, b'\x00' * 32)
 
         self.supi = self.amf_ue_ngap_id = None
-        self.action = None  # contains the request that UE is processing or has
-        self.actions = config.get('actions') if 'actions' in config else [
+        self.procedure = None  # contains the request that UE is processing or has
+        self.procedures = config.get('procedures') if 'procedures' in config else [
             '5GMMRegistrationRequest', '5GMMMODeregistrationRequest']
         if config is None:
+            self.state = FGMMState.NULL
             # raise ValueError(f"Config is required")
             # If config is None, set some variables to None and others to default values
-            self.state = FGMMState.NULL
             self.op_type, self.state_time = 'OPC', time.time()
         else:
             # Otherwise, set variables based on values from config
-            # The elements on actions should be keys in request_mapper
+            # The elements on procedures should be keys in request_mapper
             self.supi = config['supi']
             self.mcc = config['mcc']
             self.mnc = config['mnc']
@@ -286,42 +289,43 @@ class UE:
 
     def next_action(self, Msg, type = None):
         """
-        Determines the next action to process based on the given response.
+        Determines the next procedure to process based on the given response.
 
         Args:
             response: The response received by the UE.
-                Should be a string representing the current action being processed.
+                Should be a string representing the current procedure being processed.
 
         Returns:
-            The function corresponding to the action to be processed next.
+            The function corresponding to the procedure to be processed next.
         """
 
-        if validate:
-            validator(self.MsgBytes, Msg)
-        # Get the action function corresponding to the given response
+        if g_validate and Msg is not None:
+            validator(self.MsgInBytes, Msg)
+
+        # Get the procedure function corresponding to the given response
         IEs = {}
         action_func = None
         if Msg and type:
             action_func = response_mapper.get(type)
 
         if action_func is None:
-            # Get the index of the current action in actions
-            idx = self.actions.index(
-                self.action) if self.action in self.actions else -1
-            # Get the next action in actions (wrapping around if necessary)
-            if (idx + 1) >= len(self.actions):
+            # Get the index of the current procedure in procedures
+            idx = self.procedures.index(
+                self.procedure) if self.procedure in self.procedures else -1
+            # Get the next procedure in procedures (wrapping around if necessary)
+            if (idx + 1) >= len(self.procedures):
                 return None, self
-            # action = self.actions[(idx + 1) % len(self.actions)]
-            action = self.actions[idx+1]
-            # Get the action function corresponding to the next action
-            action_func = request_mapper[action]
-            # Update the UE's state with the next action
-            self.action = action
+            # procedure = self.procedures[(idx + 1) % len(self.procedures)]
+            procedure = self.procedures[idx+1]
+            # Get the procedure function corresponding to the next procedure
+            action_func = request_mapper[procedure]
+            # Update the UE's state with the next procedure
+            self.procedure = procedure
 
-        # Call the action function and return its result
+        # Call the procedure function and return its result
         Msg = action_func(self, IEs, Msg)
-        self.MsgBytes = Msg.to_bytes()
-        return self.MsgBytes, self
+        self.MsgInBytes = Msg.to_bytes()
+        return self.MsgInBytes, self
 
     def create_common_ies(self):
         IEs = {}
@@ -344,20 +348,18 @@ class UE:
                 f'k_ausf: {hexlify(self.k_ausf)}, k_seaf: {hexlify(self.k_seaf)}, '
                 f'k_nas_int: {hexlify(self.k_nas_int)}, k_nas_enc: {hexlify(self.k_nas_enc)} )')
 
-logging.basicConfig(format='%(asctime)s [%(levelname)s]: %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 class UESim:
     exit_flag = False
 
-    def __init__(self, ngap_to_ue, ue_to_ngap, ue_config, interval, number, validate=False):
-        validate = validate
+    def __init__(self, ngap_to_ue, ue_to_ngap, ue_profiles, interval, validate=False):
+        global g_validate
+        g_validate = validate
         self.ngap_to_ue = ngap_to_ue
         self.ue_to_ngap = ue_to_ngap
         self.ue_list = {}
-        self.number = number
+        self.number = 0
         self.interval = interval
-        self.ue_config = ue_config
+        self.ue_profiles = ue_profiles
 
     def dispatcher(self, data: bytes, ueId):
         Msg, err = parse_NAS5G(data)
@@ -368,13 +370,13 @@ class UESim:
         msg_type = Msg._name
         
         if msg_type == '5GMMSecProtNASMessage':
-            Msg_ = security_prot_decrypt(Msg, ue)
-            
-            if Msg_._by_name.count('5GMMSecurityModeCommand'):
-                SmcMsg = Msg_['5GMMSecurityModeCommand']
-                msg_type = SmcMsg._name
+            Msg = security_prot_decrypt(Msg, ue)
+
+            if Msg._by_name.count('5GMMSecurityModeCommand'):
+                Msg = Msg['5GMMSecurityModeCommand']
+                msg_type = Msg._name
             else:
-                msg_type = Msg_._name
+                msg_type = Msg._name
             
         tx_nas_pdu, ue_ = ue.next_action(Msg, msg_type)
         
@@ -416,21 +418,22 @@ class UESim:
                     (tx_nas_pdu, int(ue.supi[-10:])))
     
     def create_ues(self):
-        init_imsi = self.ue_config['supi'][-10:]
-        base_imsi = self.ue_config['supi'][:-10]
-        init_imsi = int(init_imsi)
-        for i in range(0, init_imsi + self.number):
-            if (i < init_imsi):
-                # self.ue_list.append(None)
-                continue
-            # else:
-            imsi = '{}{}'.format(base_imsi, format(i, '010d'))
-            config = self.ue_config
-            config['supi'] = imsi
-            ue = UE(config)
-            self.ue_list[i] = ue
-            if self.interval > 0:
-                time.sleep(self.interval)
+        # Get all the profiles
+        profiles = self.ue_profiles['ue_profiles']
+        for ue_config in profiles:
+            init_imsi = ue_config['supi'][-10:]
+            base_imsi = ue_config['supi'][:-10]
+            init_imsi = int(init_imsi)
+            for i in range(init_imsi, init_imsi + ue_config['count']):
+                imsi = '{}{}'.format(base_imsi, format(i, '010d'))
+                config = ue_config
+                config['supi'] = imsi
+                ue = UE(config)
+                self.ue_list[i] = ue
+                if self.interval > 0:
+                    time.sleep(self.interval)
+        self.number = len(self.ue_list)
+        logger.info("Created {} UEs".format(len(self.ue_list)))
 
     def print_stats_process(self):
         start_time = time.time()

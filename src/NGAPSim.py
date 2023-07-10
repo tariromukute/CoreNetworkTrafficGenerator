@@ -115,11 +115,12 @@ ue_uplink_mapper = {
 
 
 class GNB():
-    def __init__(self, sctp: SCTPClient, server_config: dict, ngap_to_ue, ue_to_ngap) -> None:
+    def __init__(self, sctp: SCTPClient, server_config: dict, ngap_to_ue, ue_to_ngap, validate) -> None:
         self.ues = {} # key -> ran_ue_ngap_id = ue.supi[-10:], value -> amf_ue_ngap_id assigned by core network
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue
         self.ue_to_ngap = ue_to_ngap
+        self.validate = validate
         self.mcc = server_config['mcc']
         self.mnc = server_config['mnc']
         self.nci = server_config['nci']
@@ -175,7 +176,7 @@ class GNB():
                 procedureCode = PDU.get_val()[1]['procedureCode']
                 procedure_func = downlink_mapper.get(procedureCode)
                 if not procedure_func:
-                    logger.info(f"Received downlink procedure {procedureCode} without handler mapped to it")
+                    logger.debug(f"Received downlink procedure {procedureCode} without handler mapped to it")
                     continue
                 ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
                 if ue_:
