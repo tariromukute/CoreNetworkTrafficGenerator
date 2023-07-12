@@ -7,6 +7,7 @@ import time
 from binascii import unhexlify, hexlify
 import traceback
 from itertools import product
+from tabulate import tabulate
 from pycrate_mobile.TS24008_IE import encode_bcd
 from pycrate_mobile.TS24501_IE import FGSIDTYPE_IMEISV
 from pycrate_mobile.NAS import FGMMRegistrationRequest, FGMMMODeregistrationRequest, FGMMRegistrationComplete, FGMMAuthenticationResponse, FGMMSecProtNASMessage, FGMMSecurityModeComplete
@@ -348,6 +349,7 @@ def validator(PrevMsgBytesSent, MsgRecvd):
             error_message = f"Expected 5GMMMODeregistrationAccept but got {MsgRecvd._name}"
             return FGMMState.FAIL, error_message
 
+    return None, None
 
 g_verbose = 0
 class UE:
@@ -431,10 +433,8 @@ class UE:
         Returns:
             The function corresponding to the procedure to be processed next.
         """
-        if g_verbose >= 3 and Msg is not None:
-            logger.debug(f"UE {self.supi} received {type}")
-            validator(self.MsgInBytes, Msg)
-
+        logger.debug(f"UE {self.supi} received {type}")
+        
         # Get the procedure function corresponding to the given response
         IEs = {}
         action_func = None
@@ -467,7 +467,6 @@ class UE:
             self.RcvMsgInBytes = Msg.to_bytes()
             logger.debug(f"UE {self.supi} received {type}")
             test_result, error_message = validator(self.MsgInBytes, Msg)
-            print(f"----------------- {test_result}")
             if test_result != None:
                 self.state = test_result
                 self.error_message = error_message
@@ -602,7 +601,7 @@ class UESim:
                     (tx_nas_pdu, int(ue.supi[-10:])))
 
     def create_ues(self):
-        profiles = []
+        profiles = self.ue_profiles['ue_profiles']
         # If doing compliance and validation (self.verbose > 3) create UEs
         # with all the possible combinations for compliance_mapper
         if g_verbose > 3:
@@ -610,43 +609,46 @@ class UESim:
             combinations = product(*compliance_test_mapper.values())
             unique_compliance_mappers = [{k: v for k, v in zip(compliance_test_mapper.keys(), combination)} for combination in combinations]
 
-            ue_config = self.ue_profiles['ue_profiles'][0]
+            ue_config = profiles[0]
             init_imsi = ue_config['supi'][-10:]
             base_imsi = ue_config['supi'][:-10]
             init_imsi = int(init_imsi)
-            i = init_imsi
-            for compliance_mapper in unique_compliance_mappers:
-                imsi = '{}{}'.format(base_imsi, format(i, '010d'))
-                config = ue_config
-                config['supi'] = imsi
-                ue = UE(config)
+            for i, compliance_mapper in enumerate(unique_compliance_mappers, start=init_imsi):
+                imsi = f"{base_imsi}{i:010d}"
+                ue = UE({**ue_config, 'supi': imsi})
                 ue.set_compliance_mapper(compliance_mapper)
                 logger.debug(f"Set UE {imsi} with compliance_mapper")
                 for k, v in compliance_mapper.items():
                     logger.debug(f"Request message: {k}, Response function: {v.__name__}")
                 self.ue_list[i] = ue
-                i += 1
             
         else:
-            # Else create UEs based on 
-            # Get all the profiles
-            profiles = self.ue_profiles['ue_profiles']
+            # Else create UEs based on config profile
             for ue_config in profiles:
-                
-                count = ue_config['count'] 
-                init_imsi = ue_config['supi'][-10:]
-                base_imsi = ue_config['supi'][:-10]
-                init_imsi = int(init_imsi)
+                count, base_imsi, init_imsi = ue_config['count'], ue_config['supi'][:-10], int(ue_config['supi'][-10:])
                 for i in range(init_imsi, init_imsi + count):
-                    imsi = '{}{}'.format(base_imsi, format(i, '010d'))
-                    config = ue_config
-                    config['supi'] = imsi
-                    ue = UE(config)
-
+                    imsi = f"{base_imsi}{i:010d}"
+                    ue = UE({**ue_config, 'supi': imsi})
                     self.ue_list[i] = ue
 
         self.number = len(self.ue_list)
         logger.info("Created {} UEs".format(len(self.ue_list)))
+
+    def update_ue_state_counts(self):
+        # Create array of size 10
+        ue_state_count = [0] * FGMMState.FGMM_STATE_MAX
+        for supi, ue in self.ue_list.items():
+            if ue and ue.supi and ue.state < FGMMState.FGMM_STATE_MAX:
+                try:
+                    ue_state_count[ue.state] += 1
+                except IndexError:
+                    logger.error(f"UE: {ue.supi} has unknown state: {ue.state}")
+        
+        # Get FGMMState names
+        fgmm_state_names = [
+            FGMMState(i).name for i in range(FGMMState.FGMM_STATE_MAX)]
+        
+        return ue_state_count, fgmm_state_names
 
     def print_stats_process(self):
         start_time = time.time()
@@ -654,19 +656,9 @@ class UESim:
         # run forever
         while not UESim.exit_flag:
             try:
-                # Create array of size 10
-                ue_state_count = [0] * FGMMState.FGMM_STATE_MAX
-                for supi, ue in self.ue_list.items():
-                    if ue and ue.supi and ue.state < FGMMState.FGMM_STATE_MAX:
-                        try:
-                            ue_state_count[ue.state] += 1
-                        except IndexError:
-                            logger.error(f"UE: {ue.supi} has unknown state: {ue.state}")
-                
-                # Get FGMMState names
-                fgmm_state_names = [
-                    FGMMState(i).name for i in range(FGMMState.FGMM_STATE_MAX)]
+                ue_state_count, fgmm_state_names = self.update_ue_state_counts()
                 logger.info(f"{dict(zip(fgmm_state_names, ue_state_count))}")
+
                 # If all the UEs have registered exit
                 if ue_state_count[FGMMState.DEREGISTERED] >= self.number:
                     # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
@@ -690,18 +682,7 @@ class UESim:
         # run forever
         while not UESim.exit_flag:
             try:
-                # Create array of size 10
-                ue_state_count = [0] * FGMMState.FGMM_STATE_MAX
-                for supi, ue in self.ue_list.items():
-                    if ue and ue.supi and ue.state < FGMMState.FGMM_STATE_MAX:
-                        try:
-                            ue_state_count[ue.state] += 1
-                        except IndexError:
-                            logger.error(f"UE: {ue.supi} has unknown state: {ue.state}")
-                
-                # Get FGMMState names
-                fgmm_state_names = [
-                    FGMMState(i).name for i in range(FGMMState.FGMM_STATE_MAX)]
+                ue_state_count, fgmm_state_names = self.update_ue_state_counts()
                 
                 # If all the UEs have registered exit
                 if ue_state_count[FGMMState.DEREGISTERED] + ue_state_count[FGMMState.FAIL] + ue_state_count[FGMMState.PASS] >= self.number:
@@ -714,7 +695,21 @@ class UESim:
                     print(f"Ran compliance test for {self.number} UEs in {latest_time - start_time}")
                     
                     # Print test results in a table
-
+                    for supi, ue in self.ue_list.items():
+                        if g_verbose == 4 and ue.error_message == None:
+                            continue
+                        SentMsg, err = parse_NAS5G(ue.MsgInBytes)
+                        if err:
+                            print('Failed to parse ue.MsgInBytes when print compliance test results')
+                        RcvMsg, err = parse_NAS5G(ue.RcvMsgInBytes)
+                        if err:
+                            print('Failed to parse ue.RcvMsgInBytes when print compliance test results')
+                        profile = ''
+                        for k, v in ue.compliance_mapper.items():
+                            profile += f"Request message: {k}, Response function: {v.__name__}\n"
+                        headers = ['UE', ue.supi]
+                        table = [['Message', ue.error_message], ['Profile', profile], ['Sent', SentMsg.show()], ['Received', RcvMsg.show()] ]
+                        print(tabulate(table, headers, tablefmt="grid"))
                     # Tell parent process to exit
                     UESim.exit_flag = True
                 time.sleep(1)
