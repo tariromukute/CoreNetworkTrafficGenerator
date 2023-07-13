@@ -6,30 +6,6 @@ from pycrate_mobile.NAS5G import parse_NAS5G
 from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
 
-def security_prot_encrypt(ue, Msg):
-    IEs = {}
-    IEs['5GMMHeaderSec'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 4 }
-    SecMsg = FGMMSecProtNASMessage(val=IEs)
-    SecMsg['NASMessage'].set_val(Msg.to_bytes())
-    SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
-    SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=1, seqnoff=0, bearer=1)
-    return SecMsg
-
-def security_prot_decrypt(Msg, ue):
-    # Msg, err = parse_NAS5G(data)
-    # if err:
-    #     return
-    # check if message is encrypted
-    if Msg['5GMMHeaderSec']['SecHdr'].get_val() == 2:
-        # decrypt message
-        Msg.decrypt(ue.k_nas_enc, dir=1, fgea=1, seqnoff=0, bearer=1)
-        Msg, err = parse_NAS5G(Msg._dec_msg)
-        if err:
-            return None
-        return Msg
-    else:
-        return Msg
-
 def registration_request(ue, IEs, Msg=None):
     IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
     IEs['NAS_KSI'] = {'TSC': 0, 'Value': 7}

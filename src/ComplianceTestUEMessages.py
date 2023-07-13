@@ -6,98 +6,98 @@ from pycrate_mobile.NAS5G import parse_NAS5G
 from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
 
-def invalid_registration_request(ue, IEs, Msg=None):
-    IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
-    IEs['NAS_KSI'] = {'TSC': 0, 'Value': 7}
-    IEs['5GSRegType'] = {'FOR': 1, 'Value': 1}
-    IEs['5GSID'] = {'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': {'PLMN': ue.mcc + ue.mnc,
-                                                                           'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin)}}
-    IEs['UESecCap'] = {'5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0,
-                       '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0, '5G-IA6': 0, '5G-IA7': 0,
-                       'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0,
-                       'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0}
-    Msg = FGMMRegistrationRequest(val=IEs)
-    ue.MsgInBytes = Msg.to_bytes()
-    logger.debug(f"UE {ue.supi} sending registration_request")
-    ue.set_state(FGMMState.REGISTERED_INITIATED)
+# --------------------------------------------------------
+# Section 1: Registration Request validations 
+# --------------------------------------------------------
+
+def registration_request_protocol_error(ue, IEs, Msg=None):
+    """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 b)
+    If the REGISTRATION REQUEST message is received with a protocol error, the AMF shall return a 
+    REGISTRATION REJECT message with one of the following 5GMM cause values: 
+    #96 invalid mandatory information; 
+    #99 information element non-existent or not implemented; 
+    #100 conditional IE error; or 
+    #111 protocol error, unspecified.
+
+
+    """
+
+    # TODO: implement method
+
     return Msg
 
+def registration_request_timeout(ue, IEs, Msg=None):
+    """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 c)
+    On the first expiry of the timer, the AMF shall retransmit the REGISTRATION ACCEPT message and shall 
+    reset and restart timer T3550. 
 
-def invalid_registration_complete(ue, IEs, Msg=None):
-    IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 67}
-    # IEs['SORTransContainer'] = { 'ListInd': }
-    Msg, = FGMMRegistrationComplete(val=IEs)
-    ue.MsgInBytes = Msg.to_bytes()
-    SecMsg = security_prot_encrypt(ue, Msg)
-    logger.debug(f"UE {ue.supi} sending registration_complete")
-    ue.set_state(FGMMState.REGISTERED)
-    return SecMsg
+    """
 
+    # TODO: implement method
 
-def invalid_mo_deregistration_request(ue, IEs, Msg=None):
-    IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 69}
-    IEs['NAS_KSI'] = {'TSC': 0, 'Value': 7}
-    IEs['DeregistrationType'] = {'SwitchOff': 0, 'ReregistrationRequired': 0, 'AccessType': 1 }
-    IEs['5GSID'] = {'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': {'PLMN': ue.mcc + ue.mnc,
-                                                                           'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin)}}
-    Msg = FGMMMODeregistrationRequest(val=IEs)
-    ue.MsgInBytes = Msg.to_bytes()
-    logger.debug(f"UE {ue.supi} sending mo_deregistration_request")
-    ue.set_state(FGMMState.DEREGISTERED_INITIATED)
     return Msg
 
-def invalid_deregistration_complete(ue, IEs, Msg=None):
-    ue.set_state(FGMMState.DEREGISTERED)
-    return None
+def registration_request_resent(ue, IEs, Msg=None):
+    """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 d)
+    REGISTRATION REQUEST message received after the REGISTRATION ACCEPT message has been sent 
+    and before the REGISTRATION COMPLETE message is received.
+    """
 
-def invalid_authentication_response(ue, IEs, Msg):
-    # Msg, err = parse_NAS_MO(data)
-    # if err:
-    #     return
-    OP = unhexlify(ue.op)
-    key = unhexlify(ue.key)
+    # TODO: implement method
 
-    sqn_xor_ak, amf, mac = Msg['AUTN']['AUTN'].get_val()
-    _, rand = Msg['RAND'].get_val()
-    abba = Msg['ABBA']['V'].get_val()
+    return Msg
 
-    Mil = Milenage(OP)
-    if ue.op_type == 'OPC':
-        Mil.set_opc(OP)
-    AK = Mil.f5star(key, rand)
+def registration_request_implicit_deregistration(ue, IEs, Msg=None):
+    """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 g)
+    REGISTRATION REQUEST message with 5GS registration type IE set to "mobility registration updating" or 
+    "periodic registration updating" received before REGISTRATION COMPLETE message.
 
-    SQN = byte_xor(AK, sqn_xor_ak)
 
-    Mil.f1(unhexlify(ue.key), rand, SQN=SQN, AMF=amf)
-    RES, CK, IK, _ = Mil.f2345(key, rand)
-    Res = conv_501_A4(CK, IK, ue.sn_name, rand, RES)
+    """
 
+    # TODO: implement method
+
+    return Msg
+
+def registration_request_early_deregistration(ue, IEs, Msg=None):
+    """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 h)
+    DEREGISTRATION REQUEST message received before REGISTRATION COMPLETE message
+
+    """
+
+    # TODO: implement method
+
+    return Msg
+
+def registration_request_invalid_security_capabilities(ue, IEs, Msg=None):
+    """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 i)
+    UE security capabilities invalid or unacceptable
+
+    """
+
+    # TODO: implement method
+
+    return Msg
+
+# --------------------------------------------------------
+# Section 2: Authentication Response validations 
+# --------------------------------------------------------
+
+def authentication_response_invalid_rand(ue, IEs, Msg):
+    
     IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 87}
-    IEs['RES'] = Res
+    IEs['RES'] = b'\x00\x00z\x00\x00\x00\x00\x00/\x00\x00x\x00\x00\x00\x00'
     Msg = FGMMAuthenticationResponse(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
-
-    # Note: See CryptoMobile.conv for documentation of this function and arguments
-    # Get K_AUSF
-    ue.k_ausf = conv_501_A2(CK, IK, ue.sn_name, sqn_xor_ak)
-    # Get K_SEAF
-    ue.k_seaf = conv_501_A6(ue.k_ausf, ue.sn_name)
-    # Get K_AMF
-    ue.k_amf = conv_501_A7(ue.k_seaf, ue.supi.encode('ascii'), abba)
-    # Get K_NAS_ENC
-    ue.k_nas_enc = conv_501_A8(ue.k_amf, alg_type=1, alg_id=1)
-    # Get least significate 16 bytes from K_NAS_ENC 32 bytes
-    ue.k_nas_enc = ue.k_nas_enc[16:]
-    # Get K_NAS_INT
-    k_nas_int = conv_501_A8(ue.k_amf, alg_type=2, alg_id=1)
-    ue.set_k_nas_int(k_nas_int)
-    ue.k_nas_int = ue.k_nas_int[16:]
     
     logger.debug(f"UE {ue.supi} sending authentication_response")
     ue.set_state(FGMMState.AUTHENTICATED_INITIATED)
     return Msg
 
-def invalid_security_mode_complete(ue, IEs, Msg):
+# --------------------------------------------------------
+# Section 3: Security Mode Complete validations 
+# --------------------------------------------------------
+def security_mode_complete_missing_nas_container(ue, IEs, Msg):
     RegIEs = {}
     RegIEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
     RegIEs['NAS_KSI'] = {'TSC': 0, 'Value': 7}

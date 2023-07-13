@@ -25,9 +25,9 @@ response_mapper = {
 
 compliance_test_mapper = {
     '5GMMRegistrationRequest': [registration_request],
-    '5GMMAuthenticationRequest': [ authentication_response, invalid_authentication_response ],
+    '5GMMAuthenticationRequest': [ authentication_response, authentication_response_invalid_rand ],
     '5GMMRegistrationAccept': [ registration_complete ],
-    '5GMMSecurityModeCommand': [ security_mode_complete, invalid_security_mode_complete ],
+    '5GMMSecurityModeCommand': [ security_mode_complete, security_mode_complete_missing_nas_container ],
     '5GMMMODeregistrationRequest': [mo_deregistration_request],
     '5GMMMODeregistrationAccept': [ deregistration_complete ]
 }
@@ -66,6 +66,13 @@ def validator(PrevMsgBytesSent, MsgRecvd):
         # TODO: Add elif for 5GMMIdentityRequest
         else:
             error_message = f"Expected 5GMMAuthenticationRequest but got {MsgRecvd._name}"
+            return FGMMState.FAIL, error_message
+    elif PrevMsgSent._name == '5GMMAuthenticationResponse':
+        if  MsgRecvd._name == '5GMMSecurityModeCommand':
+            return None, None
+        # Note: didn't handle the compliance test to show results
+        else:
+            error_message = f"Expected 5GMMSecurityModeCommand but got {MsgRecvd._name}"
             return FGMMState.FAIL, error_message
     elif PrevMsgSent._name == '5GMMSecurityModeComplete':
         """
