@@ -6,19 +6,21 @@ import time
 import traceback
 from itertools import product
 from tabulate import tabulate
-from pycrate_mobile.NAS5G import parse_NAS5G
+from pycrate_mobile.NAS5G import parse_NAS5G, parse_PayCont
 from UEMessages import *
 from ComplianceTestUEMessages import *
 from UEUtils import *
 
 request_mapper = {
     '5GMMRegistrationRequest': registration_request,
+    '5GSMPDUSessionEstabRequest': pdu_session_establishment_request,
     '5GMMMODeregistrationRequest': mo_deregistration_request,
 }
 
 response_mapper = {
     '5GMMAuthenticationRequest': authentication_response,
     '5GMMRegistrationAccept': registration_complete,
+    '5GSMPDUSessionEstabAccept': pdu_session_establishment_complete,
     '5GMMSecurityModeCommand': security_mode_complete,
     '5GMMMODeregistrationAccept': deregistration_complete
 }
@@ -28,6 +30,7 @@ compliance_test_mapper = {
     '5GMMAuthenticationRequest': [ authentication_response, authentication_response_invalid_rand ],
     '5GMMRegistrationAccept': [ registration_complete ],
     '5GMMSecurityModeCommand': [ security_mode_complete, security_mode_complete_missing_nas_container ],
+    '5GSMPDUSessionEstabRequest': [ pdu_session_establishment_request ],
     '5GMMMODeregistrationRequest': [mo_deregistration_request],
     '5GMMMODeregistrationAccept': [ deregistration_complete ]
 }
@@ -93,7 +96,8 @@ def validator(PrevMsgBytesSent, MsgRecvd):
             else:
                 error_message = f"Expected 5GMMRegistrationAccept but got {MsgRecvd._name}"
                 return FGMMState.FAIL, error_message
-
+    # elif PrevMsgSent._name == '5GSMPDUSessionEstabRequest':
+        
     elif PrevMsgSent._name == '5GMMMODeregistrationRequest':
         """ UE-initiated Deregistration procedure 3GPP TS 23.502 4.2.2.3.2
         
@@ -191,7 +195,7 @@ class UE:
         Returns:
             The function corresponding to the procedure to be processed next.
         """
-        if g_verbose > 3 and Msg is not None:
+        if g_verbose >= 3 and Msg is not None:
             logger.debug(f"UE {self.supi} received {type}")
             validator(self.MsgInBytes, Msg)
 
@@ -207,7 +211,7 @@ class UE:
                 self.procedure) if self.procedure in self.procedures else -1
             # Get the next procedure in procedures (wrapping around if necessary)
             if (idx + 1) >= len(self.procedures):
-                return None, self
+                return None, self, None
             # procedure = self.procedures[(idx + 1) % len(self.procedures)]
             procedure = self.procedures[idx+1]
             # Get the procedure function corresponding to the next procedure
@@ -216,10 +220,11 @@ class UE:
             self.procedure = procedure
 
         # Call the procedure function and return its result
-        Msg = action_func(self, IEs, Msg)
-        logger.debug("UE {} change to state {}".format(self.supi, FGMMState(self.state).name))
-         
-        return Msg.to_bytes() if Msg != None else None, self
+        Msg, sent_type = action_func(self, IEs, Msg)
+        logger.debug("UE {} change to state {} and sending {}".format(self.supi, FGMMState(self.state).name, sent_type))
+        ReturnMsg = Msg.to_bytes() if Msg != None else None                                                           
+        print(ReturnMsg, self, sent_type)
+        return ReturnMsg, self, sent_type
 
     def next_compliance_test(self, Msg, type = None):
 
@@ -253,8 +258,7 @@ class UE:
             self.procedure = procedure
 
         # Call the procedure function and return its result
-        print(action_func.__name__)
-        Msg = action_func(self, IEs, Msg)
+        Msg, sent_type = action_func(self, IEs, Msg)
         logger.debug("UE {} change to state {}".format(self.supi, FGMMState(self.state).name))
         # self.MsgInBytes = Msg.to_bytes() if Msg != None else None 
         return Msg.to_bytes() if Msg != None else None, self
@@ -305,8 +309,11 @@ class UESim:
             logging.basicConfig(level=logging.DEBUG)
 
     def dispatcher(self, data: bytes, ueId):
-        Msg, err = parse_NAS5G(data)
         ue = self.ue_list[ueId]
+        if data == None:
+            return ue.next_action(None, None) if g_verbose <= 3 else ue.next_compliance_test(None, None)
+        
+        Msg, err = parse_NAS5G(data)
         if err:
             return None, ue
             
@@ -314,19 +321,21 @@ class UESim:
         
         if msg_type == '5GMMSecProtNASMessage':
             Msg = security_prot_decrypt(Msg, ue)
-
             if Msg._by_name.count('5GMMSecurityModeCommand'):
                 Msg = Msg['5GMMSecurityModeCommand']
+                msg_type = Msg._name
+            elif Msg._name == '5GMMDLNASTransport':
+                Msg = dl_nas_transport_extract(Msg, ue)
                 msg_type = Msg._name
             else:
                 msg_type = Msg._name
             
-        tx_nas_pdu, ue_ = ue.next_action(Msg, msg_type) if g_verbose <= 3 else ue.next_compliance_test(Msg, msg_type)
+        tx_nas_pdu, ue_, sent_type = ue.next_action(Msg, msg_type) if g_verbose <= 3 else ue.next_compliance_test(Msg, msg_type)
         
         if tx_nas_pdu:
-            return tx_nas_pdu, ue_
+            return tx_nas_pdu, ue_, sent_type
             
-        return None, ue_
+        return None, ue_, sent_type
     
 
     def _load_ngap_to_ue_thread(self):
@@ -346,16 +355,29 @@ class UESim:
         while not UESim.exit_flag:
             data, ueId = self.ue_to_ngap.recv()
             if data:
-                tx_nas_pdu, ue = self.dispatcher(data, ueId)
+                tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId)
                 self.ue_list[int(ue.supi[-10:])] = ue
 
                 if tx_nas_pdu:
                     self.ue_to_ngap.send((tx_nas_pdu, ueId))
 
+                if sent_type == '5GMMRegistrationComplete':
+                    # send the next procedure
+                    tx_nas_pdu, ue, sent_type = self.dispatcher(None, ueId)
+                    self.ue_list[int(ue.supi[-10:])] = ue
+
+                    if tx_nas_pdu:
+                        self.ue_to_ngap.send((tx_nas_pdu, ueId))
+                if sent_type == '5GSMPDUSessionEstabComplete': # For internal use only, it's not a real message type
+                    tx_nas_pdu, ue, sent_type = self.dispatcher(None, ueId)
+                    self.ue_list[int(ue.supi[-10:])] = ue
+
+                    if tx_nas_pdu:
+                        self.ue_to_ngap.send((tx_nas_pdu, ueId))
     def init(self):
         for supi, ue in self.ue_list.items():
             if (ue):
-                tx_nas_pdu, ue_ = ue.next_action(None, ) if g_verbose <= 3 else ue.next_compliance_test(None, )
+                tx_nas_pdu, ue_, sent_type = ue.next_action(None, ) if g_verbose <= 3 else ue.next_compliance_test(None, )
                 self.ue_list[int(ue.supi[-10:])] = ue
                 self.ue_to_ngap.send(
                     (tx_nas_pdu, int(ue.supi[-10:])))
@@ -468,7 +490,7 @@ class UESim:
                         for k, v in ue.compliance_mapper.items():
                             profile += f"Request message: {k}, Response function: {v.__name__}\n"
                         headers = ['UE', ue.supi]
-                        table = [['Message', ue.error_message], ['Profile', profile], ['Sent', SentMsg.show()], ['Received', RcvMsg.show()] ]
+                        table = [['Status', fgmm_state_names[ue.state]], ['Message', ue.error_message], ['Profile', profile], ['Sent', SentMsg.show()], ['Received', RcvMsg.show()] ]
                         print(tabulate(table, headers, tablefmt="grid"))
                     # Tell parent process to exit
                     UESim.exit_flag = True

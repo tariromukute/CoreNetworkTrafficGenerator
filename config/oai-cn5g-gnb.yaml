@@ -10,7 +10,7 @@ ngapIp: 10.0.0.16  # gNB's local IP address for N2 Interface (Usually same with 
 
 # List of AMF address information
 amfConfigs:
-  - address: 48.0.70.132
+  - address: 192.168.70.132
     port: 38412
 
 # List of supported S-NSSAIs by this gNB

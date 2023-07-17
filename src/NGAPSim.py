@@ -37,13 +37,17 @@ def ng_setup_request(PDU, IEs, gNB):
     val = ('initiatingMessage', {'procedureCode': 21, 'criticality': 'reject', 'value': ('NGSetupRequest', {'protocolIEs': IEs})})
     PDU.set_val(val)
 
-def uplink_nas_transport(PDU, IEs, ue):
+def uplink_nas_transport(PDU, IEs, ue, gnb):
+    curTime = int(time.time()) + 2208988800 #1900 instead of 1970
+    IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': gnb.plmn_identity, 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': gnb.plmn_identity, 'tAC': gnb.tac }, 'timeStamp': struct.pack("!I",curTime)}))})
     IEs.append({'id': 10, 'criticality': 'reject', 'value': ('AMF-UE-NGAP-ID', ue['amf_ue_ngap_id'])})
     IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', ue['ran_ue_ngap_id'])})
     val = ('initiatingMessage', {'procedureCode': 46, 'criticality': 'ignore', 'value': ('UplinkNASTransport', {'protocolIEs': IEs})})
     PDU.set_val(val)
 
-def initial_ue_message(PDU, IEs, ue):
+def initial_ue_message(PDU, IEs, ue, gnb):
+    curTime = int(time.time()) + 2208988800 #1900 instead of 1970
+    IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': gnb.plmn_identity, 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': gnb.plmn_identity, 'tAC': gnb.tac }, 'timeStamp': struct.pack("!I",curTime)}))})
     IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', ue['ran_ue_ngap_id'])})
     IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
     IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
@@ -54,6 +58,15 @@ def initial_context_setup_uplink(PDU, IEs, ue):
     IEs.append({'id': 10, 'criticality': 'ignore', 'value': ('AMF-UE-NGAP-ID', ue['amf_ue_ngap_id'])})
     IEs.append({'id': 85, 'criticality': 'ignore', 'value': ('RAN-UE-NGAP-ID', ue['ran_ue_ngap_id'])})
     val = ('successfulOutcome', {'procedureCode': 14, 'criticality': 'reject', 'value': ('InitialContextSetupResponse', {'protocolIEs': IEs})})
+    PDU.set_val(val)
+
+def pdu_session_resource_response(PDU, IEs, ue):
+    IEs.append({'id': 10, 'criticality': 'ignore', 'value': ('AMF-UE-NGAP-ID', ue['amf_ue_ngap_id'])})
+    IEs.append({'id': 85, 'criticality': 'ignore', 'value': ('RAN-UE-NGAP-ID', ue['ran_ue_ngap_id'])})
+    pdu = {'pDUSessionID': ue['pdu_session_id'], 'pDUSessionResourceSetupResponseTransfer': ('PDUSessionResourceSetupResponseTransfer', {'dLQosFlowPerTNLInformation': {'uPTransportLayerInformation': ue['up_transport_layer_information'], 'associatedQosFlowList': [{'qosFlowIdentifier': ue['qos_identifier']}] }} ) }
+    IEs.append({ 'id': 75, 'criticality': 'ignore', 'value': ('PDUSessionResourceSetupListSURes', [ pdu ])})
+    print(IEs)
+    val = ('successfulOutcome', {'procedureCode': 29, 'criticality': 'reject', 'value': ('PDUSessionResourceSetupResponse', {'protocolIEs': IEs})})
     PDU.set_val(val)
 
 def initial_context_setup(PDU):
@@ -83,15 +96,35 @@ def downlink_nas_transport(PDU):
 
     return None, nas_pdu, { 'ran_ue_ngap_id': ran_ue_ngap_id, 'amf_ue_ngap_id': amf_ue_ngap_id }
 
-def uplink_nas_transport(PDU, IEs, ue):
-    IEs.append({'id': 10, 'criticality': 'reject', 'value': ('AMF-UE-NGAP-ID', ue['amf_ue_ngap_id'])})
-    IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', ue['ran_ue_ngap_id'])})
-    val = ('initiatingMessage', {'procedureCode': 46, 'criticality': 'ignore', 'value': ('UplinkNASTransport', {'protocolIEs': IEs})})
-    PDU.set_val(val)
+def pdu_session_resource_setup(PDU):
+    IEs = PDU.get_val()[1]['value'][1]['protocolIEs']
+    # Extract AMF-UE-NGAP-ID
+    amf_ue_ngap_id = next((ie['value'][1] for ie in IEs if ie['id'] == 10), None)
+    # Extract RAN-UE-NGAP-ID
+    ran_ue_ngap_id = next((ie['value'][1] for ie in IEs if ie['id'] == 85), None)
 
+    # Extract the NAS PDU
+    pdu_session_resource_setup_list_su_req = next((ie['value'][1] for ie in IEs if ie['id'] == 74), None)
+    # TODO: handle multple pdu_session_nas_pdu 
+    pduIEs = pdu_session_resource_setup_list_su_req[0]['pDUSessionResourceSetupRequestTransfer'][1]['protocolIEs']
+    up_transport_layer_information = next((ie['value'][1] for ie in pduIEs if ie['id'] == 139), None)
+    # TODO: handle mulitple QOS identifiers
+    qos_identifiers = next((ie['value'][1] for ie in pduIEs if ie['id'] == 136), None)
+    pdu_session_nas_pdu = pdu_session_resource_setup_list_su_req[0]['pDUSessionNAS-PDU']
+    IEs = []
+    pdu_session_resource_response(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id,
+                                             'pdu_session_id': pdu_session_resource_setup_list_su_req[0]['pDUSessionID'],
+                                            'up_transport_layer_information': up_transport_layer_information,
+                                            'qos_identifier': qos_identifiers[0]['qosFlowIdentifier'] })
+    # # TODO: implement the setup logic
+
+    return PDU, pdu_session_nas_pdu, { 'ran_ue_ngap_id': ran_ue_ngap_id, 'amf_ue_ngap_id': amf_ue_ngap_id }
+
+# The procedure codes are defined in pycrate_asn1dir/3GPP_NR_NGAP_38413/NGAP-Constants.asn
 downlink_mapper = {
     4: downlink_nas_transport,
     14: initial_context_setup,
+    29: pdu_session_resource_setup,
 }
 
 # nonue_uplink_mapper = {
@@ -150,7 +183,7 @@ class GNB():
     def initiate(self) -> None:
         # Send NGSetupRequest
         IEs = []
-        PDU = PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+        PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
         ng_setup_request(PDU, IEs, self)
         ng_setup_pdu_aper = PDU.to_aper()
         self.sctp.send(ng_setup_pdu_aper)
@@ -209,13 +242,11 @@ class GNB():
                 amf_ue_ngap_id = self.ues.get(ran_ue_ngap_id)
                 PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                 IEs = []
-                curTime = int(time.time()) + 2208988800 #1900 instead of 1970
-                IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': self.plmn_identity, 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': self.plmn_identity, 'tAC': self.tac }, 'timeStamp': struct.pack("!I",curTime)}))})
                 IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', Msg.to_bytes())})
                 procedure_func = ue_uplink_mapper.get(Msg._name)
                 if not procedure_func:
                     procedure_func = uplink_nas_transport
-                procedure_func(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id })
+                procedure_func(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id }, self)
 
                 self.sctp.send(PDU.to_aper())
 
@@ -227,3 +258,6 @@ class GNB():
 
     def get_ues(self):
         return self.ues
+
+    def __str__(self):
+        return f"<NGAP mcc={self.mcc}, mnc={self.mnc}, nci={self.nci}, id_length={self.id_length}>"

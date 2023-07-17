@@ -1,7 +1,8 @@
 from UEUtils import *
 from pycrate_mobile.TS24008_IE import encode_bcd
 from pycrate_mobile.TS24501_IE import FGSIDTYPE_IMEISV
-from pycrate_mobile.NAS import FGMMRegistrationRequest, FGMMMODeregistrationRequest, FGMMRegistrationComplete, FGMMAuthenticationResponse, FGMMSecProtNASMessage, FGMMSecurityModeComplete
+from pycrate_mobile.NAS import FGMMRegistrationRequest, FGMMMODeregistrationRequest, FGMMRegistrationComplete, FGMMAuthenticationResponse, FGMMSecProtNASMessage, FGMMSecurityModeComplete, FGMMULNASTransport
+from pycrate_mobile.TS24501_FGSM import FGSMPDUSessionEstabRequest
 from pycrate_mobile.NAS5G import parse_NAS5G
 from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
@@ -20,7 +21,7 @@ def registration_request(ue, IEs, Msg=None):
     ue.MsgInBytes = Msg.to_bytes()
     logger.debug(f"UE {ue.supi} sending registration_request")
     ue.set_state(FGMMState.REGISTERED_INITIATED)
-    return Msg
+    return Msg, '5GMMRegistrationRequest'
 
 
 def registration_complete(ue, IEs, Msg=None):
@@ -31,7 +32,7 @@ def registration_complete(ue, IEs, Msg=None):
     SecMsg = security_prot_encrypt(ue, Msg)
     logger.debug(f"UE {ue.supi} sending registration_complete")
     ue.set_state(FGMMState.REGISTERED)
-    return SecMsg
+    return SecMsg, '5GMMRegistrationComplete'
 
 
 def mo_deregistration_request(ue, IEs, Msg=None):
@@ -44,11 +45,11 @@ def mo_deregistration_request(ue, IEs, Msg=None):
     ue.MsgInBytes = Msg.to_bytes()
     logger.debug(f"UE {ue.supi} sending mo_deregistration_request")
     ue.set_state(FGMMState.DEREGISTERED_INITIATED)
-    return Msg
+    return Msg, '5GMMMODeregistrationRequest'
 
 def deregistration_complete(ue, IEs, Msg=None):
     ue.set_state(FGMMState.DEREGISTERED)
-    return None
+    return None, '5GMMMODeregistrationComplete'  # For internal use only, it's not a real message type
 
 def authentication_response(ue, IEs, Msg):
     # Msg, err = parse_NAS_MO(data)
@@ -76,7 +77,6 @@ def authentication_response(ue, IEs, Msg):
     IEs['RES'] = Res
     Msg = FGMMAuthenticationResponse(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
-
     # Note: See CryptoMobile.conv for documentation of this function and arguments
     # Get K_AUSF
     ue.k_ausf = conv_501_A2(CK, IK, ue.sn_name, sqn_xor_ak)
@@ -95,7 +95,7 @@ def authentication_response(ue, IEs, Msg):
     
     logger.debug(f"UE {ue.supi} sending authentication_response")
     ue.set_state(FGMMState.AUTHENTICATED_INITIATED)
-    return Msg
+    return Msg, '5GMMAuthenticationResponse'
     
 def security_mode_complete(ue, IEs, Msg):
     RegIEs = {}
@@ -124,4 +124,37 @@ def security_mode_complete(ue, IEs, Msg):
     SecMsg = security_prot_encrypt(ue, Msg)
     logger.debug(f"UE {ue.supi} sending security_mode_complete")
     ue.set_state(FGMMState.SECURITY_MODE_INITIATED)
-    return SecMsg
+    return SecMsg, '5GMMRegistrationRequest'
+
+def pdu_session_establishment_request(ue, IEs, Msg):
+    """ 3GPP TS 24.501 version 15.7.0 6.4.1.2
+    
+    """
+    IEs['5GSMHeader'] = {'EPD': 46,  'PDUSessID': 1, 'PTI': 1, 'Type': 193}
+    IEs['PDUSessType'] = { 'Value': 1 }
+    IEs['SSCMode'] = { 'Value': 1 }
+    # IEs['SMPDUDNReqContainer'] = { }
+    IEs['IntegrityProtMaxDataRate'] = { 'UPUL': 0xff, 'UPDL': 0xff }
+    # IEs['5GSMCap'] = { }
+    Msg = FGSMPDUSessionEstabRequest(val=IEs)
+    ue.MsgInBytes = Msg.to_bytes()
+    ULIEs = {}
+    ULIEs['FGMMHeader'] = {'EPD': 46, 'spare': 0, 'SecHdr': 0, 'Type': 103 }
+    ULIEs['PayloadContainerType'] = { 'V': 1 }
+    ULIEs['PDUSessID'] = 1
+    ULIEs['RequestType'] = { 'Value': 1 }
+    ULIEs['DNN'] = [{ 'Value': b'default'} ]
+    ULIEs['RequestType'] = { 'Value': 1 }
+    ULIEs['SNSSAI'] =  ue.nssai[0] # { 'SNSSAI': ue.nssai[0] }
+    # ULIEs['PayloadContainer'] = { '5GSMPDUSessionEstabRequest': {'5GSMHeader': {'EPD': 46, 'PDUSessID': 1, 'PTI': 1, 'Type': 193}, 'IntegrityProtMaxDataRate': {'IntegrityProtMaxDataRate': {'UPUL': 255, 'UPDL': 255}}, 'PDUSessType': {'T': 9, 'PDUSessType': {'spare': 0, 'Value': 1}}, 'SSCMode': {'T': 10, 'SSCMode': {'spare': 0, 'Value': 1}}, '5GSMCap': {'T': 40, 'L': 1, '5GSMCap': {'TPMIC': 0, 'ATSSS-ST': 0, 'EPT-S1': 0, 'MH6-PDU': 0, 'RQoS': 0, 'spare': b''}}, 'ExtProtConfig': {'T': 123, 'L': 7, 'ProtConfig': {'Ext': 1, 'spare': 0, 'Prot': 0, 'Config': [{'ID': 10, 'Len': 0, 'Cont': b''}, {'ID': 13, 'Len': 0, 'Cont': b''}]}}}}
+    ULMsg = FGMMULNASTransport(val=ULIEs)
+    ULMsg['PayloadContainer']['V'].set_val(Msg.to_bytes())
+    # Encrypt NAS message
+    SecMsg = security_prot_encrypt(ue, ULMsg)
+    logger.debug(f"UE {ue.supi} sending pdu_session_establishment_request")
+    ue.set_state(FGMMState.PDU_SESSION_REQUESTED)
+    return SecMsg, '5GSMPDUSessionEstabRequest'
+
+def pdu_session_establishment_complete(ue, IEs, Msg=None):
+    ue.set_state(FGMMState.PDU_SESSION_ESTABLISHED)
+    return None, '5GSMPDUSessionEstabComplete' # For internal use only, it's not a real message type

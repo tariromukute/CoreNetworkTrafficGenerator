@@ -28,11 +28,13 @@ class FGMMState(IntEnum):
     AUTHENTICATED = 7
     SECURITY_MODE_INITIATED = 8
     SECURITY_MODE_COMPLETED = 9
+    PDU_SESSION_REQUESTED = 10
+    PDU_SESSION_ESTABLISHED = 11
     # The states are for compliance test
-    FAIL = 10
-    PASS = 11
+    FAIL = 12
+    PASS = 13
     # Last state indicate number of states
-    FGMM_STATE_MAX = 12
+    FGMM_STATE_MAX = 14
 
 def security_prot_encrypt(ue, Msg):
     IEs = {}
@@ -57,3 +59,6 @@ def security_prot_decrypt(Msg, ue):
         return Msg
     else:
         return Msg
+    
+def dl_nas_transport_extract(Msg, ue):
+    return Msg['PayloadContainer'][1]
