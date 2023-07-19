@@ -2,9 +2,11 @@ import struct
 import time
 import logging
 import threading
+import socket
 from SCTP import SCTPClient
 from pycrate_asn1dir import NGAP
 from pycrate_mobile.NAS import parse_NAS5G
+from pycrate_core import utils_py3
 
 logger = logging.getLogger('__NGAPSim__')
 
@@ -28,7 +30,7 @@ def plmn_str_to_buf(s):
             ((s[1]-0x30)<<4) + (s[0]-0x30),
             ((s[3]-0x30)<<4) + (s[2]-0x30),
             ((s[5]-0x30)<<4) + (s[4]-0x30)])
-
+gtpIp = '127.0.0.1'
 def ng_setup_request(PDU, IEs, gNB):
     IEs.append({'id': 27, 'criticality': 'reject', 'value': ('GlobalRANNodeID', ('globalGNB-ID', {'pLMNIdentity': gNB.plmn_identity, 'gNB-ID': ('gNB-ID', (1, 32))}))})
     IEs.append({'id': 82, 'criticality': 'ignore', 'value': ('RANNodeName', 'UERANSIM-gnb-208-95-1')})
@@ -65,7 +67,6 @@ def pdu_session_resource_response(PDU, IEs, ue):
     IEs.append({'id': 85, 'criticality': 'ignore', 'value': ('RAN-UE-NGAP-ID', ue['ran_ue_ngap_id'])})
     pdu = {'pDUSessionID': ue['pdu_session_id'], 'pDUSessionResourceSetupResponseTransfer': ('PDUSessionResourceSetupResponseTransfer', {'dLQosFlowPerTNLInformation': {'uPTransportLayerInformation': ue['up_transport_layer_information'], 'associatedQosFlowList': [{'qosFlowIdentifier': ue['qos_identifier']}] }} ) }
     IEs.append({ 'id': 75, 'criticality': 'ignore', 'value': ('PDUSessionResourceSetupListSURes', [ pdu ])})
-    print(IEs)
     val = ('successfulOutcome', {'procedureCode': 29, 'criticality': 'reject', 'value': ('PDUSessionResourceSetupResponse', {'protocolIEs': IEs})})
     PDU.set_val(val)
 
@@ -102,23 +103,27 @@ def pdu_session_resource_setup(PDU):
     amf_ue_ngap_id = next((ie['value'][1] for ie in IEs if ie['id'] == 10), None)
     # Extract RAN-UE-NGAP-ID
     ran_ue_ngap_id = next((ie['value'][1] for ie in IEs if ie['id'] == 85), None)
-
     # Extract the NAS PDU
     pdu_session_resource_setup_list_su_req = next((ie['value'][1] for ie in IEs if ie['id'] == 74), None)
     # TODO: handle multple pdu_session_nas_pdu 
     pduIEs = pdu_session_resource_setup_list_su_req[0]['pDUSessionResourceSetupRequestTransfer'][1]['protocolIEs']
-    up_transport_layer_information = next((ie['value'][1] for ie in pduIEs if ie['id'] == 139), None)
+    ul_up_transport_layer_information = next((ie['value'][1] for ie in pduIEs if ie['id'] == 139), None)
     # TODO: handle mulitple QOS identifiers
     qos_identifiers = next((ie['value'][1] for ie in pduIEs if ie['id'] == 136), None)
     pdu_session_nas_pdu = pdu_session_resource_setup_list_su_req[0]['pDUSessionNAS-PDU']
+    dl_up_transport_layer_information = ('gTPTunnel', {'transportLayerAddress': (utils_py3.bytes_to_uint(socket.inet_aton(gtpIp), 32), 32), 'gTP-TEID': utils_py3.uint_to_bytes(ran_ue_ngap_id, 32) })
     IEs = []
+    # TODO: compose up_transport_layer_information
     pdu_session_resource_response(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id,
                                              'pdu_session_id': pdu_session_resource_setup_list_su_req[0]['pDUSessionID'],
-                                            'up_transport_layer_information': up_transport_layer_information,
+                                            'up_transport_layer_information': dl_up_transport_layer_information,
                                             'qos_identifier': qos_identifiers[0]['qosFlowIdentifier'] })
     # # TODO: implement the setup logic
 
-    return PDU, pdu_session_nas_pdu, { 'ran_ue_ngap_id': ran_ue_ngap_id, 'amf_ue_ngap_id': amf_ue_ngap_id }
+    return PDU, pdu_session_nas_pdu, { 'ran_ue_ngap_id': ran_ue_ngap_id, 'amf_ue_ngap_id': amf_ue_ngap_id,
+                                      'qos_identifier': qos_identifiers[0]['qosFlowIdentifier'],
+                                       'ul_up_transport_layer_information': ul_up_transport_layer_information,
+                                        'dl_up_transport_layer_information': dl_up_transport_layer_information }
 
 # The procedure codes are defined in pycrate_asn1dir/3GPP_NR_NGAP_38413/NGAP-Constants.asn
 downlink_mapper = {
@@ -150,6 +155,8 @@ class GNB():
             logging.basicConfig(level=logging.INFO)
         else:
             logging.basicConfig(level=logging.DEBUG)
+        global gtpIp
+        gtpIp = server_config['gtpIp']
         self.ues = {} # key -> ran_ue_ngap_id = ue.supi[-10:], value -> amf_ue_ngap_id assigned by core network
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue
@@ -214,6 +221,10 @@ class GNB():
                 ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
                 if ue_:
                     self.ues[ue_['ran_ue_ngap_id']] = ue_['amf_ue_ngap_id']
+                    if ue_.get('qos_identifier'):
+                        logger.info(f"UE {ue_['ran_ue_ngap_id']} PDU resource setup QOS id: {ue_['qos_identifier']} UL Address: {socket.inet_ntoa(utils_py3.uint_to_bytes(ue_['ul_up_transport_layer_information'][1]['transportLayerAddress'][0], 32))} UL tied {utils_py3.bytes_to_uint(ue_['ul_up_transport_layer_information'][1]['gTP-TEID'], 32)} DL tied {utils_py3.bytes_to_uint(ue_['dl_up_transport_layer_information'][1]['gTP-TEID'], 32)}")
+                        # TODO: record qos_identifier and ul_up_transport_layer_information
+                        # self.ues[ue_['ran_ue_ngap_id']] = ue_['qos_identifier']
                 if ngap_pdu:
                     self.sctp.send(ngap_pdu.to_aper())
                 if nas_pdu:

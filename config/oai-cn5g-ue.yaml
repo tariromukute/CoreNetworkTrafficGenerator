@@ -11,7 +11,7 @@ ue_profiles:
     procedures:
       - 5GMMRegistrationRequest
       - 5GSMPDUSessionEstabRequest
-      - 5GMMMODeregistrationRequest
+      # - 5GMMMODeregistrationRequest
 
     # Permanent subscription key
     key: '0C0A34601D4F07677303652C0462535B'

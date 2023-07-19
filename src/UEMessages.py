@@ -1,4 +1,5 @@
 from UEUtils import *
+import socket
 from pycrate_mobile.TS24008_IE import encode_bcd
 from pycrate_mobile.TS24501_IE import FGSIDTYPE_IMEISV
 from pycrate_mobile.NAS import FGMMRegistrationRequest, FGMMMODeregistrationRequest, FGMMRegistrationComplete, FGMMAuthenticationResponse, FGMMSecProtNASMessage, FGMMSecurityModeComplete, FGMMULNASTransport
@@ -156,5 +157,9 @@ def pdu_session_establishment_request(ue, IEs, Msg):
     return SecMsg, '5GSMPDUSessionEstabRequest'
 
 def pdu_session_establishment_complete(ue, IEs, Msg=None):
+    address = Msg['PDUAddress']['PDUAddress'].get_val_d()
+    ue.IpAddress = address # Format is {'spare': 0, 'Type': 1, 'Addr': b'\x0c\x01\x01\x07'} with type of address
+    ip_addr = socket.inet_ntoa(address['Addr'])
+    logger.info(f"UE {ue.supi} assigned address {ip_addr}")
     ue.set_state(FGMMState.PDU_SESSION_ESTABLISHED)
     return None, '5GSMPDUSessionEstabComplete' # For internal use only, it's not a real message type

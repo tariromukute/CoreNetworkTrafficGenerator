@@ -136,6 +136,7 @@ class UE:
         self.ue_capabilities = self.ue_security_capabilities = self.ue_network_capability = None
         self.MsgInBytes = None
         self.RcvMsgInBytes = None
+        self.IpAddress = None
         # Set values for empty variables to all zeros in bytes
         empty_values = ['k_nas_int', 'k_nas_enc', 'k_amf', 'k_ausf', 'k_seaf', 'sqn', 'autn',
                         'mac_a', 'mac_s', 'xres_star', 'xres', 'res_star', 'res', 'rand']
@@ -223,7 +224,6 @@ class UE:
         Msg, sent_type = action_func(self, IEs, Msg)
         logger.debug("UE {} change to state {} and sending {}".format(self.supi, FGMMState(self.state).name, sent_type))
         ReturnMsg = Msg.to_bytes() if Msg != None else None                                                           
-        print(ReturnMsg, self, sent_type)
         return ReturnMsg, self, sent_type
 
     def next_compliance_test(self, Msg, type = None):
@@ -439,7 +439,7 @@ class UESim:
         while not UESim.exit_flag:
             try:
                 ue_state_count, fgmm_state_names = self.update_ue_state_counts()
-                logger.info(f"{dict(zip(fgmm_state_names, ue_state_count))}")
+                logger.debug(f"{dict(zip(fgmm_state_names, ue_state_count))}")
 
                 # If all the UEs have registered exit
                 if ue_state_count[FGMMState.DEREGISTERED] >= self.number:
