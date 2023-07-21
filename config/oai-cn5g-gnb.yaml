@@ -8,6 +8,7 @@ tac: 0xa000              # Tracking Area Code
 linkIp: 127.0.0.1   # gNB's local IP address for Radio Link Simulation (Usually same with local IP)
 ngapIp: 10.0.0.16  # gNB's local IP address for N2 Interface (Usually same with local IP)
 gtpIp: 10.0.0.16    # gNB's local IP address for N3 Interface (Usually same with local IP)
+gtpMac: 'fa:16:3e:d8:d9:80'
 
 # List of AMF address information
 amfConfigs:

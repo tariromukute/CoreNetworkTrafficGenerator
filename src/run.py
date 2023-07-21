@@ -19,10 +19,10 @@ logger = logging.getLogger('__app__')
 
 # Multi process class
 class MultiProcess:
-    def __init__(self, server_config, ngap_to_ue, ue_to_ngap, ue_config, interval, verbose):
+    def __init__(self, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, interval, statistics, verbose):
         sctp_client = SCTPClient(server_config)
-        self.gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap, verbose)
-        self.ueSim = UESim(ngap_to_ue, ue_to_ngap, ue_config, interval, verbose)
+        self.gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose)
+        self.ueSim = UESim(ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, interval, statistics, verbose)
         self.processes = [
             Process(target=self.gnb.run),
             Process(target=self.ueSim.run),
@@ -73,13 +73,14 @@ signal.signal(signal.SIGCHLD, sigchld_handler)
 
 
 class Arguments:
-    def __init__(self, log, console, file, interval, ue_config_file, gnb_config_file, verbose):
+    def __init__(self, log, console, file, interval, ue_config_file, gnb_config_file, statistics, verbose):
         self.log = log
         self.console = console
         self.interval = interval
         self.file = file
         self.ue_config_file = ue_config_file
         self.gnb_config_file = gnb_config_file
+        self.statistics = statistics
         self.verbose = verbose
 
 
@@ -100,9 +101,10 @@ def main(args: Arguments):
             print(exc)
 
     ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
+    upf_to_ue, ue_to_upf = Pipe(duplex=True)
    
     # Create multi process
-    multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, ue_config, args.interval, args.verbose)
+    multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, args.interval, args.statistics, args.verbose)
     multi_process.run()
     
     while True:
@@ -126,8 +128,10 @@ parser.add_argument('-f', '--file', type=str, default='.',
                     help='Log file directory')
 parser.add_argument('-v', '--verbose', action='count', default=0, 
                     help='Increase verbosity (can be specified multiple times)')
+parser.add_argument('-s', '--statistics', action='store_true',
+                    help='Enable print of statistics')
 args = parser.parse_args()
 
 arguments = Arguments(False, False, '.',
-                      args.interval, args.ue_config_file, args.gnb_config_file, args.verbose)
+                      args.interval, args.ue_config_file, args.gnb_config_file, args.statistics, args.verbose)
 main(arguments)

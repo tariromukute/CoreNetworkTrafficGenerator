@@ -67,6 +67,14 @@ You can the send the packets by passing the parameters displayed during PDU sess
 python3 ue_send.py -d 192.168.70.134 -m 'fa:16:3e:d8:d9:80' -s 12.1.1.35 -q 9 -t 35 -u 5 -i 1000 -p <hex_ip_pkt>
 ```
 
+Enable the python to send packets with Scapy with non-root user\
+
+```bash
+# find original file is execute shell command
+ls -la /usr/bin/python3
+# set capabilities for binaries running your script
+sudo setcap cap_net_raw=eip /usr/bin/python3.8
+```
 ## Notes
 
 For a tutorial on how to run or test the traffic generator with open source 5G networks see the [Performance study of Open Source 5G Core networks](docs/PERFORMANCE_STUDY_OF_5G_CORES.md) under docs folder.

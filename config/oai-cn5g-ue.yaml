@@ -6,12 +6,16 @@ ue_profiles:
     # Mobile Network Code value of HPLMN (2 or 3 digits)
     mnc: '95'
     # Number of UEs to simulate
-    count: 1
+    count: 2
     # Procedures: a list of UE initiated messages that trigger a given procedure
     procedures:
       - 5GMMRegistrationRequest
       - 5GSMPDUSessionEstabRequest
-      # - 5GMMMODeregistrationRequest
+      - 5GUPMessage
+      - 5GMMMODeregistrationRequest
+
+    upData: '4500001c00010000400160c10a000010080808080800f7ff00000000'
+    upCount: 5
 
     # Permanent subscription key
     key: '0C0A34601D4F07677303652C0462535B'

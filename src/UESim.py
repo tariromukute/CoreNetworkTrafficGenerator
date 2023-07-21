@@ -15,6 +15,7 @@ request_mapper = {
     '5GMMRegistrationRequest': registration_request,
     '5GSMPDUSessionEstabRequest': pdu_session_establishment_request,
     '5GMMMODeregistrationRequest': mo_deregistration_request,
+    '5GUPMessage': up_send_data
 }
 
 response_mapper = {
@@ -153,6 +154,7 @@ class UE:
             # raise ValueError(f"Config is required")
             # If config is None, set some variables to None and others to default values
             self.op_type, self.state_time = 'OPC', time.time()
+            self.UpData = None
         else:
             # Otherwise, set variables based on values from config
             # The elements on procedures should be keys in request_mapper
@@ -173,6 +175,9 @@ class UE:
                           # Create dictionaries for each item in defaultNssai list
                           if 'sd' in a else {'SST': int(a['sst'])}
                           for a in config['defaultNssai']]
+            # Initialise with upData or set to ICMP echo request to 8.8.8.8
+            self.UpData = config['upData'] if config['upData'] else '4500001c00010000400160c10a000010080808080800f7ff00000000'
+            self.UpCount = config['upCount'] if config['upCount'] else 5
             self.state, self.state_time = FGMMState.NULL, time.time()
 
     def set_k_nas_int(self, k_nas_int):
@@ -223,6 +228,9 @@ class UE:
         # Call the procedure function and return its result
         Msg, sent_type = action_func(self, IEs, Msg)
         logger.debug("UE {} change to state {} and sending {}".format(self.supi, FGMMState(self.state).name, sent_type))
+        if sent_type == '5GUPMessage': # Already in bytes
+            return Msg, self, sent_type
+
         ReturnMsg = Msg.to_bytes() if Msg != None else None                                                           
         return ReturnMsg, self, sent_type
 
@@ -287,11 +295,14 @@ class UE:
 class UESim:
     exit_flag = False
 
-    def __init__(self, ngap_to_ue, ue_to_ngap, ue_profiles, interval, verbose):
+    def __init__(self, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_profiles, interval, statistics, verbose):
         global g_verbose
         g_verbose = verbose
         self.ngap_to_ue = ngap_to_ue
         self.ue_to_ngap = ue_to_ngap
+        self.upf_to_ue = upf_to_ue
+        self.ue_to_upf = ue_to_upf
+        self.statistics = statistics
         self.ue_list = {}
         self.number = 0
         self.interval = interval
@@ -357,23 +368,51 @@ class UESim:
             if data:
                 tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId)
                 self.ue_list[int(ue.supi[-10:])] = ue
-
-                if tx_nas_pdu:
+                if tx_nas_pdu and sent_type != '5GUPMessage':
                     self.ue_to_ngap.send((tx_nas_pdu, ueId))
-
-                if sent_type == '5GMMRegistrationComplete':
+                elif tx_nas_pdu:
+                    self.ue_to_upf.send((tx_nas_pdu, ueId))
+                    
+                if sent_type == '5GMMRegistrationComplete' or sent_type == '5GSMPDUSessionEstabComplete' or sent_type == '5GUPMessageComplete':
                     # send the next procedure
                     tx_nas_pdu, ue, sent_type = self.dispatcher(None, ueId)
                     self.ue_list[int(ue.supi[-10:])] = ue
 
-                    if tx_nas_pdu:
+                    if tx_nas_pdu and sent_type != '5GUPMessage':
                         self.ue_to_ngap.send((tx_nas_pdu, ueId))
-                if sent_type == '5GSMPDUSessionEstabComplete': # For internal use only, it's not a real message type
+                    elif tx_nas_pdu:
+                        self.ue_to_upf.send((tx_nas_pdu, ueId))
+
+    def _load_upf_to_ue_thread(self):
+        """ Load the thread that will handle NAS DownLink messages from gNB """
+        upf_to_ue_thread = threading.Thread(target=self._upf_to_ue_thread_function)
+        upf_to_ue_thread.daemon = True
+        upf_to_ue_thread.start()
+        return upf_to_ue_thread
+
+    def _upf_to_ue_thread_function(self):
+        """ Thread function that will handle NAS DownLink messages from gNB 
+
+            It will select the NAS procedure to be executed based on the NAS message type.
+            When the NAS procedure is completed, the NAS message will be put on a queue 
+            that will be read by the gNB thread.
+        """
+        while not UESim.exit_flag:
+            data, ueId = self.ue_to_upf.recv()
+            if data:
+                ue = self.ue_list[ueId]
+                tx_nas_pdu, sent_type = up_send_data(ue, None, data)
+                self.ue_list[int(ue.supi[-10:])] = ue
+                if tx_nas_pdu and sent_type == '5GUPMessage':
+                    self.ue_to_upf.send((tx_nas_pdu, ueId))
+                else:
                     tx_nas_pdu, ue, sent_type = self.dispatcher(None, ueId)
                     self.ue_list[int(ue.supi[-10:])] = ue
 
-                    if tx_nas_pdu:
+                    if tx_nas_pdu and sent_type != '5GUPMessage':
                         self.ue_to_ngap.send((tx_nas_pdu, ueId))
+                    
+    
     def init(self):
         for supi, ue in self.ue_list.items():
             if (ue):
@@ -439,7 +478,8 @@ class UESim:
         while not UESim.exit_flag:
             try:
                 ue_state_count, fgmm_state_names = self.update_ue_state_counts()
-                logger.debug(f"{dict(zip(fgmm_state_names, ue_state_count))}")
+                if self.statistics:
+                    print(f"{dict(zip(fgmm_state_names, ue_state_count))}")
 
                 # If all the UEs have registered exit
                 if ue_state_count[FGMMState.DEREGISTERED] >= self.number:
@@ -448,7 +488,7 @@ class UESim:
                     for supi, ue in self.ue_list.items():
                         if ue and ue.supi:
                             latest_time = ue.state_time if latest_time < ue.state_time else latest_time
-
+                    logger.info(f"Registered {self.number} UEs in {latest_time - start_time}")
                     print(f"Registered {self.number} UEs in {latest_time - start_time}")
                     
                     # Tell parent process to exit
@@ -505,6 +545,7 @@ class UESim:
         time.sleep(5)
         self.init()
         self.ngap_to_ue_thread = self._load_ngap_to_ue_thread()
+        self.upf_to_ue_thread = self._load_upf_to_ue_thread()
         if g_verbose > 3:
             self.print_compliance_test_results()
         else:

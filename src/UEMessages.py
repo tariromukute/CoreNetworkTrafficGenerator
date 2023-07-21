@@ -7,6 +7,8 @@ from pycrate_mobile.TS24501_FGSM import FGSMPDUSessionEstabRequest
 from pycrate_mobile.NAS5G import parse_NAS5G
 from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
+from scapy.all import *
+import binascii
 
 def registration_request(ue, IEs, Msg=None):
     IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
@@ -134,9 +136,6 @@ def pdu_session_establishment_request(ue, IEs, Msg):
     IEs['5GSMHeader'] = {'EPD': 46,  'PDUSessID': 1, 'PTI': 1, 'Type': 193}
     IEs['PDUSessType'] = { 'Value': 1 }
     IEs['SSCMode'] = { 'Value': 1 }
-    # IEs['SMPDUDNReqContainer'] = { }
-    IEs['IntegrityProtMaxDataRate'] = { 'UPUL': 0xff, 'UPDL': 0xff }
-    # IEs['5GSMCap'] = { }
     Msg = FGSMPDUSessionEstabRequest(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
     ULIEs = {}
@@ -144,10 +143,8 @@ def pdu_session_establishment_request(ue, IEs, Msg):
     ULIEs['PayloadContainerType'] = { 'V': 1 }
     ULIEs['PDUSessID'] = 1
     ULIEs['RequestType'] = { 'Value': 1 }
-    ULIEs['DNN'] = [{ 'Value': b'default'} ]
     ULIEs['RequestType'] = { 'Value': 1 }
-    ULIEs['SNSSAI'] =  ue.nssai[0] # { 'SNSSAI': ue.nssai[0] }
-    # ULIEs['PayloadContainer'] = { '5GSMPDUSessionEstabRequest': {'5GSMHeader': {'EPD': 46, 'PDUSessID': 1, 'PTI': 1, 'Type': 193}, 'IntegrityProtMaxDataRate': {'IntegrityProtMaxDataRate': {'UPUL': 255, 'UPDL': 255}}, 'PDUSessType': {'T': 9, 'PDUSessType': {'spare': 0, 'Value': 1}}, 'SSCMode': {'T': 10, 'SSCMode': {'spare': 0, 'Value': 1}}, '5GSMCap': {'T': 40, 'L': 1, '5GSMCap': {'TPMIC': 0, 'ATSSS-ST': 0, 'EPT-S1': 0, 'MH6-PDU': 0, 'RQoS': 0, 'spare': b''}}, 'ExtProtConfig': {'T': 123, 'L': 7, 'ProtConfig': {'Ext': 1, 'spare': 0, 'Prot': 0, 'Config': [{'ID': 10, 'Len': 0, 'Cont': b''}, {'ID': 13, 'Len': 0, 'Cont': b''}]}}}}
+    ULIEs['SNSSAI'] =  ue.nssai[0]
     ULMsg = FGMMULNASTransport(val=ULIEs)
     ULMsg['PayloadContainer']['V'].set_val(Msg.to_bytes())
     # Encrypt NAS message
@@ -161,5 +158,24 @@ def pdu_session_establishment_complete(ue, IEs, Msg=None):
     ue.IpAddress = address # Format is {'spare': 0, 'Type': 1, 'Addr': b'\x0c\x01\x01\x07'} with type of address
     ip_addr = socket.inet_ntoa(address['Addr'])
     logger.info(f"UE {ue.supi} assigned address {ip_addr}")
+    # Update the UpData, change source ip address
+    upPkt = binascii.unhexlify(ue.UpData)
+    ip_pkt = IP(upPkt)
+    ip_pkt.src = ip_addr
+    raw_ip_pkt = raw(ip_pkt)
+    ue.UpData = binascii.hexlify(raw_ip_pkt)
     ue.set_state(FGMMState.PDU_SESSION_ESTABLISHED)
     return None, '5GSMPDUSessionEstabComplete' # For internal use only, it's not a real message type
+
+def up_send_data(ue, IEs, Msg=None):
+    # time.sleep(1)
+    if Msg != None and Msg == b'0':
+        logger.error(f"UE {ue.supi} UP request timed out")
+    elif Msg != None:
+        upPkt = binascii.unhexlify(Msg)
+        ip_pkt = IP(upPkt)
+        logger.debug(f"UE {ue.supi} received UP packet \n{ip_pkt.show(dump=True)}")
+    ue.UpCount -= 1
+    if ue.UpCount < 0:
+        return None, '5GUPMessageComplete'
+    return ue.UpData, '5GUPMessage'

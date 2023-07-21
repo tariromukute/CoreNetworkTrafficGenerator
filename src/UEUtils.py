@@ -8,7 +8,11 @@ from pycrate_mobile.NAS5G import parse_NAS5G
 from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
 
-logger = logging.getLogger('__UESim__')
+# logging.basicConfig(filename='/tmp/core-tg/core.log',
+#                     filemode='a',
+#                     level=logging.DEBUG)
+
+logger = logging.getLogger('__UESim__') 
 
 def byte_xor(ba1, ba2):
     """ XOR two byte strings """

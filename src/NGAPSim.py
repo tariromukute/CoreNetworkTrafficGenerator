@@ -4,6 +4,7 @@ import logging
 import threading
 import socket
 from SCTP import SCTPClient
+from GTPU import GTPU
 from pycrate_asn1dir import NGAP
 from pycrate_mobile.NAS import parse_NAS5G
 from pycrate_core import utils_py3
@@ -144,7 +145,7 @@ ue_uplink_mapper = {
 
 
 class GNB():
-    def __init__(self, sctp: SCTPClient, server_config: dict, ngap_to_ue, ue_to_ngap, verbose) -> None:
+    def __init__(self, sctp: SCTPClient, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose) -> None:
         global logger
         # Set logging level based on the verbose argument
         if verbose == 0:
@@ -157,10 +158,13 @@ class GNB():
             logging.basicConfig(level=logging.DEBUG)
         global gtpIp
         gtpIp = server_config['gtpIp']
-        self.ues = {} # key -> ran_ue_ngap_id = ue.supi[-10:], value -> amf_ue_ngap_id assigned by core network
+        self.gtpu = GTPU({ 'gtpIp': gtpIp, 'gtpMac': server_config['gtpMac'] }, upf_to_ue)
+        self.ues = {} # key -> ran_ue_ngap_id = { amf_ue_ngap_id: ue.supi[-10:], qfi,  ul_tied, dl_tied }, value -> amf_ue_ngap_id assigned by core network
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue
         self.ue_to_ngap = ue_to_ngap
+        self.upf_to_ue = upf_to_ue
+        self.ue_to_upf = ue_to_upf
         self.verbose = verbose
         self.mcc = server_config['mcc']
         self.mnc = server_config['mnc']
@@ -183,6 +187,7 @@ class GNB():
         logger.debug("Starting gNB")
         self.ngap_to_ue_thread = self._load_ngap_to_ue_thread(self._ngap_to_ue_thread_function)
         self.nas_dl_thread = self._load_ue_to_ngap_thread(self._ue_to_ngap_thread_function)
+        self.ue_up_thread = self._load_ue_to_upf_thread(self._ue_to_upf_thread_function)
         # Wait for SCTP to be connected
         time.sleep(2)
         self.initiate()
@@ -219,12 +224,20 @@ class GNB():
                     logger.debug(f"Received downlink procedure {procedureCode} without handler mapped to it")
                     continue
                 ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
+                    
                 if ue_:
-                    self.ues[ue_['ran_ue_ngap_id']] = ue_['amf_ue_ngap_id']
+                    if not ue_['ran_ue_ngap_id'] in self.ues:
+                        self.ues[ue_['ran_ue_ngap_id']] = { 'amf_ue_ngap_id': ue_['amf_ue_ngap_id'] }
+                    self.ues[ue_['ran_ue_ngap_id']]['amf_ue_ngap_id'] = ue_['amf_ue_ngap_id']
                     if ue_.get('qos_identifier'):
-                        logger.info(f"UE {ue_['ran_ue_ngap_id']} PDU resource setup QOS id: {ue_['qos_identifier']} UL Address: {socket.inet_ntoa(utils_py3.uint_to_bytes(ue_['ul_up_transport_layer_information'][1]['transportLayerAddress'][0], 32))} UL tied {utils_py3.bytes_to_uint(ue_['ul_up_transport_layer_information'][1]['gTP-TEID'], 32)} DL tied {utils_py3.bytes_to_uint(ue_['dl_up_transport_layer_information'][1]['gTP-TEID'], 32)}")
-                        # TODO: record qos_identifier and ul_up_transport_layer_information
-                        # self.ues[ue_['ran_ue_ngap_id']] = ue_['qos_identifier']
+                        ul_tied = utils_py3.bytes_to_uint(ue_['ul_up_transport_layer_information'][1]['gTP-TEID'], 32)
+                        dl_tied = utils_py3.bytes_to_uint(ue_['dl_up_transport_layer_information'][1]['gTP-TEID'], 32)
+                        upf_address = socket.inet_ntoa(utils_py3.uint_to_bytes(ue_['ul_up_transport_layer_information'][1]['transportLayerAddress'][0], 32))
+                        logger.info(f"UE {ue_['ran_ue_ngap_id']} PDU resource setup QOS id: {ue_['qos_identifier']} UL Address: {upf_address} UL tied {ul_tied} DL tied {dl_tied}")
+                        self.ues[ue_['ran_ue_ngap_id']]['qfi'] = ue_['qos_identifier']
+                        self.ues[ue_['ran_ue_ngap_id']]['ul_tied'] = ul_tied
+                        self.ues[ue_['ran_ue_ngap_id']]['dl_tied'] = dl_tied
+                        self.ues[ue_['ran_ue_ngap_id']]['upf_address'] = upf_address
                 if ngap_pdu:
                     self.sctp.send(ngap_pdu.to_aper())
                 if nas_pdu:
@@ -250,7 +263,7 @@ class GNB():
                 if err:
                     logger.error("Error parsing NAS message: %s", err)
                     continue
-                amf_ue_ngap_id = self.ues.get(ran_ue_ngap_id)
+                amf_ue_ngap_id = self.ues.get(ran_ue_ngap_id).get('amf_ue_ngap_id') if self.ues.get(ran_ue_ngap_id) else None
                 PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                 IEs = []
                 IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', Msg.to_bytes())})
@@ -260,6 +273,26 @@ class GNB():
                 procedure_func(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id }, self)
 
                 self.sctp.send(PDU.to_aper())
+
+    def _load_ue_to_upf_thread(self, ue_to_upf_thread_function):
+        """ Load the thread that will handle NAS UpLink messages from UE """
+        ue_to_upf_thread = threading.Thread(target=ue_to_upf_thread_function)
+        ue_to_upf_thread.start()
+        return ue_to_upf_thread
+    
+    def _ue_to_upf_thread_function(self) -> None:
+        """ This thread function will read from queue NAS UpLink messages from UE 
+
+            It will then select the appropriate NGAP procedure to put the NAS message in
+            and put the NGAP message in the queue to be sent to 5G Core
+        """
+        while True:
+            data, ran_ue_ngap_id = self.upf_to_ue.recv()
+            if data:
+                # ran_ue_ngap_id = int(ue.supi[-10:])
+                ue = self.ues.get(ran_ue_ngap_id)
+                
+                self.gtpu.send(ue, data)
 
     def get_ue(self, ran_ue_ngap_id):
         return self.ues[ran_ue_ngap_id]

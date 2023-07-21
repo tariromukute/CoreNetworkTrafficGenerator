@@ -51,7 +51,9 @@ if __name__ == '__main__':
         for i in range(count):
             time.sleep(delta)
             sendingPacket = ethernet/outerIp/outerUdp/gtpHeader/innerIp
-            sendp(sendingPacket, verbose=True)
+            # sendingPacket.show()
+            # sendp(sendingPacket, verbose=True)
+            p = srp1(sendingPacket, timeout=2)
 
     except Exception as e:
         # Handle any exception that occurs and print error message
