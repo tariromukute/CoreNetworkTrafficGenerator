@@ -87,20 +87,24 @@ def authentication_response(ue, IEs, Msg):
     ue.k_seaf = conv_501_A6(ue.k_ausf, ue.sn_name)
     # Get K_AMF
     ue.k_amf = conv_501_A7(ue.k_seaf, ue.supi.encode('ascii'), abba)
-    # Get K_NAS_ENC
-    ue.k_nas_enc = conv_501_A8(ue.k_amf, alg_type=1, alg_id=1)
-    # Get least significate 16 bytes from K_NAS_ENC 32 bytes
-    ue.k_nas_enc = ue.k_nas_enc[16:]
-    # Get K_NAS_INT
-    k_nas_int = conv_501_A8(ue.k_amf, alg_type=2, alg_id=1)
-    ue.set_k_nas_int(k_nas_int)
-    ue.k_nas_int = ue.k_nas_int[16:]
     
     logger.debug(f"UE {ue.supi} sending authentication_response")
     ue.set_state(FGMMState.AUTHENTICATED_INITIATED)
     return Msg, '5GMMAuthenticationResponse'
     
 def security_mode_complete(ue, IEs, Msg):
+    NASSecAlgo = Msg['NASSecAlgo']['NASSecAlgo'].get_val_d()
+    ue.CiphAlgo = NASSecAlgo['CiphAlgo']
+    ue.IntegAlgo = NASSecAlgo['IntegAlgo']
+    # print(f"Set Algo {ue.CiphAlgo} and {ue.IntegAlgo}")
+    # Get K_NAS_ENC
+    ue.k_nas_enc = conv_501_A8(ue.k_amf, alg_type=1, alg_id=NASSecAlgo['CiphAlgo'])
+    # Get least significate 16 bytes from K_NAS_ENC 32 bytes
+    ue.k_nas_enc = ue.k_nas_enc[16:]
+    # Get K_NAS_INT
+    k_nas_int = conv_501_A8(ue.k_amf, alg_type=2, alg_id=NASSecAlgo['IntegAlgo'])
+    ue.set_k_nas_int(k_nas_int)
+    ue.k_nas_int = ue.k_nas_int[16:]
     RegIEs = {}
     RegIEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
     RegIEs['NAS_KSI'] = {'TSC': 0, 'Value': 7}
@@ -127,7 +131,7 @@ def security_mode_complete(ue, IEs, Msg):
     SecMsg = security_prot_encrypt(ue, Msg)
     logger.debug(f"UE {ue.supi} sending security_mode_complete")
     ue.set_state(FGMMState.SECURITY_MODE_INITIATED)
-    return SecMsg, '5GMMRegistrationRequest'
+    return SecMsg, 'FGMMSecurityModeComplete'
 
 def pdu_session_establishment_request(ue, IEs, Msg):
     """ 3GPP TS 24.501 version 15.7.0 6.4.1.2
@@ -168,7 +172,6 @@ def pdu_session_establishment_complete(ue, IEs, Msg=None):
     return None, '5GSMPDUSessionEstabComplete' # For internal use only, it's not a real message type
 
 def up_send_data(ue, IEs, Msg=None):
-    # time.sleep(1)
     if Msg != None and Msg == b'0':
         logger.error(f"UE {ue.supi} UP request timed out")
     elif Msg != None:

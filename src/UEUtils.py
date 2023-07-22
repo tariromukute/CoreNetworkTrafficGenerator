@@ -41,22 +41,23 @@ class FGMMState(IntEnum):
     FGMM_STATE_MAX = 14
 
 def security_prot_encrypt(ue, Msg):
+    if ue.CiphAlgo == 0:
+        return Msg
     IEs = {}
     IEs['5GMMHeaderSec'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 4 }
     SecMsg = FGMMSecProtNASMessage(val=IEs)
     SecMsg['NASMessage'].set_val(Msg.to_bytes())
-    SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=1, seqnoff=0, bearer=1)
-    SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=1, seqnoff=0, bearer=1)
+    SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
+    SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=ue.IntegAlgo, seqnoff=0, bearer=1)
     return SecMsg
 
 def security_prot_decrypt(Msg, ue):
-    # Msg, err = parse_NAS5G(data)
-    # if err:
-    #     return
+    
     # check if message is encrypted
     if Msg['5GMMHeaderSec']['SecHdr'].get_val() == 2:
+        # TODO: Add integrity check
         # decrypt message
-        Msg.decrypt(ue.k_nas_enc, dir=1, fgea=1, seqnoff=0, bearer=1)
+        Msg.decrypt(ue.k_nas_enc, dir=1, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
         Msg, err = parse_NAS5G(Msg._dec_msg)
         if err:
             return None

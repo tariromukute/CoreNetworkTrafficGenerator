@@ -158,8 +158,8 @@ class GNB():
             logging.basicConfig(level=logging.DEBUG)
         global gtpIp
         gtpIp = server_config['gtpIp']
-        self.gtpu = GTPU({ 'gtpIp': gtpIp, 'gtpMac': server_config['gtpMac'] }, upf_to_ue)
-        self.ues = {} # key -> ran_ue_ngap_id = { amf_ue_ngap_id: ue.supi[-10:], qfi,  ul_tied, dl_tied }, value -> amf_ue_ngap_id assigned by core network
+        self.gtpu = GTPU({ 'gtpIp': gtpIp, 'fgcMac': server_config['fgcMac'] }, upf_to_ue)
+        self.ues = {} # key -> ran_ue_ngap_id = { amf_ue_ngap_id: ue.supi[-10:], qfi,  ul_teid, dl_teid }, value -> amf_ue_ngap_id assigned by core network
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue
         self.ue_to_ngap = ue_to_ngap
@@ -230,13 +230,13 @@ class GNB():
                         self.ues[ue_['ran_ue_ngap_id']] = { 'amf_ue_ngap_id': ue_['amf_ue_ngap_id'] }
                     self.ues[ue_['ran_ue_ngap_id']]['amf_ue_ngap_id'] = ue_['amf_ue_ngap_id']
                     if ue_.get('qos_identifier'):
-                        ul_tied = utils_py3.bytes_to_uint(ue_['ul_up_transport_layer_information'][1]['gTP-TEID'], 32)
-                        dl_tied = utils_py3.bytes_to_uint(ue_['dl_up_transport_layer_information'][1]['gTP-TEID'], 32)
+                        ul_teid = utils_py3.bytes_to_uint(ue_['ul_up_transport_layer_information'][1]['gTP-TEID'], 32)
+                        dl_teid = utils_py3.bytes_to_uint(ue_['dl_up_transport_layer_information'][1]['gTP-TEID'], 32)
                         upf_address = socket.inet_ntoa(utils_py3.uint_to_bytes(ue_['ul_up_transport_layer_information'][1]['transportLayerAddress'][0], 32))
-                        logger.info(f"UE {ue_['ran_ue_ngap_id']} PDU resource setup QOS id: {ue_['qos_identifier']} UL Address: {upf_address} UL tied {ul_tied} DL tied {dl_tied}")
+                        logger.info(f"UE {ue_['ran_ue_ngap_id']} PDU resource setup QOS id: {ue_['qos_identifier']} UL Address: {upf_address} UL teid {ul_teid} DL teid {dl_teid}")
                         self.ues[ue_['ran_ue_ngap_id']]['qfi'] = ue_['qos_identifier']
-                        self.ues[ue_['ran_ue_ngap_id']]['ul_tied'] = ul_tied
-                        self.ues[ue_['ran_ue_ngap_id']]['dl_tied'] = dl_tied
+                        self.ues[ue_['ran_ue_ngap_id']]['ul_teid'] = ul_teid
+                        self.ues[ue_['ran_ue_ngap_id']]['dl_teid'] = dl_teid
                         self.ues[ue_['ran_ue_ngap_id']]['upf_address'] = upf_address
                 if ngap_pdu:
                     self.sctp.send(ngap_pdu.to_aper())

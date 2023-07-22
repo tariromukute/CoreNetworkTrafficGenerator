@@ -138,6 +138,8 @@ class UE:
         self.MsgInBytes = None
         self.RcvMsgInBytes = None
         self.IpAddress = None
+        self.CiphAlgo = None
+        self.IntegAlgo = None
         # Set values for empty variables to all zeros in bytes
         empty_values = ['k_nas_int', 'k_nas_enc', 'k_amf', 'k_ausf', 'k_seaf', 'sqn', 'autn',
                         'mac_a', 'mac_s', 'xres_star', 'xres', 'res_star', 'res', 'rand']
@@ -335,11 +337,12 @@ class UESim:
             if Msg._by_name.count('5GMMSecurityModeCommand'):
                 Msg = Msg['5GMMSecurityModeCommand']
                 msg_type = Msg._name
-            elif Msg._name == '5GMMDLNASTransport':
-                Msg = dl_nas_transport_extract(Msg, ue)
-                msg_type = Msg._name
             else:
                 msg_type = Msg._name
+
+        if Msg._name == '5GMMDLNASTransport':
+            Msg = dl_nas_transport_extract(Msg, ue)
+            msg_type = Msg._name
             
         tx_nas_pdu, ue_, sent_type = ue.next_action(Msg, msg_type) if g_verbose <= 3 else ue.next_compliance_test(Msg, msg_type)
         

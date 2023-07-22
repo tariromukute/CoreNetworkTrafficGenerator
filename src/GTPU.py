@@ -16,11 +16,11 @@ class GTPU():
 
     def send(self, ue_data, ip_pkt_data):
         ip_pkt = binascii.unhexlify(ip_pkt_data)
-        ethernet = Ether(dst=self.config['gtpMac'])
+        ethernet = Ether(dst=self.config['fgcMac'])
         outerIp = IP(src=self.config['gtpIp'], dst=ue_data['upf_address'])
         outerUdp = UDP(sport=2152, dport=2152)
         innerIp = IP(ip_pkt)
-        gtpHeader = GTP_U_Header(teid=ue_data['ul_tied'], next_ex=133)/GTPPDUSessionContainer(type=1, QFI=ue_data['qfi'])
+        gtpHeader = GTP_U_Header(teid=ue_data['ul_teid'], next_ex=133)/GTPPDUSessionContainer(type=1, QFI=ue_data['qfi'])
 
         del outerIp[IP].chksum
         # Delete IP/ICMP checksum fields so that they can be recalculate by scapy
@@ -33,8 +33,9 @@ class GTPU():
         p = srp1(sendingPacket, verbose=True, timeout=5)
         if p:
             self.forward(p[GTP_U_Header])
-        # Send byte 0 to UE to indicate timeout
-        self.upf_to_ue.send((b'0', ue_data['dl_tied']))
+        else:
+            # Send byte 0 to UE to indicate timeout
+            self.upf_to_ue.send((b'0', ue_data['dl_teid']))
 
 
     def forward(self, gtpu_pkt):
