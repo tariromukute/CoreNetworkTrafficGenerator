@@ -10,9 +10,10 @@ import binascii
 logger = logging.getLogger('__GPTU__') 
 
 class GTPU():
-    def __init__(self, config, upf_to_ue) -> None:
+    def __init__(self, config, upf_to_ue, verbose) -> None:
         self.config = config
         self.upf_to_ue = upf_to_ue
+        self.verbose = verbose
 
     def send(self, ue_data, ip_pkt_data):
         ip_pkt = binascii.unhexlify(ip_pkt_data)
@@ -30,7 +31,7 @@ class GTPU():
 
         sendingPacket = ethernet/outerIp/outerUdp/gtpHeader/innerIp
         logger.debug(f"Send GTPU packet \n{sendingPacket.show(dump=True)}")
-        p = srp1(sendingPacket, verbose=True, timeout=5)
+        p = srp1(sendingPacket, verbose=self.verbose, timeout=5)
         if p:
             self.forward(p[GTP_U_Header])
         else:

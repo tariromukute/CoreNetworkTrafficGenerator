@@ -34,11 +34,12 @@ class FGMMState(IntEnum):
     SECURITY_MODE_COMPLETED = 9
     PDU_SESSION_REQUESTED = 10
     PDU_SESSION_ESTABLISHED = 11
+    CONNECTION_RELEASED = 12
     # The states are for compliance test
-    FAIL = 12
-    PASS = 13
+    FAIL = 13
+    PASS = 14
     # Last state indicate number of states
-    FGMM_STATE_MAX = 14
+    FGMM_STATE_MAX = 15
 
 def security_prot_encrypt(ue, Msg):
     if ue.CiphAlgo == 0:

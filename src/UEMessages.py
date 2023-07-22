@@ -22,7 +22,6 @@ def registration_request(ue, IEs, Msg=None):
                        'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0}
     Msg = FGMMRegistrationRequest(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
-    logger.debug(f"UE {ue.supi} sending registration_request")
     ue.set_state(FGMMState.REGISTERED_INITIATED)
     return Msg, '5GMMRegistrationRequest'
 
@@ -33,7 +32,6 @@ def registration_complete(ue, IEs, Msg=None):
     Msg, = FGMMRegistrationComplete(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
     SecMsg = security_prot_encrypt(ue, Msg)
-    logger.debug(f"UE {ue.supi} sending registration_complete")
     ue.set_state(FGMMState.REGISTERED)
     return SecMsg, '5GMMRegistrationComplete'
 
@@ -46,7 +44,6 @@ def mo_deregistration_request(ue, IEs, Msg=None):
                                                                            'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin)}}
     Msg = FGMMMODeregistrationRequest(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
-    logger.debug(f"UE {ue.supi} sending mo_deregistration_request")
     ue.set_state(FGMMState.DEREGISTERED_INITIATED)
     return Msg, '5GMMMODeregistrationRequest'
 
@@ -88,7 +85,6 @@ def authentication_response(ue, IEs, Msg):
     # Get K_AMF
     ue.k_amf = conv_501_A7(ue.k_seaf, ue.supi.encode('ascii'), abba)
     
-    logger.debug(f"UE {ue.supi} sending authentication_response")
     ue.set_state(FGMMState.AUTHENTICATED_INITIATED)
     return Msg, '5GMMAuthenticationResponse'
     
@@ -129,7 +125,6 @@ def security_mode_complete(ue, IEs, Msg):
     ue.MsgInBytes = Msg.to_bytes()
     # Encrypt NAS message
     SecMsg = security_prot_encrypt(ue, Msg)
-    logger.debug(f"UE {ue.supi} sending security_mode_complete")
     ue.set_state(FGMMState.SECURITY_MODE_INITIATED)
     return SecMsg, 'FGMMSecurityModeComplete'
 
@@ -153,7 +148,7 @@ def pdu_session_establishment_request(ue, IEs, Msg):
     ULMsg['PayloadContainer']['V'].set_val(Msg.to_bytes())
     # Encrypt NAS message
     SecMsg = security_prot_encrypt(ue, ULMsg)
-    logger.debug(f"UE {ue.supi} sending pdu_session_establishment_request")
+
     ue.set_state(FGMMState.PDU_SESSION_REQUESTED)
     return SecMsg, '5GSMPDUSessionEstabRequest'
 
@@ -170,6 +165,10 @@ def pdu_session_establishment_complete(ue, IEs, Msg=None):
     ue.UpData = binascii.hexlify(raw_ip_pkt)
     ue.set_state(FGMMState.PDU_SESSION_ESTABLISHED)
     return None, '5GSMPDUSessionEstabComplete' # For internal use only, it's not a real message type
+
+def connection_release_complete(ue, IEs, Msg=None):
+    ue.set_state(FGMMState.CONNECTION_RELEASED)
+    return None, '5GMMANConnectionReleaseComplete'  # For internal use only, it's not a real message type
 
 def up_send_data(ue, IEs, Msg=None):
     if Msg != None and Msg == b'0':

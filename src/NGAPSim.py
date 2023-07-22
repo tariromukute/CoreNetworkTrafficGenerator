@@ -71,6 +71,12 @@ def pdu_session_resource_response(PDU, IEs, ue):
     val = ('successfulOutcome', {'procedureCode': 29, 'criticality': 'reject', 'value': ('PDUSessionResourceSetupResponse', {'protocolIEs': IEs})})
     PDU.set_val(val)
 
+def ue_connection_release_complete(PDU, IEs, ue):
+    IEs.append({'id': 10, 'criticality': 'ignore', 'value': ('AMF-UE-NGAP-ID', ue['amf_ue_ngap_id'])})
+    IEs.append({'id': 85, 'criticality': 'ignore', 'value': ('RAN-UE-NGAP-ID', ue['ran_ue_ngap_id'])})
+    val = ('successfulOutcome', {'procedureCode': 41, 'criticality': 'reject', 'value': ('UEContextReleaseComplete', {'protocolIEs': IEs})})
+    PDU.set_val(val)
+
 def initial_context_setup(PDU):
     # Extract IE values
     IEs = PDU.get_val()[1]['value'][1]['protocolIEs']
@@ -126,11 +132,24 @@ def pdu_session_resource_setup(PDU):
                                        'ul_up_transport_layer_information': ul_up_transport_layer_information,
                                         'dl_up_transport_layer_information': dl_up_transport_layer_information }
 
+def ue_connection_release_command(PDU):
+    IEs = PDU.get_val()[1]['value'][1]['protocolIEs']
+    # Extract AMF-UE-NGAP-ID and RAN-UE-NGAP-ID
+    # TODO: handle multiple ids
+    ue_ngap_ids = next((ie['value'][1] for ie in IEs if ie['id'] == 114), None)
+    amf_ue_ngap_id = ue_ngap_ids[1]['aMF-UE-NGAP-ID']
+    ran_ue_ngap_id = ue_ngap_ids[1]['rAN-UE-NGAP-ID']
+
+    IEs = []
+    ue_connection_release_complete(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id})
+    return PDU, b'F', { 'ran_ue_ngap_id': ran_ue_ngap_id, 'amf_ue_ngap_id': amf_ue_ngap_id }
+
 # The procedure codes are defined in pycrate_asn1dir/3GPP_NR_NGAP_38413/NGAP-Constants.asn
 downlink_mapper = {
     4: downlink_nas_transport,
     14: initial_context_setup,
     29: pdu_session_resource_setup,
+    41: ue_connection_release_command,
 }
 
 # nonue_uplink_mapper = {
@@ -158,7 +177,7 @@ class GNB():
             logging.basicConfig(level=logging.DEBUG)
         global gtpIp
         gtpIp = server_config['gtpIp']
-        self.gtpu = GTPU({ 'gtpIp': gtpIp, 'fgcMac': server_config['fgcMac'] }, upf_to_ue)
+        self.gtpu = GTPU({ 'gtpIp': gtpIp, 'fgcMac': server_config['fgcMac'] }, upf_to_ue, verbose=verbose >= 2)
         self.ues = {} # key -> ran_ue_ngap_id = { amf_ue_ngap_id: ue.supi[-10:], qfi,  ul_teid, dl_teid }, value -> amf_ue_ngap_id assigned by core network
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue

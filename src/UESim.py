@@ -23,7 +23,8 @@ response_mapper = {
     '5GMMRegistrationAccept': registration_complete,
     '5GSMPDUSessionEstabAccept': pdu_session_establishment_complete,
     '5GMMSecurityModeCommand': security_mode_complete,
-    '5GMMMODeregistrationAccept': deregistration_complete
+    '5GMMMODeregistrationAccept': deregistration_complete,
+    '5GMMANConnectionRelease': connection_release_complete
 }
 
 compliance_test_mapper = {
@@ -42,11 +43,20 @@ def validator(PrevMsgBytesSent, MsgRecvd):
         Checks the last message sent against the message received to see if it is the expected response.
         It logs the mismatch if any is detected
     """
+        
     PrevMsgSent, err = parse_NAS5G(PrevMsgBytesSent)
     if err:
         logger.error(f"Failed to parse the UE's previous message {PrevMsgSent}")
         return
-
+    
+    if MsgRecvd == b'F':
+        # Check if we received 5GMMMODeregistrationAccept
+        if PrevMsgSent._name == '5GMMMODeregistrationAccept':
+            return FGMMState.PASS, None
+        else:
+            error_message = f"Expected 5GMMMODeregistrationAccept but got 5GMMANConnectionRelease"
+            return FGMMState.FAIL, error_message 
+         
     PrevMsgSentDict = PrevMsgSent.get_val_d()
     # print(PrevMsgSentDict)
     MsgRecvdDict = MsgRecvd.get_val_d()
@@ -204,7 +214,7 @@ class UE:
             The function corresponding to the procedure to be processed next.
         """
         if g_verbose >= 3 and Msg is not None:
-            logger.debug(f"UE {self.supi} received {type}")
+            logger.debug(f"UE {self.supi} received message \n{Msg.show()}")
             validator(self.MsgInBytes, Msg)
 
         # Get the procedure function corresponding to the given response
@@ -229,9 +239,9 @@ class UE:
 
         # Call the procedure function and return its result
         Msg, sent_type = action_func(self, IEs, Msg)
-        logger.debug("UE {} change to state {} and sending {}".format(self.supi, FGMMState(self.state).name, sent_type))
         if sent_type == '5GUPMessage': # Already in bytes
             return Msg, self, sent_type
+        logger.debug(f"UE {self.supi} change to state {FGMMState(self.state).name} and sending message \n{Msg.show() if Msg != None else None}")
 
         ReturnMsg = Msg.to_bytes() if Msg != None else None                                                           
         return ReturnMsg, self, sent_type
@@ -325,6 +335,11 @@ class UESim:
         ue = self.ue_list[ueId]
         if data == None:
             return ue.next_action(None, None) if g_verbose <= 3 else ue.next_compliance_test(None, None)
+        
+        # If the gNB receives a UE Context Release Command it will send data b'F' as the (R)AN Connection Release
+        # TODO: implement the appropriate message for R(AN) Connection Release
+        if data == b'F':
+            return ue.next_action(data, '5GMMANConnectionRelease') if g_verbose <= 3 else ue.next_compliance_test(data, '5GMMANConnectionRelease')
         
         Msg, err = parse_NAS5G(data)
         if err:
@@ -485,7 +500,7 @@ class UESim:
                     print(f"{dict(zip(fgmm_state_names, ue_state_count))}")
 
                 # If all the UEs have registered exit
-                if ue_state_count[FGMMState.DEREGISTERED] >= self.number:
+                if ue_state_count[FGMMState.CONNECTION_RELEASED] >= self.number:
                     # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
                     latest_time = start_time
                     for supi, ue in self.ue_list.items():
