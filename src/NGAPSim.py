@@ -322,5 +322,8 @@ class GNB():
     def get_ues(self):
         return self.ues
 
+    def stop(self):
+        print("Stopping gnb")
+
     def __str__(self):
         return f"<NGAP mcc={self.mcc}, mnc={self.mnc}, nci={self.nci}, id_length={self.id_length}>"

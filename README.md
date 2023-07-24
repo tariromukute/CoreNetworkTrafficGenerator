@@ -22,8 +22,9 @@ NGAP Features
 4. Downlink NAS Transport
 5. Uplink NAS Transport
 6. PDU Session Resource Setup
+7. UE Connection Release
 
-## Requirements
+## Installing 5GC traffic generator
 
 ```bash
 # initialize your local configuration file
@@ -124,7 +125,7 @@ ls -la /usr/bin/python3
 sudo setcap cap_net_raw=eip /usr/bin/python3.8
 ```
 
-### Validation/Compliance testing of 5GC responses
+## Validation/Compliance testing of 5GC responses
 
 The traffic generator can be used to validate responses from the core network. The response data is checked against what's stated in the 3GPP TS 24.501 version 15.7.0. To start validate increase the verbose of the generator: `vvvv` will print only failed validations and `vvvvv` will print all the validation results.
 

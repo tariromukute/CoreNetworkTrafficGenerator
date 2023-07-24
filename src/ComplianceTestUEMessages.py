@@ -24,7 +24,7 @@ def registration_request_protocol_error(ue, IEs, Msg=None):
 
     # TODO: implement method
 
-    return Msg
+    return Msg, '5GMMRegistrationRequest'
 
 def registration_request_timeout(ue, IEs, Msg=None):
     """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 c)
@@ -35,7 +35,7 @@ def registration_request_timeout(ue, IEs, Msg=None):
 
     # TODO: implement method
 
-    return Msg
+    return Msg, '5GMMRegistrationRequest'
 
 def registration_request_resent(ue, IEs, Msg=None):
     """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 d)
@@ -45,7 +45,7 @@ def registration_request_resent(ue, IEs, Msg=None):
 
     # TODO: implement method
 
-    return Msg
+    return Msg, '5GMMRegistrationRequest'
 
 def registration_request_implicit_deregistration(ue, IEs, Msg=None):
     """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 g)
@@ -57,7 +57,7 @@ def registration_request_implicit_deregistration(ue, IEs, Msg=None):
 
     # TODO: implement method
 
-    return Msg
+    return Msg, '5GMMRegistrationRequest'
 
 def registration_request_early_deregistration(ue, IEs, Msg=None):
     """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 h)
@@ -67,7 +67,7 @@ def registration_request_early_deregistration(ue, IEs, Msg=None):
 
     # TODO: implement method
 
-    return Msg
+    return Msg, '5GMMRegistrationRequest'
 
 def registration_request_invalid_security_capabilities(ue, IEs, Msg=None):
     """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 i)
@@ -77,7 +77,7 @@ def registration_request_invalid_security_capabilities(ue, IEs, Msg=None):
 
     # TODO: implement method
 
-    return Msg
+    return Msg, '5GMMRegistrationRequest'
 
 # --------------------------------------------------------
 # Section 2: Authentication Response validations 
@@ -92,12 +92,25 @@ def authentication_response_invalid_rand(ue, IEs, Msg):
     
     logger.debug(f"UE {ue.supi} sending authentication_response")
     ue.set_state(FGMMState.AUTHENTICATED_INITIATED)
-    return Msg
+    return Msg, '5GMMAuthenticationResponse'
 
 # --------------------------------------------------------
 # Section 3: Security Mode Complete validations 
 # --------------------------------------------------------
 def security_mode_complete_missing_nas_container(ue, IEs, Msg):
+    NASSecAlgo = Msg['NASSecAlgo']['NASSecAlgo'].get_val_d()
+    ue.CiphAlgo = NASSecAlgo['CiphAlgo']
+    ue.IntegAlgo = NASSecAlgo['IntegAlgo']
+    # print(f"Set Algo {ue.CiphAlgo} and {ue.IntegAlgo}")
+    # Get K_NAS_ENC
+    ue.k_nas_enc = conv_501_A8(ue.k_amf, alg_type=1, alg_id=NASSecAlgo['CiphAlgo'])
+    # Get least significate 16 bytes from K_NAS_ENC 32 bytes
+    ue.k_nas_enc = ue.k_nas_enc[16:]
+    # Get K_NAS_INT
+    k_nas_int = conv_501_A8(ue.k_amf, alg_type=2, alg_id=NASSecAlgo['IntegAlgo'])
+    ue.set_k_nas_int(k_nas_int)
+    ue.k_nas_int = ue.k_nas_int[16:]
+
     RegIEs = {}
     RegIEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
     RegIEs['NAS_KSI'] = {'TSC': 0, 'Value': 7}
@@ -124,4 +137,4 @@ def security_mode_complete_missing_nas_container(ue, IEs, Msg):
     SecMsg = security_prot_encrypt(ue, Msg)
     logger.debug(f"UE {ue.supi} sending invalid_security_mode_complete")
     ue.set_state(FGMMState.SECURITY_MODE_INITIATED)
-    return SecMsg
+    return SecMsg, 'FGMMSecurityModeComplete'

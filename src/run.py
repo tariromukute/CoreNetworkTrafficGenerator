@@ -1,16 +1,12 @@
-import threading
 import time
-import array
-import sys
-import traceback
 from argparse import ArgumentParser
-
-from UESim import UE, UESim, FGMMState
+# Define struct for arguments
+import signal
+from UESim import UESim
 from SCTP import SCTPClient
 from NGAPSim import GNB
 
-from multiprocessing import Process, Manager, cpu_count, active_children, Pipe
-from logging.handlers import QueueHandler
+from multiprocessing import Process, active_children, Pipe
 import logging
 import yaml
 
@@ -28,49 +24,9 @@ class MultiProcess:
             Process(target=self.ueSim.run),
         ]
 
-    # Listen for SIGTERM signal
-        signal.signal(signal.SIGTERM, self._sigterm_handler)
-        signal.signal(signal.SIGCHLD, self._sigterm_handler)
-
-    def _sigterm_handler(self, signum, frame):
-        # Stop child processes
-        for process in self.processes:
-            process.terminate()
-
     def run(self):
         for process in self.processes:
             process.start()
-
-    def stop(self):
-        for process in self.processes:
-            process.terminate()
-
-# Define struct for arguments
-import os
-import signal
-
-# Keep track of the number of child processes still running
-num_children = 0
-
-# Define a signal handler function for SIGCHLD
-def sigchld_handler(signum, frame):
-    global num_children
-    while True:
-        try:
-            # Call os.waitpid() to get the exit status of the child process
-            # WNOHANG makes sure we don't block if there are no child processes left to wait for
-            pid, status = os.waitpid(-1, os.WNOHANG)
-            if pid == 0:
-                break
-            print("Exiting...")
-            sys.exit(0)
-        except OSError:
-            break
-    
-
-# Register the signal handler function for SIGCHLD
-signal.signal(signal.SIGCHLD, sigchld_handler)
-
 
 class Arguments:
     def __init__(self, log, console, file, interval, ue_config_file, gnb_config_file, statistics, verbose):
@@ -87,7 +43,6 @@ class Arguments:
 # Main function
 def main(args: Arguments):
     # Read server configuration
-
     with open(args.gnb_config_file, 'r') as stream:
         try:
             server_config = yaml.safe_load(stream)
@@ -108,12 +63,15 @@ def main(args: Arguments):
     multi_process.run()
     
     while True:
-        # Check if all child processes have terminated
-        if len(active_children()) == 0:
-            print("Exiting......")
-            break
-        # Wait for a short time before checking again
-        time.sleep(1)
+        try:
+            # Check if all child processes have terminated
+            if len(active_children()) == 0:
+                print("Exiting......")
+                break
+            # Wait for a short time before checking again
+            time.sleep(1)
+        except KeyboardInterrupt:
+            print("Program Interrupted")
 
 
 # Define parser arguments

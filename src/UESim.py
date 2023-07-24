@@ -4,6 +4,8 @@ import logging
 import threading
 import time
 import traceback
+import signal
+from functools import partial
 from itertools import product
 from tabulate import tabulate
 from pycrate_mobile.NAS5G import parse_NAS5G, parse_PayCont
@@ -48,23 +50,23 @@ def validator(PrevMsgBytesSent, MsgRecvd):
     if err:
         logger.error(f"Failed to parse the UE's previous message {PrevMsgSent}")
         return
-    
+    recv_msg_name = None
+    MsgRecvdDict = {}
     if MsgRecvd == b'F':
-        # Check if we received 5GMMMODeregistrationAccept
-        if PrevMsgSent._name == '5GMMMODeregistrationAccept':
-            return FGMMState.PASS, None
-        else:
-            error_message = f"Expected 5GMMMODeregistrationAccept but got 5GMMANConnectionRelease"
-            return FGMMState.FAIL, error_message 
-         
+        recv_msg_name = '5GMMANConnectionRelease'
+    elif MsgRecvd == b'0':
+         recv_msg_name = 'program teminated before receiving the expected response, the 5GC might not have responded'
+    else:
+        recv_msg_name = MsgRecvd._name 
+        MsgRecvdDict = MsgRecvd.get_val_d()
+     
     PrevMsgSentDict = PrevMsgSent.get_val_d()
     # print(PrevMsgSentDict)
-    MsgRecvdDict = MsgRecvd.get_val_d()
 
     # Check if the received message doesn't have a response mapped
-    if not MsgRecvd._name in response_mapper:
+    if not recv_msg_name in response_mapper:
         # This is not an error, log for info purposes
-        logger.info(f"Received {MsgRecvd._name} a message without a response mapped to it")
+        logger.info(f"Received {recv_msg_name} a message without a response mapped to it")
 
     if PrevMsgSent._name == '5GMMRegistrationRequest':
         """ General Registration procedure 3GPP TS 23.502 4.2.2.2.2
@@ -73,39 +75,39 @@ def validator(PrevMsgBytesSent, MsgRecvd):
         message from the CN is either Identity Request (5GMMIdentityRequest) or Authentication request
         (5GMMAuthenticationRequest)
         """
-        if MsgRecvd._name == '5GMMAuthenticationRequest':
+        if recv_msg_name == '5GMMAuthenticationRequest':
             if 'AUTN' not in MsgRecvdDict:
                 error_message = "5GMMAuthenticationRequest did not contain AUTN"
                 return FGMMState.FAIL, error_message
         # TODO: Add elif for 5GMMIdentityRequest
         else:
-            error_message = f"Expected 5GMMAuthenticationRequest but got {MsgRecvd._name}"
+            error_message = f"Expected 5GMMAuthenticationRequest but got {recv_msg_name}"
             return FGMMState.FAIL, error_message
     elif PrevMsgSent._name == '5GMMAuthenticationResponse':
-        if  MsgRecvd._name == '5GMMSecurityModeCommand':
-            return None, None
+        if  recv_msg_name == '5GMMSecurityModeCommand':
+            return FGMMState.NULL, None
         # Note: didn't handle the compliance test to show results
         else:
-            error_message = f"Expected 5GMMSecurityModeCommand but got {MsgRecvd._name}"
+            error_message = f"Expected 5GMMSecurityModeCommand but got {recv_msg_name}"
             return FGMMState.FAIL, error_message
     elif PrevMsgSent._name == '5GMMSecurityModeComplete':
         """
         During the registration procedure, after sending the 5GMMSecurityModeCommand the UE
         should received the 5GMMRegistrationAccept response.
         """
-        if MsgRecvd._name != '5GMMRegistrationAccept':
+        if recv_msg_name != '5GMMRegistrationAccept':
             """ Check if we didn't send an invalid request for compliance test """
-            if PrevMsgSentDict['NASContainer']['V'] == b'\x00\x00':
+            if PrevMsgSentDict.get('NASContainer').get('V') and PrevMsgSentDict['NASContainer']['V'] == b'\x00\x00':
                 """ We sent an invalid 5GMMSecurityModeComplete with no UE data
                 we should get a registration reject
                 """
-                if MsgRecvd._name != '5GMMRegistrationReject':
-                    error_message= f"Expected 5GMMAuthenticationRequest but got {MsgRecvd._name}"
+                if recv_msg_name != '5GMMRegistrationReject':
+                    error_message= f"Expected 5GMMRegistrationReject but got {recv_msg_name}"
                     return FGMMState.FAIL, error_message
                 # We expected reject therefore pass
                 return FGMMState.PASS, None
             else:
-                error_message = f"Expected 5GMMRegistrationAccept but got {MsgRecvd._name}"
+                error_message = f"Expected 5GMMRegistrationAccept but got {recv_msg_name}"
                 return FGMMState.FAIL, error_message
     # elif PrevMsgSent._name == '5GSMPDUSessionEstabRequest':
         
@@ -114,15 +116,22 @@ def validator(PrevMsgBytesSent, MsgRecvd):
         
         The next message from the CN should be De-registration Accept (5GMMMODeregistrationAccept)
         """
-        if MsgRecvd._name == '5GMMMODeregistrationAccept':
+        if recv_msg_name == '5GMMMODeregistrationAccept':
             if '5GMMCause' in MsgRecvdDict:
                 error_message = f"5GMMMODeregistrationComplete contained RejectionCause: {MsgRecvdDict['RejectionCause']}"
                 return FGMMState.FAIL, error_message
         else:
-            error_message = f"Expected 5GMMMODeregistrationAccept but got {MsgRecvd._name}"
+            error_message = f"Expected 5GMMMODeregistrationAccept but got {recv_msg_name}"
+            return FGMMState.FAIL, error_message
+    elif recv_msg_name == '5GMMANConnectionRelease':
+        # Check if we received 5GMMMODeregistrationAccept
+        if PrevMsgSent._name == '5GMMMODeregistrationAccept':
+            return FGMMState.PASS, None
+        else:
+            error_message = f"Expected 5GMMMODeregistrationAccept but got 5GMMANConnectionRelease"
             return FGMMState.FAIL, error_message
 
-    return None, None
+    return FGMMState.NULL, None
 
 g_verbose = 0
 class UE:
@@ -202,7 +211,7 @@ class UE:
     def set_compliance_mapper(self, mapper):
         self.compliance_mapper = mapper
         
-    def next_action(self, Msg, type = None):
+    def next_action(self, Msg, msg_type = None):
         """
         Determines the next procedure to process based on the given response.
 
@@ -214,14 +223,15 @@ class UE:
             The function corresponding to the procedure to be processed next.
         """
         if g_verbose >= 3 and Msg is not None:
-            logger.debug(f"UE {self.supi} received message \n{Msg.show()}")
+            if type(Msg) is not bytes:
+                logger.debug(f"UE {self.supi} received message \n{Msg.show()}")
             validator(self.MsgInBytes, Msg)
 
         # Get the procedure function corresponding to the given response
         IEs = {}
         action_func = None
-        if Msg and type:
-            action_func = response_mapper.get(type)
+        if Msg and msg_type:
+            action_func = response_mapper.get(msg_type)
 
         if action_func is None:
             # Get the index of the current procedure in procedures
@@ -247,15 +257,17 @@ class UE:
         return ReturnMsg, self, sent_type
 
     def next_compliance_test(self, Msg, type = None):
-
         if g_verbose > 3 and Msg is not None:
-            self.RcvMsgInBytes = Msg.to_bytes()
+            self.RcvMsgInBytes = Msg.to_bytes() if Msg != b'F' else None
             logger.debug(f"UE {self.supi} received {type}")
             test_result, error_message = validator(self.MsgInBytes, Msg)
-            if test_result != None:
+            if test_result != None: 
+                # We have reached end of test. 
+                # Validator return PASS on an expected reject is received or when succcessfully deregistered and connection release
+                # It returns None otherwise 
                 self.state = test_result
                 self.error_message = error_message
-                return None, self
+                return None, self, None
 
         IEs = {}
         action_func = None
@@ -269,7 +281,7 @@ class UE:
                 self.procedure) if self.procedure in self.procedures else -1
             # Get the next procedure in procedures (wrapping around if necessary)
             if (idx + 1) >= len(self.procedures):
-                return None, self
+                return None, self, None
             # procedure = self.procedures[(idx + 1) % len(self.procedures)]
             procedure = self.procedures[idx+1]
             # Get the procedure function corresponding to the next procedure
@@ -279,9 +291,8 @@ class UE:
 
         # Call the procedure function and return its result
         Msg, sent_type = action_func(self, IEs, Msg)
-        logger.debug("UE {} change to state {}".format(self.supi, FGMMState(self.state).name))
-        # self.MsgInBytes = Msg.to_bytes() if Msg != None else None 
-        return Msg.to_bytes() if Msg != None else None, self
+        logger.debug(f"UE {self.supi} change to state {FGMMState(self.state).name} and sending message \n{Msg.show() if Msg != None else None}")
+        return Msg.to_bytes() if Msg != None else None, self, sent_type
     
     def create_common_ies(self):
         IEs = {}
@@ -303,6 +314,14 @@ class UE:
                 f'k_nas_enc: {hexlify(self.k_nas_enc)}, k_amf: {hexlify(self.k_amf)}, '
                 f'k_ausf: {hexlify(self.k_ausf)}, k_seaf: {hexlify(self.k_seaf)}, '
                 f'k_nas_int: {hexlify(self.k_nas_int)}, k_nas_enc: {hexlify(self.k_nas_enc)} )')
+
+def interrupt_handler(ueSim, ask, signum, frame):
+    if ask:
+        signal.signal(signal.SIGINT, partial(interrupt_handler, ueSim, False))
+        print('Compiling results, to interrupt the results compilation press ctrl-c again.')
+        ueSim.stop()
+        return
+    sys.exit(0)
 
 class UESim:
     exit_flag = False
@@ -507,7 +526,7 @@ class UESim:
                         if ue and ue.supi:
                             latest_time = ue.state_time if latest_time < ue.state_time else latest_time
                     logger.info(f"Registered {self.number} UEs in {latest_time - start_time}")
-                    print(f"Registered {self.number} UEs in {latest_time - start_time}")
+                    print(f"Registered {self.number} UEs in {latest_time - start_time} \n\nPress ctrl+c to end program")
                     
                     # Tell parent process to exit
                     UESim.exit_flag = True
@@ -516,6 +535,34 @@ class UESim:
                 # logger.exception('Whoops! Problem:', file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
 
+    def show_compliance_results(self, fgmm_state_names):
+        # Print test results in a table
+        for supi, ue in self.ue_list.items():
+            if g_verbose == 4 and ue.error_message == None:
+                continue
+            SentMsg, err = parse_NAS5G(ue.MsgInBytes)
+            if err:
+                print('Failed to parse ue.MsgInBytes when print compliance test results')
+                SentMsgShow = ''
+            else:
+                SentMsgShow = SentMsg.show()
+            RcvMsg, err = parse_NAS5G(ue.RcvMsgInBytes)
+            if err:
+                print('Failed to parse ue.RcvMsgInBytes when print compliance test results')
+                RcvMsgShow = ''
+            else:
+                RcvMsgShow = RcvMsg.show()
+            profile = ''
+            for k, v in ue.compliance_mapper.items():
+                profile += f"Request message: {k}, Response function: {v.__name__}\n"
+            headers = ['UE', ue.supi]
+            table = [['Status', fgmm_state_names[ue.state]], 
+                     ['Message', ue.error_message], 
+                     ['Profile', profile], 
+                     ['Sent', SentMsgShow], 
+                     ['Received', RcvMsgShow] ]
+            print(tabulate(table, headers, tablefmt="grid"))
+
     def print_compliance_test_results(self):
         start_time = time.time()
 
@@ -523,6 +570,8 @@ class UESim:
         while not UESim.exit_flag:
             try:
                 ue_state_count, fgmm_state_names = self.update_ue_state_counts()
+                if self.statistics:
+                    print(f"{dict(zip(fgmm_state_names, ue_state_count))}")
                 
                 # If all the UEs have registered exit
                 if ue_state_count[FGMMState.DEREGISTERED] + ue_state_count[FGMMState.FAIL] + ue_state_count[FGMMState.PASS] >= self.number:
@@ -533,30 +582,17 @@ class UESim:
                             latest_time = ue.state_time if latest_time < ue.state_time else latest_time
 
                     print(f"Ran compliance test for {self.number} UEs in {latest_time - start_time}")
-                    
-                    # Print test results in a table
-                    for supi, ue in self.ue_list.items():
-                        if g_verbose == 4 and ue.error_message == None:
-                            continue
-                        SentMsg, err = parse_NAS5G(ue.MsgInBytes)
-                        if err:
-                            print('Failed to parse ue.MsgInBytes when print compliance test results')
-                        RcvMsg, err = parse_NAS5G(ue.RcvMsgInBytes)
-                        if err:
-                            print('Failed to parse ue.RcvMsgInBytes when print compliance test results')
-                        profile = ''
-                        for k, v in ue.compliance_mapper.items():
-                            profile += f"Request message: {k}, Response function: {v.__name__}\n"
-                        headers = ['UE', ue.supi]
-                        table = [['Status', fgmm_state_names[ue.state]], ['Message', ue.error_message], ['Profile', profile], ['Sent', SentMsg.show()], ['Received', RcvMsg.show()] ]
-                        print(tabulate(table, headers, tablefmt="grid"))
                     # Tell parent process to exit
                     UESim.exit_flag = True
                 time.sleep(1)
             except Exception:
                 # logger.exception('Whoops! Problem:', file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
+        
+        self.stop()
+        
     def run(self):
+        signal.signal(signal.SIGINT, partial(interrupt_handler, self, True))
         """ Run the NAS thread """
         self.create_ues()
         # Wait for GNB to be ready
@@ -570,3 +606,20 @@ class UESim:
             self.print_stats_process()
         self.ngap_to_ue.close()
         sys.exit(0)
+
+    def stop(self):
+        # Check the UE if the have all terminated if not log details and state the UE is in
+        if UESim.exit_flag == False:
+            # Check if any UEs are not terminated and call validator
+            for supi, ue in self.ue_list.items():
+                if ue.state < FGMMState.DEREGISTERED:
+                    test_result, error_message = validator(ue.MsgInBytes, b'0')
+                    ue.state = test_result
+                    ue.error_message = error_message
+                    ue.RcvMsgInBytes = None
+            
+        fgmm_state_names = [
+                FGMMState(i).name for i in range(FGMMState.FGMM_STATE_MAX)]
+        self.show_compliance_results(fgmm_state_names)
+
+        print(f"Stopping UESim press ctrl+c to end program")

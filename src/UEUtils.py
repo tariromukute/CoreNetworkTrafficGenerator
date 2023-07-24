@@ -22,18 +22,19 @@ def byte_xor(ba1, ba2):
 class FGMMState(IntEnum):
     """ 5GMM State: 3GPP TS 24.501 version 16.9.0 Release 16, Section 5. """
     NULL = 0
-    DEREGISTERED = 1
-    REGISTERED_INITIATED = 2
-    REGISTERED = 3
-    DEREGISTERED_INITIATED = 4
-    SERVICE_REQUEST_INITIATED = 5
+    REGISTERED_INITIATED = 1
+    REGISTERED = 2
+    DEREGISTERED_INITIATED = 3
+    SERVICE_REQUEST_INITIATED = 4
     # Not in 3GPP TS 24.501 version 16.9.0 Release 16, Section 5.
-    AUTHENTICATED_INITIATED = 6
-    AUTHENTICATED = 7
-    SECURITY_MODE_INITIATED = 8
-    SECURITY_MODE_COMPLETED = 9
-    PDU_SESSION_REQUESTED = 10
-    PDU_SESSION_ESTABLISHED = 11
+    AUTHENTICATED_INITIATED = 5
+    AUTHENTICATED = 6
+    SECURITY_MODE_INITIATED = 7
+    SECURITY_MODE_COMPLETED = 8
+    PDU_SESSION_REQUESTED = 9
+    PDU_SESSION_ESTABLISHED = 10
+    # The states below can be used to check end of session or test
+    DEREGISTERED = 11 # In 3GPP TS 24.501 version 16.9.0 Release 16, Section 5.
     CONNECTION_RELEASED = 12
     # The states are for compliance test
     FAIL = 13
