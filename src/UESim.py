@@ -56,6 +56,8 @@ def validator(PrevMsgBytesSent, MsgRecvd):
         recv_msg_name = '5GMMANConnectionRelease'
     elif MsgRecvd == b'0':
          recv_msg_name = 'program teminated before receiving the expected response, the 5GC might not have responded'
+         error_message = f"Expected response but {recv_msg_name}"
+         return FGMMState.NO_RESPONSE, error_message
     else:
         recv_msg_name = MsgRecvd._name 
         MsgRecvdDict = MsgRecvd.get_val_d()
@@ -134,6 +136,7 @@ def validator(PrevMsgBytesSent, MsgRecvd):
     return FGMMState.NULL, None
 
 g_verbose = 0
+start_time = 0
 class UE:
     def __init__(self, config=None):
         """
@@ -159,6 +162,8 @@ class UE:
         self.IpAddress = None
         self.CiphAlgo = None
         self.IntegAlgo = None
+        self.start_time = None
+        self.end_time = None
         # Set values for empty variables to all zeros in bytes
         empty_values = ['k_nas_int', 'k_nas_enc', 'k_amf', 'k_ausf', 'k_seaf', 'sqn', 'autn',
                         'mac_a', 'mac_s', 'xres_star', 'xres', 'res_star', 'res', 'rand']
@@ -325,6 +330,7 @@ def interrupt_handler(ueSim, ask, signum, frame):
 
 class UESim:
     exit_flag = False
+    global start_time
 
     def __init__(self, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_profiles, interval, statistics, verbose):
         global g_verbose
@@ -339,6 +345,7 @@ class UESim:
         self.interval = interval
         self.ue_profiles = ue_profiles
         global logger
+        
         # Set logging level based on the verbose argument
         # Note: A verbose of 4 implies compliance test
         if verbose == 0:
@@ -451,6 +458,8 @@ class UESim:
                     
     
     def init(self):
+        global start_time
+        start_time = time.time()
         for supi, ue in self.ue_list.items():
             if (ue):
                 tx_nas_pdu, ue_, sent_type = ue.next_action(None, ) if g_verbose <= 3 else ue.next_compliance_test(None, )
@@ -509,8 +518,9 @@ class UESim:
         return ue_state_count, fgmm_state_names
 
     def print_stats_process(self):
-        start_time = time.time()
-
+        global start_time
+        min_interval = 9999999
+        max_interval = 0
         # run forever
         while not UESim.exit_flag:
             try:
@@ -525,8 +535,12 @@ class UESim:
                     for supi, ue in self.ue_list.items():
                         if ue and ue.supi:
                             latest_time = ue.state_time if latest_time < ue.state_time else latest_time
+                            min_interval = ue.end_time - ue.start_time if min_interval > ue.end_time - ue.start_time else min_interval
+                            max_interval = ue.end_time - ue.start_time if max_interval < ue.end_time - ue.start_time else max_interval
                     logger.info(f"Registered {self.number} UEs in {latest_time - start_time}")
-                    print(f"Registered {self.number} UEs in {latest_time - start_time} \n\nPress ctrl+c to end program")
+                    print(f"Registered {self.number} UEs in {latest_time - start_time} seconds \
+                          \nMinimum interval time {min_interval} seconds and Maximum interval time {max_interval} \
+                          \n\nPress ctrl+c to end program")
                     
                     # Tell parent process to exit
                     UESim.exit_flag = True
@@ -536,9 +550,25 @@ class UESim:
                 traceback.print_exc(file=sys.stderr)
 
     def show_compliance_results(self, fgmm_state_names):
+        global start_time
+        latest_time = start_time
+        end_time = time.time()
+        min_interval = 9999999
+        max_interval = 0
+        completed = 0
         # Print test results in a table
         for supi, ue in self.ue_list.items():
-            if g_verbose == 4 and ue.error_message == None:
+            # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
+            # Don't consider UEs that didn't get a respond
+            if ue.state >= FGMMState.DEREGISTERED:
+                latest_time = ue.state_time if latest_time < ue.state_time else latest_time
+                min_interval = ue.end_time - ue.start_time if min_interval > ue.end_time - ue.start_time else min_interval
+                max_interval = ue.end_time - ue.start_time if max_interval < ue.end_time - ue.start_time else max_interval
+                completed += 1
+            else:
+                ue.error_message += f"\n\nUE hung for {end_time - ue.state_time} seconds"
+
+            if g_verbose <= 4 and ue.error_message == None:
                 continue
             SentMsg, err = parse_NAS5G(ue.MsgInBytes)
             if err:
@@ -563,8 +593,11 @@ class UESim:
                      ['Received', RcvMsgShow] ]
             print(tabulate(table, headers, tablefmt="grid"))
 
+        print(f"Ended test after {end_time - start_time} seconds \nRan test for {self.number} UEs in {latest_time - start_time} seconds procedures completed for {completed} UEs, failed for {len(self.ue_list) - completed} \
+              \nMinimum interval time {min_interval} seconds and Maximum interval time {max_interval}")
+
     def print_compliance_test_results(self):
-        start_time = time.time()
+        global start_time
 
         # run forever
         while not UESim.exit_flag:
@@ -574,14 +607,8 @@ class UESim:
                     print(f"{dict(zip(fgmm_state_names, ue_state_count))}")
                 
                 # If all the UEs have registered exit
-                if ue_state_count[FGMMState.DEREGISTERED] + ue_state_count[FGMMState.FAIL] + ue_state_count[FGMMState.PASS] >= self.number:
-                    # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
-                    latest_time = start_time
-                    for supi, ue in self.ue_list.items():
-                        if ue and ue.supi:
-                            latest_time = ue.state_time if latest_time < ue.state_time else latest_time
-
-                    print(f"Ran compliance test for {self.number} UEs in {latest_time - start_time}")
+                if ue_state_count[FGMMState.DEREGISTERED] + ue_state_count[FGMMState.CONNECTION_RELEASED] + ue_state_count[FGMMState.FAIL] + ue_state_count[FGMMState.PASS] >= self.number:
+                    
                     # Tell parent process to exit
                     UESim.exit_flag = True
                 time.sleep(1)

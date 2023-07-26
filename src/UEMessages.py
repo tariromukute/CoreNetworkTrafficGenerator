@@ -23,6 +23,7 @@ def registration_request(ue, IEs, Msg=None):
     Msg = FGMMRegistrationRequest(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
     ue.set_state(FGMMState.REGISTERED_INITIATED)
+    ue.start_time = time.time()
     return Msg, '5GMMRegistrationRequest'
 
 
@@ -168,6 +169,7 @@ def pdu_session_establishment_complete(ue, IEs, Msg=None):
 
 def connection_release_complete(ue, IEs, Msg=None):
     ue.set_state(FGMMState.CONNECTION_RELEASED)
+    ue.end_time = time.time()
     return None, '5GMMANConnectionReleaseComplete'  # For internal use only, it's not a real message type
 
 def up_send_data(ue, IEs, Msg=None):

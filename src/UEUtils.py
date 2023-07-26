@@ -33,14 +33,16 @@ class FGMMState(IntEnum):
     SECURITY_MODE_COMPLETED = 8
     PDU_SESSION_REQUESTED = 9
     PDU_SESSION_ESTABLISHED = 10
+    # 
+    NO_RESPONSE = 11
     # The states below can be used to check end of session or test
-    DEREGISTERED = 11 # In 3GPP TS 24.501 version 16.9.0 Release 16, Section 5.
-    CONNECTION_RELEASED = 12
+    DEREGISTERED = 12 # In 3GPP TS 24.501 version 16.9.0 Release 16, Section 5.
+    CONNECTION_RELEASED = 13
     # The states are for compliance test
-    FAIL = 13
-    PASS = 14
+    FAIL = 14
+    PASS = 15
     # Last state indicate number of states
-    FGMM_STATE_MAX = 15
+    FGMM_STATE_MAX = 16
 
 def security_prot_encrypt(ue, Msg):
     if ue.CiphAlgo == 0:
