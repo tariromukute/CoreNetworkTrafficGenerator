@@ -9,9 +9,9 @@ from functools import partial
 from itertools import product
 from tabulate import tabulate
 from pycrate_mobile.NAS5G import parse_NAS5G, parse_PayCont
-from UEMessages import *
-from ComplianceTestUEMessages import *
-from UEUtils import *
+from src.UEMessages import *
+from src.ComplianceTestUEMessages import *
+from src.UEUtils import *
 
 request_mapper = {
     '5GMMRegistrationRequest': registration_request,
@@ -172,7 +172,7 @@ class UE:
 
         self.supi = self.amf_ue_ngap_id = None
         self.procedure = None  # contains the request that UE is processing or has
-        self.error_message = None
+        self.error_message = ""
         self.procedures = config.get('procedures') if 'procedures' in config else [
             '5GMMRegistrationRequest', '5GMMMODeregistrationRequest']
         if config is None:
@@ -332,7 +332,7 @@ class UESim:
     exit_flag = False
     global start_time
 
-    def __init__(self, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_profiles, interval, statistics, verbose):
+    def __init__(self, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_profiles, interval, statistics, verbose, completed_at):
         global g_verbose
         g_verbose = verbose
         self.ngap_to_ue = ngap_to_ue
@@ -344,6 +344,7 @@ class UESim:
         self.number = 0
         self.interval = interval
         self.ue_profiles = ue_profiles
+        self.completed_at = completed_at
         global logger
         
         # Set logging level based on the verbose argument
@@ -530,17 +531,6 @@ class UESim:
 
                 # If all the UEs have registered exit
                 if ue_state_count[FGMMState.CONNECTION_RELEASED] >= self.number:
-                    # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
-                    latest_time = start_time
-                    for supi, ue in self.ue_list.items():
-                        if ue and ue.supi:
-                            latest_time = ue.state_time if latest_time < ue.state_time else latest_time
-                            min_interval = ue.end_time - ue.start_time if min_interval > ue.end_time - ue.start_time else min_interval
-                            max_interval = ue.end_time - ue.start_time if max_interval < ue.end_time - ue.start_time else max_interval
-                    logger.info(f"Registered {self.number} UEs in {latest_time - start_time}")
-                    print(f"Registered {self.number} UEs in {latest_time - start_time} seconds \
-                          \nMinimum interval time {min_interval} seconds and Maximum interval time {max_interval} \
-                          \n\nPress ctrl+c to end program")
                     
                     # Tell parent process to exit
                     UESim.exit_flag = True
@@ -549,7 +539,9 @@ class UESim:
                 # logger.exception('Whoops! Problem:', file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
 
-    def show_compliance_results(self, fgmm_state_names):
+        self.stop()
+
+    def show_results(self, fgmm_state_names):
         global start_time
         latest_time = start_time
         end_time = time.time()
@@ -560,7 +552,7 @@ class UESim:
         for supi, ue in self.ue_list.items():
             # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
             # Don't consider UEs that didn't get a respond
-            if ue.state >= FGMMState.DEREGISTERED:
+            if ue.state >= FGMMState.DEREGISTERED and ue.end_time != None and ue.start_time != None:
                 latest_time = ue.state_time if latest_time < ue.state_time else latest_time
                 min_interval = ue.end_time - ue.start_time if min_interval > ue.end_time - ue.start_time else min_interval
                 max_interval = ue.end_time - ue.start_time if max_interval < ue.end_time - ue.start_time else max_interval
@@ -568,7 +560,7 @@ class UESim:
             else:
                 ue.error_message += f"\n\nUE hung for {end_time - ue.state_time} seconds"
 
-            if g_verbose <= 4 and ue.error_message == None:
+            if g_verbose <= 4 and ue.error_message == "":
                 continue
             SentMsg, err = parse_NAS5G(ue.MsgInBytes)
             if err:
@@ -593,6 +585,13 @@ class UESim:
                      ['Received', RcvMsgShow] ]
             print(tabulate(table, headers, tablefmt="grid"))
 
+        # Calculate the number of seconds between the monotonic starting point and the Unix epoch
+        epoch_to_monotonic_s = time.monotonic() - time.time()
+        
+        # Convert the Unix timestamp to monotonic time in nanoseconds
+        monotonic_time_ns = int((latest_time + epoch_to_monotonic_s) * 1e9)
+ 
+        self.completed_at.value = monotonic_time_ns
         print(f"Ended test after {end_time - start_time} seconds \nRan test for {self.number} UEs in {latest_time - start_time} seconds procedures completed for {completed} UEs, failed for {len(self.ue_list) - completed} \
               \nMinimum interval time {min_interval} seconds and Maximum interval time {max_interval}")
 
@@ -647,6 +646,6 @@ class UESim:
             
         fgmm_state_names = [
                 FGMMState(i).name for i in range(FGMMState.FGMM_STATE_MAX)]
-        self.show_compliance_results(fgmm_state_names)
+        self.show_results(fgmm_state_names)
 
         print(f"Stopping UESim press ctrl+c to end program")

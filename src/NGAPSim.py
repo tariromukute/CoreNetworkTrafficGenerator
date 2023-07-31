@@ -3,8 +3,8 @@ import time
 import logging
 import threading
 import socket
-from SCTP import SCTPClient
-from GTPU import GTPU
+from src.SCTP import SCTPClient
+from src.GTPU import GTPU
 from pycrate_asn1dir import NGAP
 from pycrate_mobile.NAS import parse_NAS5G
 from pycrate_core import utils_py3

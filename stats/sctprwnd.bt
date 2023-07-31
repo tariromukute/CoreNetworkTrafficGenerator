@@ -1,0 +1,13 @@
+#include <net/sctp/structs.h>
+BEGIN { 
+    @rwnd = (uint32) 0;
+}
+
+tracepoint:sctp:sctp_probe /@rwnd != args->rwnd / {
+    @rwnd = args->rwnd;
+    @delta[nsecs] = args->rwnd;
+}
+
+END {
+    clear(@rwnd)
+}'

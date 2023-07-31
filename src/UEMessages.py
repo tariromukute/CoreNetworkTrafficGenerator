@@ -1,4 +1,4 @@
-from UEUtils import *
+from src.UEUtils import *
 import socket
 from pycrate_mobile.TS24008_IE import encode_bcd
 from pycrate_mobile.TS24501_IE import FGSIDTYPE_IMEISV

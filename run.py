@@ -2,23 +2,22 @@ import time
 from argparse import ArgumentParser
 # Define struct for arguments
 import signal
-from UESim import UESim
-from SCTP import SCTPClient
-from NGAPSim import GNB
-
-from multiprocessing import Process, active_children, Pipe
+from src.UESim import UESim
+from src.SCTP import SCTPClient
+from src.NGAPSim import GNB
+from netstats.sctprwnd import b, rwnd_map
+from multiprocessing import Process, active_children, Pipe, Value
 import logging
 import yaml
-
 
 logger = logging.getLogger('__app__')
 
 # Multi process class
 class MultiProcess:
-    def __init__(self, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, interval, statistics, verbose):
+    def __init__(self, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, interval, statistics, verbose, completed_at):
         sctp_client = SCTPClient(server_config)
         self.gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose)
-        self.ueSim = UESim(ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, interval, statistics, verbose)
+        self.ueSim = UESim(ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, interval, statistics, verbose, completed_at)
         self.processes = [
             Process(target=self.gnb.run),
             Process(target=self.ueSim.run),
@@ -59,20 +58,24 @@ def main(args: Arguments):
     upf_to_ue, ue_to_upf = Pipe(duplex=True)
    
     # Create multi process
-    multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, args.interval, args.statistics, args.verbose)
+    completed_at = Value('d', 0.0)
+    multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, args.interval, args.statistics, args.verbose, completed_at)
     multi_process.run()
     
     while True:
         try:
             # Check if all child processes have terminated
             if len(active_children()) == 0:
-                print("Exiting......")
                 break
             # Wait for a short time before checking again
             time.sleep(1)
         except KeyboardInterrupt:
-            print("Program Interrupted")
-
+            print()
+            # print("Program Interrupted")
+    
+    for k, v in sorted(rwnd_map.items(), key=lambda rwnd_map: rwnd_map[0].nsecs):
+        print("%d %d %8d" % (k.peer_port, k.nsecs, v.value))
+    print("Final Value: ", completed_at.value)
 
 # Define parser arguments
 parser = ArgumentParser(description='Run 5G Core traffic generator')

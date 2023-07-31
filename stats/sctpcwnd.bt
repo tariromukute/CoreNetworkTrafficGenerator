@@ -1,0 +1,24 @@
+#include <net/sctp/structs.h>
+
+BEGIN { 
+    @cwnd = (uint32) 0;
+}
+
+tracepoint:sctp:sctp_probe_path /@cwnd != args->cwnd / {
+    $addr = (union sctp_addr *)args->ipaddr; 
+    $saddr = ntop(0);
+    if ($addr->sa.sa_family == AF_INET) {
+        $sk = $addr->v4;
+        $saddr = ntop(AF_INET, $sk.sin_addr.s_addr);
+    } else {
+        // AF_INET6
+        $sk6 = $addr->v6;
+        $saddr = ntop(AF_INET6, $sk6.sin6_addr.in6_u.u6_addr8);
+    }
+    @cwnd = args->cwnd;
+    @delta[$saddr, strftime("%H:%M:%S:%f", nsecs)] = args->cwnd;
+}
+
+END {
+    clear(@cwnd)
+}'
