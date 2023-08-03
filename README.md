@@ -64,8 +64,10 @@ cd ~/cn-tg/
 #                         GNB configuration file
 #   -f FILE, --file FILE  Log file directory
 #   -v, --verbose         Increase verbosity (can be specified multiple times)
+#   -s, --statistics      Enable print of statistics
+#   -e, --ebpf            Load ebpf programs to collect and graph SCTP stats
 
-python3 src/run.py -u config/oai-cn5g-ue.yaml -g config/oai-cn5g-gnb.yaml -vvv
+python3 run.py -u config/oai-cn5g-ue.yaml -g config/oai-cn5g-gnb.yaml -vvv
 ```
 
 ### Sending user plane traffic

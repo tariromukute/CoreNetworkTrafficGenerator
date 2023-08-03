@@ -1,20 +1,6 @@
 #!/usr/bin/env python
-#
-# bitehist.py   Block I/O size histogram.
-#               For Linux, uses BCC, eBPF. See .c file.
-#
-# USAGE: bitesize
-#
-# Ctrl-C will print the partially gathered histogram then exit.
-#
-# Copyright (c) 2016 Allan McAleavy
-# Licensed under the Apache License, Version 2.0 (the "License")
-#
-# 05-Feb-2016 Allan McAleavy ran pep8 against file
-# 19-Mar-2019 Brendan Gregg  Switched to use tracepoints.
 
 from bcc import BPF
-from time import sleep
 
 bpf_text = """
 #include <net/sctp/structs.h>
@@ -49,7 +35,7 @@ TRACEPOINT_PROBE(sctp, sctp_probe)
 # load BPF program
 b = BPF(text=bpf_text)
 
-print("Tracing block I/O... Hit Ctrl-C to end.")
+print("Tracing SCTP associations")
 
 rwnd_map = b.get_table("rwnd_map")
 

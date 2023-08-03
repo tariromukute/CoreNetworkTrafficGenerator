@@ -332,7 +332,7 @@ class UESim:
     exit_flag = False
     global start_time
 
-    def __init__(self, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_profiles, interval, statistics, verbose, completed_at):
+    def __init__(self, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_profiles, interval, statistics, verbose, ue_sim_time):
         global g_verbose
         g_verbose = verbose
         self.ngap_to_ue = ngap_to_ue
@@ -344,7 +344,7 @@ class UESim:
         self.number = 0
         self.interval = interval
         self.ue_profiles = ue_profiles
-        self.completed_at = completed_at
+        self.ue_sim_time = ue_sim_time
         global logger
         
         # Set logging level based on the verbose argument
@@ -519,9 +519,6 @@ class UESim:
         return ue_state_count, fgmm_state_names
 
     def print_stats_process(self):
-        global start_time
-        min_interval = 9999999
-        max_interval = 0
         # run forever
         while not UESim.exit_flag:
             try:
@@ -548,6 +545,7 @@ class UESim:
         min_interval = 9999999
         max_interval = 0
         completed = 0
+        sum_interval = 0
         # Print test results in a table
         for supi, ue in self.ue_list.items():
             # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
@@ -556,6 +554,7 @@ class UESim:
                 latest_time = ue.state_time if latest_time < ue.state_time else latest_time
                 min_interval = ue.end_time - ue.start_time if min_interval > ue.end_time - ue.start_time else min_interval
                 max_interval = ue.end_time - ue.start_time if max_interval < ue.end_time - ue.start_time else max_interval
+                sum_interval += ue.end_time - ue.start_time
                 completed += 1
             else:
                 ue.error_message += f"\n\nUE hung for {end_time - ue.state_time} seconds"
@@ -587,13 +586,11 @@ class UESim:
 
         # Calculate the number of seconds between the monotonic starting point and the Unix epoch
         epoch_to_monotonic_s = time.monotonic() - time.time()
-        
-        # Convert the Unix timestamp to monotonic time in nanoseconds
-        monotonic_time_ns = int((latest_time + epoch_to_monotonic_s) * 1e9)
  
-        self.completed_at.value = monotonic_time_ns
+        self.ue_sim_time.end_time.value = int((latest_time + epoch_to_monotonic_s) * 1e9)
+        self.ue_sim_time.start_time.value = int((start_time + epoch_to_monotonic_s) * 1e9)
         print(f"Ended test after {end_time - start_time} seconds \nRan test for {self.number} UEs in {latest_time - start_time} seconds procedures completed for {completed} UEs, failed for {len(self.ue_list) - completed} \
-              \nMinimum interval time {min_interval} seconds and Maximum interval time {max_interval}")
+              \nMinimum interval time {min_interval} seconds, Average interval time {sum_interval/completed} and Maximum interval time {max_interval}")
 
     def print_compliance_test_results(self):
         global start_time
