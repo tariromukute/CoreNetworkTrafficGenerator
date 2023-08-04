@@ -102,6 +102,46 @@ key_str += cwnd_key_text
 store_str += cwnd_store_text
 program_str += cwnd_program_text
 
+# Define program for SCTP rtt stats
+rtt_key_text = """
+struct rtt_key_t {
+    u64 proto;
+    u64 ipaddr[2]; // IPv4: store in laddr[0]
+    u64 nsecs;
+};
+"""
+
+rtt_store_text = """
+BPF_HASH(rtt_map, struct rtt_key_t, u32);
+BPF_ARRAY(g_rtt, u64, 1);
+"""
+
+rtt_program_text = """
+int kprobe__sctp_transport_update_rto(struct pt_regs *ctx, struct sctp_transport *tp, __u32 rtt)
+{
+
+    int index = 0;
+    u64 *c_rtt = g_rtt.lookup(&index);
+    if (!c_rtt || *c_rtt == rtt) {
+        return 0;
+    }
+
+    struct rtt_key_t key = {.proto = AF_INET, .nsecs = bpf_ktime_get_ns() };
+
+    if (tp->ipaddr.sa.sa_family == AF_INET) {
+       key.ipaddr[0] = tp->ipaddr.v4.sin_addr.s_addr;
+    }
+
+    *c_rtt = rtt;
+    rtt_map.update(&key, &rtt);
+    return 0;
+}
+"""
+
+key_str += rtt_key_text
+store_str += rtt_store_text
+program_str += rtt_program_text
+
 # Replace 
 bpf_text = bpf_text.replace("KEY", key_str)
 bpf_text = bpf_text.replace("STORE", store_str)
@@ -116,6 +156,8 @@ rwnd_map = b.get_table("rwnd_map")
 
 cwnd_map = b.get_table("cwnd_map")
 
+rtt_map = b.get_table("rtt_map")
+
 # try:
 #     time.sleep(99999999)
 # except KeyboardInterrupt:
@@ -125,6 +167,15 @@ cwnd_map = b.get_table("cwnd_map")
 
 #     print("\n%-32s %-14s %8s" % ("ADDR", "TIME (ns)", "CWND(bytes)"))
 #     for k, v in sorted(cwnd_map.items(), key=lambda cwnd_map: cwnd_map[0].nsecs):
+#         address = ""
+#         if k.proto == AF_INET:
+#             address = inet_ntop(AF_INET, pack("I", k.ipaddr[0]))
+#         elif  k.proto == AF_INET6:
+#             address = inet_ntop(AF_INET6, k.ipaddr)
+#         print("%-32s %-14d %8d" % (address, k.nsecs, v.value))
+
+#     print("\n%-32s %-14s %8s" % ("ADDR", "TIME (ns)", "RTT (ms)"))
+#     for k, v in sorted(rtt_map.items(), key=lambda rtt_map: rtt_map[0].nsecs):
 #         address = ""
 #         if k.proto == AF_INET:
 #             address = inet_ntop(AF_INET, pack("I", k.ipaddr[0]))

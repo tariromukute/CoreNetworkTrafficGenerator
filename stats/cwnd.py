@@ -11,7 +11,7 @@ bpf_text = """
 #define MAX_ENTRIES 1024
 
 struct cwnd_key_t {
-    u64 proto;    // familiy << 16 | type
+    u64 proto;
     u64 ipaddr[2]; // IPv4: store in laddr[0]
     u64 nsecs;
 };

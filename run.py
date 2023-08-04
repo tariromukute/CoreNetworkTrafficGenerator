@@ -62,7 +62,7 @@ def main(args: Arguments):
             print(exc)
 
     if args.ebpf:
-        from stats.sctp import b, rwnd_map, cwnd_map
+        from stats.sctp import b, rwnd_map, cwnd_map, rtt_map
 
     # Calculate the number of seconds between the monotonic starting point and the Unix epoch
     epoch_to_monotonic_s = time.monotonic() - time.time()
@@ -93,6 +93,7 @@ def main(args: Arguments):
         from collections import defaultdict
         from socket import inet_ntop, AF_INET, AF_INET6
         from struct import pack
+        import copy
         
         """ Collect and structure results for rwnd
 
@@ -104,7 +105,7 @@ def main(args: Arguments):
         # Filter rwnd_map to get values before completed_at.value
         filtered_rwnd_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, rwnd_map.items()))
         # We assume the last value recorded was still the value when the program was terminated
-        last_value = filtered_rwnd_map[-1]
+        last_value = copy.deepcopy(filtered_rwnd_map[-1])
         last_key = last_value[0]
         last_key.nsecs = int(ue_sim_time.end_time.value)
         end_value = (last_key, last_value[1])
@@ -129,7 +130,7 @@ def main(args: Arguments):
         filtered_cwnd_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, cwnd_map.items()))
 
         # We assume the last value recorded was still the value when the program was terminated
-        last_value = filtered_cwnd_map[-1]
+        last_value = copy.deepcopy(filtered_cwnd_map[-1])
         last_key = last_value[0]
         last_key.nsecs = int(ue_sim_time.end_time.value)
         end_value = (last_key, last_value[1])
@@ -138,7 +139,7 @@ def main(args: Arguments):
         # Sort filtered_rwnd_map by key
         sorted_cwnd_map = sorted(filtered_cwnd_map, key=lambda x: x[0].nsecs)
         cwnd_init_nsecs_time = sorted_cwnd_map[0][0].nsecs
-
+        
         for k, v in sorted_cwnd_map:
             address = ""
             if k.proto == AF_INET:
@@ -150,6 +151,36 @@ def main(args: Arguments):
 
         cwnd_results = list(cwnd_dict.values())
 
+        """ Collect and structure results for rtt
+
+        """
+        rtt_dict = defaultdict(lambda: {"address": None, "values": []})
+
+        # Filter rwnd_map to get values before completed_at.value
+        filtered_rtt_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, rtt_map.items()))
+
+        # We assume the last value recorded was still the value when the program was terminated
+        last_value = copy.deepcopy(filtered_rtt_map[-1])
+        last_key = last_value[0]
+        last_key.nsecs = int(ue_sim_time.end_time.value)
+        end_value = (last_key, last_value[1])
+        filtered_rtt_map.append(end_value)
+
+        # Sort filtered_rwnd_map by key
+        sorted_rtt_map = sorted(filtered_rtt_map, key=lambda x: x[0].nsecs)
+        rtt_init_nsecs_time = sorted_rtt_map[0][0].nsecs
+
+        for k, v in sorted_rtt_map:
+            address = ""
+            if k.proto == AF_INET:
+                address = inet_ntop(AF_INET, pack("I", k.ipaddr[0]))
+            elif  k.proto == AF_INET6:
+                address = inet_ntop(AF_INET6, k.ipaddr)
+            rtt_dict[address]["address"] = address
+            rtt_dict[address]["values"].append({"time_ns": k.nsecs - rtt_init_nsecs_time, "value": v.value})
+
+        rtt_results = list(rtt_dict.values())
+
         # Plot SCTP rwnd graph using matlibplot
         import matplotlib.pyplot as plt
         
@@ -159,6 +190,7 @@ def main(args: Arguments):
         min_index = y_rwnd.index(min(y_rwnd))
 
         # Plot the data and format the plot
+        plt.figure()
         plt.plot(x_rwnd, y_rwnd)
         plt.title(f"SCTP rwnd over duration of simulation")
         plt.xlabel("Time (ns)")
@@ -185,9 +217,9 @@ def main(args: Arguments):
         # Get the list of x and y values from the data
         x_cwnd = [point["time_ns"] for point in cwnd_results[0]["values"]]
         y_cwnd = [point["value"] for point in cwnd_results[0]["values"]]
-        min_index = y_cwnd.index(min(y_cwnd))
-
+        cwnd_min_index = y_cwnd.index(min(y_cwnd))
         # Plot the data and format the plot
+        plt.figure()
         plt.plot(x_cwnd, y_cwnd)
         plt.title(f"SCTP cwnd over duration of simulation")
         plt.xlabel("Time (ns)")
@@ -199,17 +231,49 @@ def main(args: Arguments):
                     )
         
         # Add a marker at the lowest point
-        plt.plot(x_cwnd[min_index], y_cwnd[min_index], marker='o', color='red')
+        plt.plot(x_cwnd[cwnd_min_index], y_cwnd[cwnd_min_index], marker='o', color='red')
 
         # Label the marker
-        plt.text(x_cwnd[min_index], y_cwnd[min_index], f'Lowest Point ({y_cwnd[min_index]})')
+        plt.text(x_cwnd[cwnd_min_index], y_cwnd[cwnd_min_index], f'Lowest Point ({y_cwnd[cwnd_min_index]})')
         
         # Add a legend to the plot
         plt.legend()
 
         plt.savefig("cwnd_plot.png")
 
-        print(f"Lowest cwnd is {y_cwnd[min_index]}")
+        print(f"Lowest cwnd is {y_cwnd[cwnd_min_index]}")
+
+        # ========== RTT ===============
+        # Get the list of x and y values from the data
+        x_rtt = [point["time_ns"] for point in rtt_results[0]["values"]]
+        y_rtt = [point["value"] for point in rtt_results[0]["values"]]
+        min_index = y_rtt.index(min(y_rtt))
+        max_index = y_rtt.index(max(y_rtt))
+
+        # Plot the data and format the plot
+        plt.figure()
+        plt.plot(x_rtt, y_rtt)
+        plt.title(f"SCTP rtt over duration of simulation")
+        plt.xlabel("Time (ns)")
+        plt.ylabel("SCTP rtt value (ms)")
+
+        # Add a vertical line at the simulation start time
+        plt.axvline(x=(ue_sim_time.start_time.value - rtt_init_nsecs_time), color='r', linestyle='--',
+                    label='Simulation started'
+                    )
+        
+        # Add a marker at the lowest point
+        plt.plot(x_rtt[max_index], y_rtt[max_index], marker='o', color='red')
+
+        # Label the marker
+        plt.text(x_rtt[max_index], y_rtt[max_index], f'Highest Point ({y_rtt[max_index]})')
+        
+        # Add a legend to the plot
+        plt.legend()
+
+        plt.savefig("rtt_plot.png")
+
+        print(f"Highest rtt is {y_rtt[max_index]}")
 
 # Define parser arguments
 parser = ArgumentParser(description='Run 5G Core traffic generator')
