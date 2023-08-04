@@ -62,14 +62,13 @@ def main(args: Arguments):
             print(exc)
 
     if args.ebpf:
-        from stats.sctprwnd import b, rwnd_map
+        from stats.sctp import b, rwnd_map, cwnd_map
 
     # Calculate the number of seconds between the monotonic starting point and the Unix epoch
     epoch_to_monotonic_s = time.monotonic() - time.time()
     
     # Convert the Unix timestamp to monotonic time in nanoseconds
     start_time_ns = int((time.time() + epoch_to_monotonic_s) * 1e9)
-    print(f"Program starts at {start_time_ns} monotonic time in nanoseconds")
     
     ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
     upf_to_ue, ue_to_upf = Pipe(duplex=True)
@@ -92,7 +91,13 @@ def main(args: Arguments):
             # print("Program Interrupted")
     if args.ebpf:
         from collections import defaultdict
+        from socket import inet_ntop, AF_INET, AF_INET6
+        from struct import pack
         
+        """ Collect and structure results for rwnd
+
+        """
+
         # to hold json data of rwnd stats
         rwnd_dict = defaultdict(lambda: {"port": None, "values": []})
         
@@ -107,48 +112,104 @@ def main(args: Arguments):
         
         # Sort filtered_rwnd_map by key
         sorted_rwnd_map = sorted(filtered_rwnd_map, key=lambda x: x[0].nsecs)
-        init_nsecs_time = sorted_rwnd_map[0][0].nsecs
-
-        # calculate the average which is average of (current k.necs - previous k.nsecs) * previous v.value 
+        rwnd_init_nsecs_time = sorted_rwnd_map[0][0].nsecs
+        
         for k, v in sorted_rwnd_map:
             rwnd_dict[k.peer_port]["port"] = k.peer_port
-            rwnd_dict[k.peer_port]["values"].append({"time_ns": k.nsecs - init_nsecs_time, "value": v.value})
+            rwnd_dict[k.peer_port]["values"].append({"time_ns": k.nsecs - rwnd_init_nsecs_time, "value": v.value})
         
-        
-
         rwnd_results = list(rwnd_dict.values())
+
+        """ Collect and structure results for cwnd
+
+        """
+        cwnd_dict = defaultdict(lambda: {"address": None, "values": []})
+
+        # Filter rwnd_map to get values before completed_at.value
+        filtered_cwnd_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, cwnd_map.items()))
+
+        # We assume the last value recorded was still the value when the program was terminated
+        last_value = filtered_cwnd_map[-1]
+        last_key = last_value[0]
+        last_key.nsecs = int(ue_sim_time.end_time.value)
+        end_value = (last_key, last_value[1])
+        filtered_cwnd_map.append(end_value)
+
+        # Sort filtered_rwnd_map by key
+        sorted_cwnd_map = sorted(filtered_cwnd_map, key=lambda x: x[0].nsecs)
+        cwnd_init_nsecs_time = sorted_cwnd_map[0][0].nsecs
+
+        for k, v in sorted_cwnd_map:
+            address = ""
+            if k.proto == AF_INET:
+                address = inet_ntop(AF_INET, pack("I", k.ipaddr[0]))
+            elif  k.proto == AF_INET6:
+                address = inet_ntop(AF_INET6, k.ipaddr)
+            cwnd_dict[address]["address"] = address
+            cwnd_dict[address]["values"].append({"time_ns": k.nsecs - cwnd_init_nsecs_time, "value": v.value})
+
+        cwnd_results = list(cwnd_dict.values())
 
         # Plot SCTP rwnd graph using matlibplot
         import matplotlib.pyplot as plt
         
         # Get the list of x and y values from the data
-        x = [point["time_ns"] for point in rwnd_results[0]["values"]]
-        y = [point["value"] for point in rwnd_results[0]["values"]]
-        min_index = y.index(min(y))
+        x_rwnd = [point["time_ns"] for point in rwnd_results[0]["values"]]
+        y_rwnd = [point["value"] for point in rwnd_results[0]["values"]]
+        min_index = y_rwnd.index(min(y_rwnd))
 
         # Plot the data and format the plot
-        plt.plot(x, y)
+        plt.plot(x_rwnd, y_rwnd)
         plt.title(f"SCTP rwnd over duration of simulation")
         plt.xlabel("Time (ns)")
         plt.ylabel("SCTP rwnd value (bytes)")
 
         # Add a vertical line at the simulation start time
-        plt.axvline(x=(ue_sim_time.start_time.value - init_nsecs_time), color='r', linestyle='--',
+        plt.axvline(x=int(ue_sim_time.start_time.value - rwnd_init_nsecs_time), color='r', linestyle='--',
                     label='Simulation started'
                     )
         
         # Add a marker at the lowest point
-        plt.plot(x[min_index], y[min_index], marker='o', color='red')
+        plt.plot(x_rwnd[min_index], y_rwnd[min_index], marker='o', color='red')
 
         # Label the marker
-        plt.text(x[min_index], y[min_index], f'Lowest Point ({y[min_index]})')
+        plt.text(x_rwnd[min_index], y_rwnd[min_index], f'Lowest Point ({y_rwnd[min_index]})')
         
         # Add a legend to the plot
         plt.legend()
 
         plt.savefig("rwnd_plot.png")
 
-        print(f"Lowest rwnd is {y[min_index]}")
+        print(f"Lowest rwnd is {y_rwnd[min_index]}")
+
+        # Get the list of x and y values from the data
+        x_cwnd = [point["time_ns"] for point in cwnd_results[0]["values"]]
+        y_cwnd = [point["value"] for point in cwnd_results[0]["values"]]
+        min_index = y_cwnd.index(min(y_cwnd))
+
+        # Plot the data and format the plot
+        plt.plot(x_cwnd, y_cwnd)
+        plt.title(f"SCTP cwnd over duration of simulation")
+        plt.xlabel("Time (ns)")
+        plt.ylabel("SCTP cwnd value (bytes)")
+
+        # Add a vertical line at the simulation start time
+        plt.axvline(x=(ue_sim_time.start_time.value - cwnd_init_nsecs_time), color='r', linestyle='--',
+                    label='Simulation started'
+                    )
+        
+        # Add a marker at the lowest point
+        plt.plot(x_cwnd[min_index], y_cwnd[min_index], marker='o', color='red')
+
+        # Label the marker
+        plt.text(x_cwnd[min_index], y_cwnd[min_index], f'Lowest Point ({y_cwnd[min_index]})')
+        
+        # Add a legend to the plot
+        plt.legend()
+
+        plt.savefig("cwnd_plot.png")
+
+        print(f"Lowest cwnd is {y_cwnd[min_index]}")
 
 # Define parser arguments
 parser = ArgumentParser(description='Run 5G Core traffic generator')
