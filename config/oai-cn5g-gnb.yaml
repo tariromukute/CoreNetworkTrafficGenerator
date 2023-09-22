@@ -11,7 +11,7 @@ gtpIp: 10.0.0.16    # gNB's local IP address for N3 Interface (Usually same with
 
 # List of AMF address information
 amfConfigs:
-  - address: 192.168.70.132
+  - address: 10.0.0.37
     port: 38412
 
 fgcMac: 'fa:16:3e:d8:d9:80' # Mac address of the Machine with the core network

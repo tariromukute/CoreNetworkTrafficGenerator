@@ -103,13 +103,15 @@ def main(args: Arguments):
         rwnd_dict = defaultdict(lambda: {"port": None, "values": []})
         
         # Filter rwnd_map to get values before completed_at.value
-        filtered_rwnd_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, rwnd_map.items()))
+        # filtered_rwnd_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, rwnd_map.items()))
+        filtered_rwnd_map = list(filter(lambda x: x[0].nsecs > 0, rwnd_map.items()))
         # We assume the last value recorded was still the value when the program was terminated
-        last_value = copy.deepcopy(filtered_rwnd_map[-1])
-        last_key = last_value[0]
-        last_key.nsecs = int(ue_sim_time.end_time.value)
-        end_value = (last_key, last_value[1])
-        filtered_rwnd_map.append(end_value)
+        print(f"Length {ue_sim_time.end_time.value}")
+        # last_value = copy.deepcopy(filtered_rwnd_map[-1])
+        # last_key = last_value[0]
+        # last_key.nsecs = int(ue_sim_time.end_time.value)
+        # end_value = (last_key, last_value[1])
+        # filtered_rwnd_map.append(end_value)
         
         # Sort filtered_rwnd_map by key
         sorted_rwnd_map = sorted(filtered_rwnd_map, key=lambda x: x[0].nsecs)
@@ -127,14 +129,15 @@ def main(args: Arguments):
         cwnd_dict = defaultdict(lambda: {"address": None, "values": []})
 
         # Filter rwnd_map to get values before completed_at.value
-        filtered_cwnd_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, cwnd_map.items()))
+        # filtered_cwnd_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, cwnd_map.items()))
+        filtered_cwnd_map = list(filter(lambda x: x[0].nsecs > 0, cwnd_map.items()))
 
         # We assume the last value recorded was still the value when the program was terminated
-        last_value = copy.deepcopy(filtered_cwnd_map[-1])
-        last_key = last_value[0]
-        last_key.nsecs = int(ue_sim_time.end_time.value)
-        end_value = (last_key, last_value[1])
-        filtered_cwnd_map.append(end_value)
+        # last_value = copy.deepcopy(filtered_cwnd_map[-1])
+        # last_key = last_value[0]
+        # last_key.nsecs = int(ue_sim_time.end_time.value)
+        # end_value = (last_key, last_value[1])
+        # filtered_cwnd_map.append(end_value)
 
         # Sort filtered_rwnd_map by key
         sorted_cwnd_map = sorted(filtered_cwnd_map, key=lambda x: x[0].nsecs)
@@ -157,14 +160,15 @@ def main(args: Arguments):
         rtt_dict = defaultdict(lambda: {"address": None, "values": []})
 
         # Filter rwnd_map to get values before completed_at.value
-        filtered_rtt_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, rtt_map.items()))
+        # filtered_rtt_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, rtt_map.items()))
+        filtered_rtt_map = list(filter(lambda x: x[0].nsecs > 0, rtt_map.items()))
 
         # We assume the last value recorded was still the value when the program was terminated
-        last_value = copy.deepcopy(filtered_rtt_map[-1])
-        last_key = last_value[0]
-        last_key.nsecs = int(ue_sim_time.end_time.value)
-        end_value = (last_key, last_value[1])
-        filtered_rtt_map.append(end_value)
+        # last_value = copy.deepcopy(filtered_rtt_map[-1])
+        # last_key = last_value[0]
+        # last_key.nsecs = int(ue_sim_time.end_time.value)
+        # end_value = (last_key, last_value[1])
+        # filtered_rtt_map.append(end_value)
 
         # Sort filtered_rwnd_map by key
         sorted_rtt_map = sorted(filtered_rtt_map, key=lambda x: x[0].nsecs)

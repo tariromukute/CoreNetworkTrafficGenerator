@@ -590,7 +590,7 @@ class UESim:
         self.ue_sim_time.end_time.value = int((latest_time + epoch_to_monotonic_s) * 1e9)
         self.ue_sim_time.start_time.value = int((start_time + epoch_to_monotonic_s) * 1e9)
         print(f"Ended test after {end_time - start_time} seconds \nRan test for {self.number} UEs in {latest_time - start_time} seconds procedures completed for {completed} UEs, failed for {len(self.ue_list) - completed} \
-              \nMinimum interval time {min_interval} seconds, Average interval time {sum_interval/completed} and Maximum interval time {max_interval}")
+              \nMinimum interval time {min_interval} seconds, Average interval time {sum_interval/completed if completed > 0 else -1} and Maximum interval time {max_interval}")
 
     def print_compliance_test_results(self):
         global start_time
@@ -646,3 +646,4 @@ class UESim:
         self.show_results(fgmm_state_names)
 
         print(f"Stopping UESim press ctrl+c to end program")
+        sys.exit(0)

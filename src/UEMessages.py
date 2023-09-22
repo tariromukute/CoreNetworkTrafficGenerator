@@ -32,9 +32,10 @@ def registration_complete(ue, IEs, Msg=None):
     # IEs['SORTransContainer'] = { 'ListInd': }
     Msg, = FGMMRegistrationComplete(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
-    SecMsg = security_prot_encrypt(ue, Msg)
+    SecMsg = security_prot_encrypt_ciphered(ue, Msg)
     ue.set_state(FGMMState.REGISTERED)
     return SecMsg, '5GMMRegistrationComplete'
+    # return Msg, '5GMMRegistrationComplete'
 
 
 def mo_deregistration_request(ue, IEs, Msg=None):
@@ -46,7 +47,8 @@ def mo_deregistration_request(ue, IEs, Msg=None):
     Msg = FGMMMODeregistrationRequest(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
     ue.set_state(FGMMState.DEREGISTERED_INITIATED)
-    return Msg, '5GMMMODeregistrationRequest'
+    SecMsg = security_prot_encrypt_ciphered(ue, Msg)
+    return SecMsg, '5GMMMODeregistrationRequest'
 
 def deregistration_complete(ue, IEs, Msg=None):
     ue.set_state(FGMMState.DEREGISTERED)

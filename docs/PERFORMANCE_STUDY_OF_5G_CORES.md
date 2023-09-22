@@ -21,7 +21,7 @@ This study will:
 
 ## Install and set up openstack on a workstation
 
-There are two options for setting up the local cloud (testbed), [using Microstack](#using-microstack) snd [using Devstack](#using-devstack). Microstack worked fine for a start but there we couple of issues I had to workaround. You can see this under the [Microstack Gotchas](#microstack-gotchas) section. One of the issues ended up reoccuring and could resolve it so had to switch to Devstack. It is possible that one might not face the issue on their environment. Based on this we recommend using Devstack for replicaing the study. Aside from the issues encountered with Microstack, with Devstack you can use the latest stable version of openstack `zed` where as Microstack will install `ussuri` (at the time of writing).
+There are two options for setting up the local cloud (testbed), [using Microstack](#using-microstack) and [using Devstack](#using-devstack). Microstack worked fine for a start but there we couple of issues I had to workaround. You can see this under the [Microstack Gotchas](#microstack-gotchas) section. One of the issues ended up reoccuring and could resolve it so had to switch to Devstack. It is possible that one might not face the issue on their environment. Based on this we recommend using Devstack for replicaing the study. Aside from the issues encountered with Microstack, with Devstack you can use the latest stable version of openstack `zed` where as Microstack will install `ussuri` (at the time of writing).
 
 **Installing devstack**
 

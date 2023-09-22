@@ -1,0 +1,14 @@
+[Unit]
+Description=OAI AMF Daemon
+After=network-online.target
+
+[Service]
+Type=simple
+
+ExecStart=/usr/local/bin/amf -c /etc/oai/config.yaml -o
+Restart=always
+RestartSec=2
+RestartPreventExitStatus=1
+
+[Install]
+WantedBy=multi-user.target

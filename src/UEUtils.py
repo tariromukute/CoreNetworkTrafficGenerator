@@ -8,9 +8,9 @@ from pycrate_mobile.NAS5G import parse_NAS5G
 from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
 
-# logging.basicConfig(filename='/tmp/core-tg/core.log',
-#                     filemode='a',
-#                     level=logging.DEBUG)
+logging.basicConfig(filename='/tmp/core-tg/core.log',
+                    filemode='a',
+                    level=logging.INFO)
 
 logger = logging.getLogger('__UESim__') 
 
@@ -54,6 +54,21 @@ def security_prot_encrypt(ue, Msg):
     SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
     SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=ue.IntegAlgo, seqnoff=0, bearer=1)
     return SecMsg
+
+def security_prot_encrypt_ciphered(ue, Msg):
+    try:
+        if ue.CiphAlgo == 0:
+            return Msg
+        IEs = {}
+        IEs['5GMMHeaderSec'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 2 }
+        SecMsg = FGMMSecProtNASMessage(val=IEs)
+        SecMsg['NASMessage'].set_val(Msg.to_bytes())
+        SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
+        SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=ue.IntegAlgo, seqnoff=0, bearer=1)
+        return SecMsg
+    except:
+        # print(f"ue.CiphAlgo {ue.CiphAlgo} ue.IntegAlgo {ue.IntegAlgo} ue.state {ue}")
+        return Msg
 
 def security_prot_decrypt(Msg, ue):
     
