@@ -134,7 +134,7 @@ def security_mode_complete_missing_nas_container(ue, IEs, Msg):
     # Msg['NASContainer']['V'].set_val(RegMsg.to_bytes()) 
     # Encrypt NAS message
     ue.MsgInBytes = Msg.to_bytes()
-    SecMsg = security_prot_encrypt(ue, Msg)
+    SecMsg = security_prot_encrypt_ciphered(ue, Msg)
     logger.debug(f"UE {ue.supi} sending invalid_security_mode_complete")
     ue.set_state(FGMMState.SECURITY_MODE_INITIATED)
     return SecMsg, 'FGMMSecurityModeComplete'

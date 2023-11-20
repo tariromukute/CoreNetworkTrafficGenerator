@@ -57,14 +57,18 @@ def security_prot_encrypt(ue, Msg):
 
 def security_prot_encrypt_ciphered(ue, Msg):
     try:
-        if ue.CiphAlgo == 0:
-            return Msg
         IEs = {}
-        IEs['5GMMHeaderSec'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 2 }
+        if ue.CiphAlgo != 0:
+            IEs['5GMMHeaderSec'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 2 }
+        else:
+            IEs['5GMMHeaderSec'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0 }
+            # return Msg
         SecMsg = FGMMSecProtNASMessage(val=IEs)
         SecMsg['NASMessage'].set_val(Msg.to_bytes())
-        SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
-        SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=ue.IntegAlgo, seqnoff=0, bearer=1)
+        if ue.CiphAlgo != 0:
+            SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
+        if ue.IntegAlgo != 0:
+            SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=ue.IntegAlgo, seqnoff=0, bearer=1)
         return SecMsg
     except:
         # print(f"ue.CiphAlgo {ue.CiphAlgo} ue.IntegAlgo {ue.IntegAlgo} ue.state {ue}")

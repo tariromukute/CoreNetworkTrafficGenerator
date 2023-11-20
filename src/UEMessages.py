@@ -127,7 +127,7 @@ def security_mode_complete(ue, IEs, Msg):
     Msg['NASContainer']['V'].set_val(RegMsg.to_bytes())
     ue.MsgInBytes = Msg.to_bytes()
     # Encrypt NAS message
-    SecMsg = security_prot_encrypt(ue, Msg)
+    SecMsg = security_prot_encrypt_ciphered(ue, Msg)
     ue.set_state(FGMMState.SECURITY_MODE_INITIATED)
     return SecMsg, 'FGMMSecurityModeComplete'
 
@@ -150,7 +150,7 @@ def pdu_session_establishment_request(ue, IEs, Msg):
     ULMsg = FGMMULNASTransport(val=ULIEs)
     ULMsg['PayloadContainer']['V'].set_val(Msg.to_bytes())
     # Encrypt NAS message
-    SecMsg = security_prot_encrypt(ue, ULMsg)
+    SecMsg = security_prot_encrypt_ciphered(ue, ULMsg)
 
     ue.set_state(FGMMState.PDU_SESSION_REQUESTED)
     return SecMsg, '5GSMPDUSessionEstabRequest'
