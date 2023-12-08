@@ -148,5 +148,11 @@ Start cn-tg
 
 ```bash
 cd ~/cn-tg
-python3 run.py -u config/open5gs-ue.yaml -g config/open5gs-gnb.yaml -vv
+python3 run.py -u config/oai-cn5g-ue.yaml -g config/oai-cn5g-gnb.yaml -vv
+```
+
+Get logs
+
+```bash
+journalctl -u oai-* -n 200
 ```

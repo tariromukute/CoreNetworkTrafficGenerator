@@ -220,6 +220,11 @@ class GNB():
         PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
         ng_setup_request(PDU, IEs, self)
         ng_setup_pdu_aper = PDU.to_aper()
+        logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                gNB sending message to 5GC\n\
+|----------------------------------------------------------------------------------------------------------------|\n\
+{PDU.show()}\n\
+|----------------------------------------------------------------------------------------------------------------|\n\n")
         self.sctp.send(ng_setup_pdu_aper)
     
     def _load_ngap_to_ue_thread(self, ngap_to_ue_thread_function):
@@ -241,10 +246,15 @@ class GNB():
                 if data:
                     PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                     PDU.from_aper(data)
+                    logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                gNB received message from 5GC\n\
+|----------------------------------------------------------------------------------------------------------------|\n\
+{PDU.show()}\n\
+|----------------------------------------------------------------------------------------------------------------|\n\n")
                     procedureCode = PDU.get_val()[1]['procedureCode']
                     procedure_func = downlink_mapper.get(procedureCode)
                     if not procedure_func:
-                        logger.debug(f"Received downlink procedure {procedureCode} without handler mapped to it")
+                        # logger.debug(f"Received downlink procedure {procedureCode} without handler mapped to it")
                         continue
                     ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
                         
@@ -262,6 +272,11 @@ class GNB():
                             self.ues[ue_['ran_ue_ngap_id']]['dl_teid'] = dl_teid
                             self.ues[ue_['ran_ue_ngap_id']]['upf_address'] = upf_address
                     if ngap_pdu:
+                        logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                gNB sending message to 5GC\n\
+|----------------------------------------------------------------------------------------------------------------|\n\
+{ngap_pdu.show()}\n\
+|----------------------------------------------------------------------------------------------------------------|\n\n")
                         self.sctp.send(ngap_pdu.to_aper())
                     if nas_pdu:
                         self.ngap_to_ue.send((nas_pdu, ue_['ran_ue_ngap_id']))
@@ -298,7 +313,11 @@ class GNB():
                     if not procedure_func:
                         procedure_func = uplink_nas_transport
                     procedure_func(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id }, self)
-
+                    logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                gNB sending message to 5GC\n\
+|----------------------------------------------------------------------------------------------------------------|\n\
+{PDU.show()}\n\
+|----------------------------------------------------------------------------------------------------------------|\n\n")
                     self.sctp.send(PDU.to_aper())
             except:
                 # IF error occurs, likely from SCTP end program

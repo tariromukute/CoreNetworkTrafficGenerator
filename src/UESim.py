@@ -229,7 +229,13 @@ class UE:
         """
         if g_verbose >= 3 and Msg is not None:
             if type(Msg) is not bytes:
-                logger.debug(f"UE {self.supi} received message \n{Msg.show()}")
+                # logger.debug("|----------------------------------------------------------------------------------------------------------------|")
+                logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                UE {self.supi} received message\n\
+|----------------------------------------------------------------------------------------------------------------|\n\
+{Msg.show()}\n\
+|----------------------------------------------------------------------------------------------------------------|\n\n")
+
             validator(self.MsgInBytes, Msg)
 
         # Get the procedure function corresponding to the given response
@@ -256,7 +262,11 @@ class UE:
         Msg, sent_type = action_func(self, IEs, Msg)
         if sent_type == '5GUPMessage': # Already in bytes
             return Msg, self, sent_type
-        logger.debug(f"UE {self.supi} change to state {FGMMState(self.state).name} and sending message \n{Msg.show() if Msg != None else None}")
+        logger.debug(f" \n|----------------------------------------------------------------------------------------------------------------|\n\
+        UE {self.supi} changed to state {FGMMState(self.state).name} and sending message \n\
+|----------------------------------------------------------------------------------------------------------------|\n\
+\n{Msg.show() if Msg != None else None} \n\
+|----------------------------------------------------------------------------------------------------------------|\n\n")
 
         ReturnMsg = Msg.to_bytes() if Msg != None else None                                                           
         return ReturnMsg, self, sent_type
@@ -589,8 +599,12 @@ class UESim:
  
         self.ue_sim_time.end_time.value = int((latest_time + epoch_to_monotonic_s) * 1e9)
         self.ue_sim_time.start_time.value = int((start_time + epoch_to_monotonic_s) * 1e9)
-        print(f"Ended test after {end_time - start_time} seconds \nRan test for {self.number} UEs in {latest_time - start_time} seconds procedures completed for {completed} UEs, failed for {len(self.ue_list) - completed} \
-              \nMinimum interval time {min_interval} seconds, Average interval time {sum_interval/completed if completed > 0 else -1} and Maximum interval time {max_interval}")
+        table = [["Duration",f" {end_time - start_time} seconds"],["Completed in",f" {latest_time - start_time} seconds"],
+        ["N# of UEs",self.number],["Successful procedures ",f"{completed} UEs"],
+        ["Failed procedures",f"{len(self.ue_list) - completed} UEs"],["Min interval",f"{min_interval} seconds"],
+        ["Avg interval",f"{sum_interval/completed if completed > 0 else -1} seconds"], ["Max interval",f"{max_interval} seconds"]]
+        print("\n\n")
+        print(tabulate(table, ["Item","Results"], tablefmt="heavy_outline"))
 
     def print_compliance_test_results(self):
         global start_time

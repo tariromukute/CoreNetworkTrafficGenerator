@@ -82,7 +82,7 @@ nfs:
     sbi:
       port: 8080
       api_version: v1
-      interface_name: lo:0
+      interface_name: lo:130
 
 #### Common for UDR and AMF
 database:
@@ -154,23 +154,18 @@ smf:
  # the DNN you configure here should be configured in "dnns"
   local_subscription_infos:
     - single_nssai:
-        sst: 1
       dnn: "oai"
       qos_profile:
         5qi: 9
         session_ambr_ul: "200Mbps"
         session_ambr_dl: "400Mbps"
     - single_nssai:
-        sst: 1
-        sd: 1
       dnn: "oai.ipv4"
       qos_profile:
         5qi: 9
         session_ambr_ul: "100Mbps"
         session_ambr_dl: "200Mbps"
     - single_nssai:
-        sst: 222
-        sd: 123
       dnn: "default"
       qos_profile:
         5qi: 9

@@ -43,6 +43,7 @@ git submodule update
     - `sudo apt-get install build-essential`
     - `cd CryptoMobile && python3 setup.py install`
 - pyyaml `pip install pyyaml`
+- tabulate `pip install tabulate`
 
 ## Running the traffic generator
 
