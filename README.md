@@ -37,13 +37,14 @@ git submodule update
 - headers for pysctp `sudo apt-get install python3-dev`
 - pysctp `pip install pysctp`
 - scapy `pip install scapy`
-- bcc `pip install bcc-python`
+- bcc `pip install bcc-python` and `sudo apt-get install bpfcc-tools linux-headers-$(uname -r)`
 - CryptoMobile (See the submodule for installation)
     - `pip install cryptography`
     - `sudo apt-get install build-essential`
     - `cd CryptoMobile && python3 setup.py install`
 - pyyaml `pip install pyyaml`
 - tabulate `pip install tabulate`
+- matplotlib `pip install matplotlib`
 
 ## Running the traffic generator
 

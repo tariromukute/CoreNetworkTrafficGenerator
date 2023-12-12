@@ -163,7 +163,12 @@ ue_uplink_mapper = {
     '5GMMRegistrationRequest': initial_ue_message,
 }
 
+import threading
 
+# Create a lock object
+ue_to_ngap_lock = threading.Lock()
+ngap_to_ue_lock = threading.Lock()
+num_threads = 1
 class GNB():
     exit_flag = False
 
@@ -229,9 +234,19 @@ class GNB():
     
     def _load_ngap_to_ue_thread(self, ngap_to_ue_thread_function):
         """ Load the thread that will handle NGAP DownLink messages from 5G Core """
-        ngap_to_ue_thread = threading.Thread(target=ngap_to_ue_thread_function)
-        ngap_to_ue_thread.start()
-        return ngap_to_ue_thread
+        threads = []
+        for i in range(num_threads):
+            t = threading.Thread(target=ngap_to_ue_thread_function)
+            t.daemon = True
+            threads.append(t)
+
+        # start all threads
+        for t in threads:
+            t.start()
+        # ngap_to_ue_thread = threading.Thread(target=ngap_to_ue_thread_function)
+        # ngap_to_ue_thread.start()
+        # return ngap_to_ue_thread
+        return threads
 
     def _ngap_to_ue_thread_function(self) -> None:
         """ This thread function will read from queue and handle NGAP DownLink messages from 5G Core 
@@ -242,7 +257,9 @@ class GNB():
         
         while not GNB.exit_flag:
             try:
-                data = self.sctp.recv()
+                data = None
+                with ngap_to_ue_lock:
+                    data = self.sctp.recv()
                 if data:
                     PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                     PDU.from_aper(data)
@@ -286,9 +303,19 @@ class GNB():
     
     def _load_ue_to_ngap_thread(self, ue_to_ngap_thread_function):
         """ Load the thread that will handle NAS UpLink messages from UE """
-        ue_to_ngap_thread = threading.Thread(target=ue_to_ngap_thread_function)
-        ue_to_ngap_thread.start()
-        return ue_to_ngap_thread
+        threads = []
+        for i in range(num_threads):
+            t = threading.Thread(target=ue_to_ngap_thread_function)
+            t.daemon = True
+            threads.append(t)
+
+        # start all threads
+        for t in threads:
+            t.start()
+        # ue_to_ngap_thread = threading.Thread(target=ue_to_ngap_thread_function)
+        # ue_to_ngap_thread.start()
+        # return ue_to_ngap_thread
+        return threads
 
     def _ue_to_ngap_thread_function(self) -> None:
         """ This thread function will read from queue NAS UpLink messages from UE 
@@ -298,7 +325,10 @@ class GNB():
         """
         while not GNB.exit_flag:
             try:
-                data, ran_ue_ngap_id = self.ngap_to_ue.recv()
+                data = None
+                ran_ue_ngap_id = None
+                with ue_to_ngap_lock:
+                    data, ran_ue_ngap_id = self.ngap_to_ue.recv()
                 if data:
                     # ran_ue_ngap_id = int(ue.supi[-10:])
                     Msg, err = parse_NAS5G(data)

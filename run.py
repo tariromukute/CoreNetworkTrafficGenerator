@@ -14,14 +14,18 @@ logger = logging.getLogger('__app__')
 
 # Multi process class
 class MultiProcess:
-    def __init__(self, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, interval, statistics, verbose, ue_sim_time):
-        sctp_client = SCTPClient(server_config)
-        self.gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose)
-        self.ueSim = UESim(ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, interval, statistics, verbose, ue_sim_time)
-        self.processes = [
-            Process(target=self.gnb.run),
-            Process(target=self.ueSim.run),
-        ]
+    def __init__(self, server_config, ue_config, interval, statistics, verbose, ue_sim_time):
+        self.processes = []
+        for i in range(len(ue_config['ue_profiles'])):
+            sctp_client = SCTPClient(server_config)
+            ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
+            upf_to_ue, ue_to_upf = Pipe(duplex=True)
+            config = {}
+            config['ue_profiles'] = [ue_config['ue_profiles'][i]]
+            gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose)
+            ueSim = UESim(ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, config, interval, statistics, verbose, ue_sim_time)
+            self.processes.append(Process(target=gnb.run))
+            self.processes.append(Process(target=ueSim.run))
 
     def run(self):
         for process in self.processes:
@@ -69,14 +73,11 @@ def main(args: Arguments):
     
     # Convert the Unix timestamp to monotonic time in nanoseconds
     start_time_ns = int((time.time() + epoch_to_monotonic_s) * 1e9)
-    
-    ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
-    upf_to_ue, ue_to_upf = Pipe(duplex=True)
    
     # This will store the start and end time of the UE simulation/emulation
     ue_sim_time = TimeRange(0.0, 0.0)
-    # Create multi process
-    multi_process = MultiProcess(server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, ue_config, args.interval, args.statistics, args.verbose, ue_sim_time)
+    # # Create multi process
+    multi_process = MultiProcess(server_config, ue_config, args.interval, args.statistics, args.verbose, ue_sim_time)
     multi_process.run()
     
     while True:
@@ -133,11 +134,11 @@ def main(args: Arguments):
         filtered_cwnd_map = list(filter(lambda x: x[0].nsecs > 0, cwnd_map.items()))
 
         # We assume the last value recorded was still the value when the program was terminated
-        # last_value = copy.deepcopy(filtered_cwnd_map[-1])
-        # last_key = last_value[0]
-        # last_key.nsecs = int(ue_sim_time.end_time.value)
-        # end_value = (last_key, last_value[1])
-        # filtered_cwnd_map.append(end_value)
+        last_value = copy.deepcopy(filtered_cwnd_map[-1])
+        last_key = last_value[0]
+        last_key.nsecs = int(ue_sim_time.end_time.value)
+        end_value = (last_key, last_value[1])
+        filtered_cwnd_map.append(end_value)
 
         # Sort filtered_rwnd_map by key
         sorted_cwnd_map = sorted(filtered_cwnd_map, key=lambda x: x[0].nsecs)

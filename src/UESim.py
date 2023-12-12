@@ -338,6 +338,11 @@ def interrupt_handler(ueSim, ask, signum, frame):
         return
     sys.exit(0)
 
+import threading
+
+# Create a lock object
+lock = threading.Lock()
+num_threads = 1
 class UESim:
     exit_flag = False
     global start_time
@@ -406,10 +411,20 @@ class UESim:
 
     def _load_ngap_to_ue_thread(self):
         """ Load the thread that will handle NAS DownLink messages from gNB """
-        ngap_to_ue_thread = threading.Thread(target=self._ngap_to_ue_thread_function)
-        ngap_to_ue_thread.daemon = True
-        ngap_to_ue_thread.start()
-        return ngap_to_ue_thread
+        threads = []
+        for i in range(num_threads):
+            t = threading.Thread(target=self._ngap_to_ue_thread_function)
+            t.daemon = True
+            threads.append(t)
+
+        # start all threads
+        for t in threads:
+            t.start()
+        # ngap_to_ue_thread = threading.Thread(target=self._ngap_to_ue_thread_function)
+        # ngap_to_ue_thread.daemon = True
+        # ngap_to_ue_thread.start()
+        # return ngap_to_ue_thread
+        return threads
 
     def _ngap_to_ue_thread_function(self):
         """ Thread function that will handle NAS DownLink messages from gNB 
@@ -419,7 +434,10 @@ class UESim:
             that will be read by the gNB thread.
         """
         while not UESim.exit_flag:
-            data, ueId = self.ue_to_ngap.recv()
+            data = None
+            ueId = None
+            with lock:
+                data, ueId = self.ue_to_ngap.recv()
             if data:
                 tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId)
                 self.ue_list[int(ue.supi[-10:])] = ue
