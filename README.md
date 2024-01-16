@@ -38,6 +38,7 @@ git submodule update
 - pysctp `pip install pysctp`
 - scapy `pip install scapy`
 - bcc `pip install bcc-python` and `sudo apt-get install bpfcc-tools linux-headers-$(uname -r)`
+- setuptools `sudo apt install python3-setuptools`
 - CryptoMobile (See the submodule for installation)
     - `pip install cryptography`
     - `sudo apt-get install build-essential`
