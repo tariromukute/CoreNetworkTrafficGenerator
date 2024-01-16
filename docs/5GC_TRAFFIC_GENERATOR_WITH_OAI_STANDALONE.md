@@ -76,14 +76,14 @@ sudo ./build_nrf --install-deps --force
 sudo ./build_nrf --clean --Verbose --build-type Release --jobs
 
 # x> SPGWU
-git clone https://github.com/OPENAIRINTERFACE/openair-spgwu-tiny.git
-cd openair-spgwu-tiny/build/scripts
+git clone https://gitlab.eurecom.fr/oai/cn5g/oai-cn5g-upf.git
+cd oai-cn5g-upf/build/scripts
 
 # Install dependencies
-sudo ./build_spgwu --install-deps --force
+sudo ./build_upf --install-deps --force
 
 # Install SPGWU
-sudo ./build_spgwu --clean --Verbose --build-type Release --jobs
+sudo ./build_upf --clean --Verbose --build-type Release --jobs
 ```
 
 Install Mysql
@@ -141,7 +141,7 @@ Create oai-cn5g hostnames in `/etc/hosts`. You can utilise the helper script und
 Start oai-cn5g
 
 ```bash
-sudo systemctl restart oai-nrfd oai-udrd oai-udmd oai-ausfd oai-amfd oai-smfd
+sudo systemctl restart oai-cn5g-nrfd oai-cn5g-udrd oai-cn5g-udmd oai-cn5g-ausfd oai-cn5g-amfd oai-cn5g-smfd oai-cn5g-upfd 
 ```
 
 Start cn-tg
@@ -149,4 +149,9 @@ Start cn-tg
 ```bash
 cd ~/cn-tg
 python3 run.py -u config/open5gs-ue.yaml -g config/open5gs-gnb.yaml -vv
+```
+
+Get logs
+```bash
+journalctl -u oai-* -n 200
 ```

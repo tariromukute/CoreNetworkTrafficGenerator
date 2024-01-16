@@ -1,4 +1,5 @@
 from src.UEUtils import *
+from src.UEMessages import registration_request
 from pycrate_mobile.TS24008_IE import encode_bcd
 from pycrate_mobile.TS24501_IE import FGSIDTYPE_IMEISV
 from pycrate_mobile.NAS import FGMMRegistrationRequest, FGMMMODeregistrationRequest, FGMMRegistrationComplete, FGMMAuthenticationResponse, FGMMSecProtNASMessage, FGMMSecurityModeComplete
@@ -10,21 +11,36 @@ from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7
 # Section 1: Registration Request validations 
 # --------------------------------------------------------
 
-def registration_request_protocol_error(ue, IEs, Msg=None):
-    """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 b)
+""" 
+    3GPP TS 24.501 version 15.7.0 5.5.1.2.8 b)
     If the REGISTRATION REQUEST message is received with a protocol error, the AMF shall return a 
     REGISTRATION REJECT message with one of the following 5GMM cause values: 
     #96 invalid mandatory information; 
     #99 information element non-existent or not implemented; 
     #100 conditional IE error; or 
     #111 protocol error, unspecified.
+"""
+def registration_request_protocol_error(ue, IEs, Msg=None):
 
+    # Call original registration_request
+    Msg, _ = registration_request(ue, IEs, Msg)
 
-    """
+    # TODO: modify Msg to introduce error
 
-    # TODO: implement method
+    return Msg, '5GMMRegistrationRequest_ProtocolError'
 
-    return Msg, '5GMMRegistrationRequest'
+def validate_response_registration_request_protocol_error(PrevMsgBytesSent, MsgRecvd):
+
+    PrevMsgSent, err = parse_NAS5G(PrevMsgBytesSent)
+    if err:
+        return FGMMState.FAIL, 'Previous message is invalid'
+    
+    MsgRecvdDict = MsgRecvd.get_val_d()
+
+    # TODO: validate the received message/response
+    
+    return FGMMState.FAIL, 'Not implemented'
+
 
 def registration_request_timeout(ue, IEs, Msg=None):
     """ 3GPP TS 24.501 version 15.7.0 5.5.1.2.8 c)
