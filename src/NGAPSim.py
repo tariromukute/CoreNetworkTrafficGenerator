@@ -367,11 +367,11 @@ class GNB():
         """
         while not GNB.exit_flag:
             try:
+                # data is the ip address in bytes
                 data, ran_ue_ngap_id = self.upf_to_ue.recv()
                 if data:
                     # ran_ue_ngap_id = int(ue.supi[-10:])
                     ue = self.ues.get(ran_ue_ngap_id)
-                    
                     self.gtpu.send(ue, data)
             except:
                 GNB.exit_flag = True

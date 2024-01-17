@@ -174,6 +174,9 @@ def connection_release_complete(ue, IEs, Msg=None):
     ue.end_time = time.time()
     return None, '5GMMANConnectionReleaseComplete'  # For internal use only, it's not a real message type
 
+def pdu_session_generate_traffic(ue, IEs, Msg=None):
+    return ue.IpAddress['Addr'], '5GUPMessage'
+
 def up_send_data(ue, IEs, Msg=None):
     if Msg != None and Msg == b'0':
         logger.error(f"UE {ue.supi} UP request timed out")

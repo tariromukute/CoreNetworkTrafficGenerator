@@ -20,6 +20,8 @@
 #define BPF_F_TEST_XDP_LIVE_FRAMES	(1U << 1)
 #endif
 
+static bool status_exited = false;
+
 void print_packet(const unsigned char *packet, int length) {
     for (int i = 0; i < length; i++) {
         printf("%02x ", packet[i]);
@@ -33,8 +35,7 @@ void print_packet(const unsigned char *packet, int length) {
 // Create function that takes the xdp_prog_fd, the packet data, ifindex
 int xdp_gen(int xdp_prog_fd, int num_pkts, char *pkt, int size)
 {
-
-    print_packet((unsigned char *)pkt, size);
+    // print_packet((unsigned char *)pkt, size);
     char data[size + sizeof(__u32)];
     int err;
     struct xdp_md ctx_in = { .data = sizeof(__u32),
