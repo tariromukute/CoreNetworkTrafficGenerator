@@ -10,20 +10,20 @@ from scapy.contrib.gtp import (
 import ipaddress
 
 import socket
+import os
 
+include_path = "/home/azureuser/cn-tg" # os.environ['APP_INCLUDE_PATH']
 
 src_port = 12345
 dst_port = 54321
 
-ethernet = Ether(dst="00:22:48:ce:14:39", src="60:45:bd:41:38:71")
-outerIp = IPv6(src="2404:f800:8000:122::4", dst="2404:f800:8000:122::5")
+ethernet = Ether(dst="00:22:48:f9:1f:1e", src="00:22:48:65:34:2d")
+outerIp = IPv6(src="2404:f800:8000:123::4", dst="2404:f800:8000:123::5")
 outerUdp = UDP(sport=2152, dport=2152,chksum=0)
-# innerIp = IP(src="12.1.1.4", dst="10.50.100.1")
-innerIp = IPv6(src="2404:f800:8000:121::4", dst="2404:f800:8000:124::5")
+innerIp = IP(src="10.1.1.4", dst="10.50.100.1")
 icmpPkt = ICMP()
 innerUdp = UDP(sport=src_port, dport=dst_port)
 gtpHeader = GTP_U_Header(teid=0, next_ex=133)/GTPPDUSessionContainer(type=1, QFI=9)
-
 payload = "This is a test message"
 
 packet = ethernet/outerIp/outerUdp/gtpHeader/innerIp/innerUdp/payload
@@ -36,9 +36,7 @@ ifname = "eth1"
 # Use socket to get the ifindex
 ifindex = socket.if_nametoindex(ifname)
 
-print(ifindex)
-
-b = BPF(src_file="gtpu.bpf.c", cflags=["-I/home/azureuser", "-Wno-macro-redefined"])
+b = BPF(src_file="xdpgen.bpf.c", cflags=[f"-I{include_path}/src/xdpgen", "-Wno-macro-redefined"])
 func = b.load_func("xdp_redirect_update_gtpu", BPF.XDP)
 
 # TODO: add entries to map supi_record_map, the struct is as follows
@@ -68,11 +66,10 @@ class TrafficgenConfig(ctypes.Structure):
 
 supi_record_map = b.get_table("supi_record_map")
 
-ip_address_str = "2404:f800:8000:124::4"
+ip_address_str = "12.1.1.4"
 
 ip_address_bytes = ipaddress.ip_address(ip_address_str).packed
 
-print(len(ip_address_bytes))
 ip_version = 4 if len(ip_address_bytes) == 4 else 6
 for i in range(0,10):
     # create an instance of the struct and populate its value
@@ -102,7 +99,7 @@ state_map = b.get_table("state_map")
 state_map[0] = state
 
 # Load shared library
-lib = ctypes.CDLL("/home/azureuser/xdpgen.so")
+lib = ctypes.CDLL(f"{include_path}/src/xdpgen/libxdpgen.so")
 
 # Define argument types for xdp_gen function
 lib.xdp_gen.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
