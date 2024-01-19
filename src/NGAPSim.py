@@ -282,7 +282,7 @@ class GNB():
                             ul_teid = utils_py3.bytes_to_uint(ue_['ul_up_transport_layer_information'][1]['gTP-TEID'], 32)
                             dl_teid = utils_py3.bytes_to_uint(ue_['dl_up_transport_layer_information'][1]['gTP-TEID'], 32)
                             upf_address = socket.inet_ntoa(utils_py3.uint_to_bytes(ue_['ul_up_transport_layer_information'][1]['transportLayerAddress'][0], 32))
-                            logger.info(f"UE {ue_['ran_ue_ngap_id']} PDU resource setup QOS id: {ue_['qos_identifier']} UL Address: {upf_address} UL teid {ul_teid} DL teid {dl_teid}")
+                            logger.debug(f"UE {ue_['ran_ue_ngap_id']} PDU resource setup QOS id: {ue_['qos_identifier']} UL Address: {upf_address} UL teid {ul_teid} DL teid {dl_teid}")
                             self.ues[ue_['ran_ue_ngap_id']]['qfi'] = ue_['qos_identifier']
                             self.ues[ue_['ran_ue_ngap_id']]['ul_teid'] = ul_teid
                             self.ues[ue_['ran_ue_ngap_id']]['dl_teid'] = dl_teid

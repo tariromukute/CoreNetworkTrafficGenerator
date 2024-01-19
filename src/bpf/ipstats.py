@@ -13,7 +13,6 @@ XDP_FLAGS_HW_MODE = (1 << 3)
 XDP_FLAGS_REPLACE = (1 << 4)
 GTP_UDP_PORT = 2152
 
-
 protocol_names = {
     socket.IPPROTO_TCP: "TCP",
     socket.IPPROTO_UDP: "UDP",
@@ -48,33 +47,37 @@ class IPStats:
     def run(self):
         pkt_s = "pkts/s"
         bytes_s = "kb/s"
-        print(f"{'':<6} | {' '.join(f'{self.interfaces_map[if_index]:^20}' for if_index in sorted(self.interfaces_map))}") # Headers
-        print(f"{'':<6} | {' '.join(f'{pkt_s:>10}{bytes_s:>10}' for _ in sorted(self.interfaces_map))}") # Subheaders
 
         while True:
             try:
-                # Retrieve and process statistics
-                grouped_data = collections.defaultdict(lambda: {"rx_bytes": 0, "rx_packets": 0})
-                stats_map = self.b.get_table("stats_map")  # Assuming `b` is defined elsewhere
-                for key, value in stats_map.items():
-                    grouped_data[(key.ifindex, key.protocol)]["rx_bytes"] += value.rx_bytes
-                    grouped_data[(key.ifindex, key.protocol)]["rx_packets"] += value.rx_packets
+                print(f"{'':<8} | {' '.join(f'{self.interfaces_map[if_index]:^20}' for if_index in sorted(self.interfaces_map))}") # Headers
+                print(f"{'':<8} | {' '.join(f'{pkt_s:>10}{bytes_s:>10}' for _ in sorted(self.interfaces_map))}") # Subheaders
+                grouped_data = collections.defaultdict(
+                    lambda: {"rx_bytes": 0, "rx_packets": 0, "tx_bytes": 0, "tx_packets": 0}
+                )
+                stats_map = self.b.get_table("stats_map")
 
-                # Print data for each protocol
+                for key, value in stats_map.items():
+                    group = grouped_data[(key.ifindex, key.protocol)]
+                    for field in ("rx_bytes", "rx_packets", "tx_bytes", "tx_packets"):
+                        group[field] += getattr(value, field)  # Dynamically access fields
+
                 for proto, p_name in protocol_names.items():
-                    row_data = [
-                        f"{delta_packets:>10}{delta_bytes:>10}"
-                        for if_index in sorted(self.interfaces_map.keys())
-                        for delta_packets, delta_bytes in [
-                            (
-                                grouped_data.get((if_index, proto), {}).get("rx_packets", 0)
-                                - self.previous_data.get((if_index, proto), {}).get("rx_packets", 0),
-                                grouped_data.get((if_index, proto), {}).get("rx_bytes", 0)
-                                - self.previous_data.get((if_index, proto), {}).get("rx_bytes", 0),
-                            )
+                    for direction, label in ("rx", "rx"), ("tx", "tx"):
+                        row_data = [
+                            f"{delta_packets:>10}{delta_bytes:>10}"
+                            for if_index in sorted(self.interfaces_map.keys())
+                            for delta_packets, delta_bytes in [
+                                (
+                                    grouped_data.get((if_index, proto), {}).get(f"{direction}_packets", 0)
+                                    - self.previous_data.get((if_index, proto), {}).get(f"{direction}_packets", 0),
+                                    grouped_data.get((if_index, proto), {}).get(f"{direction}_bytes", 0)
+                                    - self.previous_data.get((if_index, proto), {}).get(f"{direction}_bytes", 0),
+                                )
+                            ]
                         ]
-                    ]
-                    print(f"{p_name:<6} | {' '.join(row_data)}")
+                        # stats.append(f"{p_name} {label} | {' '.join(row_data)}")
+                        print(f"{p_name:<6} {label:<2} | {' '.join(row_data)}")
 
                 print()  # Add spacing between iterations
                 self.previous_data = grouped_data
@@ -87,31 +90,18 @@ class IPStats:
                 break  # Exit gracefully on Ctrl+C
                 
     def get_stats(self):
-        stats = []
         # Retrieve and process statistics
-        grouped_data = collections.defaultdict(lambda: {"rx_bytes": 0, "rx_packets": 0})
-        stats_map = self.b.get_table("stats_map")  # Assuming `b` is defined elsewhere
+        grouped_data = collections.defaultdict(
+            lambda: {"rx_bytes": 0, "rx_packets": 0, "tx_bytes": 0, "tx_packets": 0}
+        )
+        stats_map = self.b.get_table("stats_map")
+
         for key, value in stats_map.items():
-            grouped_data[(key.ifindex, key.protocol)]["rx_bytes"] += value.rx_bytes
-            grouped_data[(key.ifindex, key.protocol)]["rx_packets"] += value.rx_packets
+            group = grouped_data[(key.ifindex, key.protocol)]
+            for field in ("rx_bytes", "rx_packets", "tx_bytes", "tx_packets"):
+                group[field] += getattr(value, field)  # Dynamically access fields
 
-        for proto, p_name in protocol_names.items():
-            row_data = [
-                f"{delta_packets:>10}{delta_bytes:>10}"
-                for if_index in sorted(self.interfaces_map.keys())
-                for delta_packets, delta_bytes in [
-                    (
-                        grouped_data.get((if_index, proto), {}).get("rx_packets", 0)
-                        - self.previous_data.get((if_index, proto), {}).get("rx_packets", 0),
-                        grouped_data.get((if_index, proto), {}).get("rx_bytes", 0)
-                        - self.previous_data.get((if_index, proto), {}).get("rx_bytes", 0),
-                    )
-                ]
-            ]
-            stats.append(f"{p_name:<6} | {' '.join(row_data)}")
-
-        self.previous_data = grouped_data
-        return stats
+        return grouped_data
         
     def load(self):
         # Load the XDP program (replace with the path to your compiled program)

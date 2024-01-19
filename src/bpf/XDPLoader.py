@@ -12,14 +12,9 @@ import netifaces
 
 GTP_UDP_PORT = 2152
 
-
+# The program only looks at GTPU traffic
 protocol_names = {
-    # socket.IPPROTO_TCP: "TCP",
-    # socket.IPPROTO_UDP: "UDP",
-    # socket.IPPROTO_ICMP: "ICMP",
-    # socket.IPPROTO_SCTP: "SCTP",
     GTP_UDP_PORT: 'GTPU',
-    # ... Add other protocols as needed
 }
 
 include_path = "/home/azureuser/cn-tg" # os.environ['APP_INCLUDE_PATH']
@@ -144,31 +139,18 @@ class Trafficgen:
         self.config_map[0] = self.config
 
     def get_stats(self):
-        stats = []
         # Retrieve and process statistics
-        grouped_data = collections.defaultdict(lambda: {"rx_bytes": 0, "rx_packets": 0})
-        stats_map = self.b.get_table("stats_map")  # Assuming `b` is defined elsewhere
+        grouped_data = collections.defaultdict(
+            lambda: {"rx_bytes": 0, "rx_packets": 0, "tx_bytes": 0, "tx_packets": 0}
+        )
+        stats_map = self.b.get_table("stats_map")
+
         for key, value in stats_map.items():
-            grouped_data[(key.ifindex, key.protocol)]["rx_bytes"] += value.rx_bytes
-            grouped_data[(key.ifindex, key.protocol)]["rx_packets"] += value.rx_packets
+            group = grouped_data[(key.ifindex, key.protocol)]
+            for field in ("rx_bytes", "rx_packets", "tx_bytes", "tx_packets"):
+                group[field] += getattr(value, field)  # Dynamically access fields
 
-        for proto, p_name in protocol_names.items():
-            row_data = [
-                f"{delta_packets:>10}{delta_bytes / 1024:>10.0f}"
-                for if_index in sorted(self.interfaces_map.keys())
-                for delta_packets, delta_bytes in [
-                    (
-                        grouped_data.get((if_index, proto), {}).get("rx_packets", 0)
-                        - self.previous_data.get((if_index, proto), {}).get("rx_packets", 0),
-                        grouped_data.get((if_index, proto), {}).get("rx_bytes", 0)
-                        - self.previous_data.get((if_index, proto), {}).get("rx_bytes", 0),
-                    )
-                ]
-            ]
-            stats.append(f"{p_name:<6} | {' '.join(row_data)}")
-
-        self.previous_data = grouped_data
-        return stats
+        return grouped_data
 
     def print_stats(self):
         pkt_s = "pkts/s"

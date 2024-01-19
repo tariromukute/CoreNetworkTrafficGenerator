@@ -9,24 +9,28 @@ import binascii
 import socket
 logger = logging.getLogger('__GPTU__')
 
+from typing import NamedTuple
+
+class GTPUConfig(NamedTuple):
+    src_mac: str
+    dst_mac: str
+    src_ip: str
+    dst_ip: str
+    cpu_cores: List[int]
+
 class GTPU():
-    def __init__(self, config, trafficgen, verbose):
+    def __init__(self, config: GTPUConfig, trafficgen, verbose):
         self.config = config
         self.verbose = verbose
         self.generate = False
-        self.gtpu_pkt = self.prepare_gtpu_pkt({
-            'src_mac': "00:22:48:13:95:78",
-            'dst_mac': "60:45:bd:43:3a:17",
-            'src_ip': "10.0.3.4",
-            'dst_ip': "10.0.3.5"
-        })
-        self.cpu_cores = [0, 1, 2, 3]
+        self.gtpu_pkt = self.prepare_gtpu_pkt(config)
+        self.cpu_cores = config.cpu_cores if config.cpu_cores != None else [0, 1, 2, 3]
         self.tg = trafficgen
 
     def prepare_gtpu_pkt(self, pkt_cfg):
         # TODO: accomodate IPv6
-        ethernet = Ether(src=pkt_cfg['src_mac'], dst=pkt_cfg['dst_mac'])
-        outerIp = IP(src=pkt_cfg['src_ip'], dst=pkt_cfg['dst_ip'])
+        ethernet = Ether(src=pkt_cfg.src_mac, dst=pkt_cfg.dst_mac)
+        outerIp = IP(src=pkt_cfg.src_ip, dst=pkt_cfg.dst_ip)
         outerUdp = UDP(sport=2152, dport=2152, chksum=0)
         innerIp = IP(src="10.1.1.4", dst="10.50.100.1")
         innerUdp = UDP(sport=12345, dport=54321)

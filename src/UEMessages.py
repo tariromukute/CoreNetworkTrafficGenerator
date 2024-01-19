@@ -159,7 +159,7 @@ def pdu_session_establishment_complete(ue, IEs, Msg=None):
     address = Msg['PDUAddress']['PDUAddress'].get_val_d()
     ue.IpAddress = address # Format is {'spare': 0, 'Type': 1, 'Addr': b'\x0c\x01\x01\x07'} with type of address
     ip_addr = socket.inet_ntoa(address['Addr'])
-    logger.info(f"UE {ue.supi} assigned address {ip_addr}")
+    logger.debug(f"UE {ue.supi} assigned address {ip_addr}")
     # Update the UpData, change source ip address
     upPkt = binascii.unhexlify(ue.UpData)
     ip_pkt = IP(upPkt)

@@ -17,7 +17,7 @@ if ! dpkg -s "clang-14" >/dev/null 2>&1; then
 fi
 
 # List of required packages
-PACKAGES=(pycrate pysctp scapy cryptography pyyaml tabulate matplotlib)
+PACKAGES=(pycrate pysctp scapy cryptography pyyaml tabulate)
 
 # Loop through each package and check if it's installed
 for package in "${PACKAGES[@]}"

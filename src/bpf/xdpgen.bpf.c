@@ -17,8 +17,12 @@ struct statskey {
 struct statsrec {
 	__u64 rx_packets;
 	__u64 rx_bytes;
+    __u64 tx_packets;
+    __u64 tx_bytes;
     __u64 rx_chunks; // For SCTP stats only
+    __u64 tx_chunks;
 };
+
 
 
 BPF_HASH(stats_map, struct statskey, struct statsrec);
@@ -36,19 +40,19 @@ __u32 record_stats(struct xdp_md *ctx, struct statskey *key, __u32 count)
     struct statsrec *rec, data = {0};
     rec = stats_map.lookup(key);
 	if (rec == 0) {
-        data.rx_packets = 1;
-        data.rx_bytes = (ctx->data_end - ctx->data);
+        data.tx_packets = 1;
+        data.tx_bytes = (ctx->data_end - ctx->data);
         if (key->protocol == IPPROTO_SCTP) {
-            data.rx_chunks = count;
+            data.tx_chunks = count;
         }
         stats_map.update(key, &data);
         return 0;
 	}
 
-	rec->rx_packets++;
-	rec->rx_bytes += (ctx->data_end - ctx->data);
+	rec->tx_packets++;
+	rec->tx_bytes += (ctx->data_end - ctx->data);
     if (key->protocol == IPPROTO_SCTP) {
-        rec->rx_chunks += count;
+        rec->tx_chunks += count;
     }
 
 	return 0;
@@ -65,13 +69,13 @@ int xdp_redirect_update_gtpu(struct xdp_md *ctx)
 	struct ethhdr *eth_header;
     struct ipv6hdr *ipv6_header;
     struct iphdr *ip_header;
-	struct statskey skey = { .ifindex = ctx->ingress_ifindex, .protocol = 2152, .cpu = bpf_get_smp_processor_id() };
 	__u32 key = 0;
 
     config = config_map.lookup(&key);
 	if (!config) {
 		goto out;
 	}
+	struct statskey skey = { .ifindex = config->ifindex_out, .protocol = 2152, .cpu = bpf_get_smp_processor_id() };
 
     if (config->supi_range == 0) {
         // No UE records have been added

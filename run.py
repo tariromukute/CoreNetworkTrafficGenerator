@@ -5,7 +5,7 @@ import signal
 from src.UESim import UESim
 from src.SCTP import SCTPClient
 from src.NGAPSim import GNB
-from src.GTPU import GTPU
+from src.GTPU import GTPU, GTPUConfig
 from src.bpf.XDPLoader import Trafficgen
 from src.bpf.ipstats import IPStats
 from multiprocessing import Process, active_children, Pipe, Value
@@ -14,6 +14,17 @@ import yaml
 import json
 import netifaces
 import socket
+
+GTP_UDP_PORT = 2152
+
+protocol_names = {
+    socket.IPPROTO_TCP: "tcp",
+    socket.IPPROTO_UDP: "udp",
+    socket.IPPROTO_ICMP: "icmp",
+    socket.IPPROTO_SCTP: "sctp",
+    GTP_UDP_PORT: 'gtpu',
+    # ... Add other protocols as needed
+}
 
 logger = logging.getLogger('__app__')
 
@@ -38,7 +49,7 @@ class MultiProcess:
             process.start()
 
 class Arguments:
-    def __init__(self, log, console, file, interval, ue_config_file, gnb_config_file, statistics, verbose, ebpf):
+    def __init__(self, log, console, file, interval, ue_config_file, gnb_config_file, statistics, verbose):
         self.log = log
         self.console = console
         self.interval = interval
@@ -47,7 +58,6 @@ class Arguments:
         self.gnb_config_file = gnb_config_file
         self.statistics = statistics
         self.verbose = verbose
-        self.ebpf = ebpf
 
 class TimeRange():
     def __init__(self, start_time, end_time):
@@ -82,12 +92,16 @@ def main(args: Arguments):
         except yaml.YAMLError as exc:
             print(exc)
 
-    if args.ebpf:
-        from stats.sctp import b, rwnd_map, cwnd_map, rtt_map
-
     interfaces_map = get_network_interfaces_map()
-    gtpuTrafficgen = Trafficgen("eth2")
-    gtpu = GTPU({ 'gtpIp': server_config['gtpIp'], 'fgcMac': server_config['fgcMac'] }, gtpuTrafficgen, args.verbose)
+    gtpuTrafficgen = Trafficgen(server_config['gtpuConfig']['interface'])
+    gtpuConfig = GTPUConfig(
+        src_mac=server_config['gtpuConfig']['srcMac'],
+        dst_mac=server_config['gtpuConfig']['dstMac'],
+        src_ip=server_config['gtpuConfig']['srcIp'],
+        dst_ip=server_config['gtpuConfig']['dstIp'],
+        cpu_cores=[0, 1, 2, 3]
+    )
+    gtpu = GTPU(gtpuConfig, gtpuTrafficgen, args.verbose)
 
     # Calculate the number of seconds between the monotonic starting point and the Unix epoch
     epoch_to_monotonic_s = time.monotonic() - time.time()
@@ -102,218 +116,46 @@ def main(args: Arguments):
     multi_process.run()
 
     ipstats = IPStats()
-    
+    previous_data = {}
     pkt_s = "pkts/s"
     bytes_s = "kb/s"
     while True:
         print()
-        print(f"{'':<6} | {' '.join(f'{interfaces_map[if_index]:^20}' for if_index in sorted(interfaces_map))}") # Headers
-        print(f"{'':<6} | {' '.join(f'{pkt_s:>10}{bytes_s:>10}' for _ in sorted(interfaces_map))}") # Subheaders
+        print(f"{'':<8} | {' '.join(f'{interfaces_map[if_index]:^20}' for if_index in sorted(interfaces_map))}") # Headers
+        print(f"{'':<8} | {' '.join(f'{pkt_s:>10}{bytes_s:>10}' for _ in sorted(interfaces_map))}") # Subheaders
         try:
             ip_stats = ipstats.get_stats()
             gtpu_stats = gtpuTrafficgen.get_stats()
-            for i in range(len(ip_stats)):
-                print(ip_stats[i])
-            print("----")
-            for i in range(len(gtpu_stats)):
-                print(gtpu_stats[i])
-            # Check if all child processes have terminated
+            # Merge GTPU stats with ip stats
+            for key, value in gtpu_stats.items():
+                group = ip_stats[key]
+                for field in ("rx_bytes", "rx_packets", "tx_bytes", "tx_packets"):
+                    group[field] += value[field]  # Dynamically access fields
+
+            for proto, p_name in protocol_names.items():
+                for direction, label in ("rx", "rx"), ("tx", "tx"):
+                    row_data = [
+                        f"{delta_packets:>10}{delta_bytes / 1024:>10.0f}"
+                        for if_index in sorted(interfaces_map.keys())
+                        for delta_packets, delta_bytes in [
+                            (
+                                ip_stats.get((if_index, proto), {}).get(f"{direction}_packets", 0)
+                                - previous_data.get((if_index, proto), {}).get(f"{direction}_packets", 0),
+                                ip_stats.get((if_index, proto), {}).get(f"{direction}_bytes", 0)
+                                - previous_data.get((if_index, proto), {}).get(f"{direction}_bytes", 0),
+                            )
+                        ]
+                    ]
+                    # stats.append(f"{p_name} {label} | {' '.join(row_data)}")
+                    print(f"{p_name:<6}{label:<2} | {' '.join(row_data)}")
+            previous_data = ip_stats
+            
             if len(active_children()) == 0:
                 break
             # Wait for a short time before checking again
             time.sleep(1)
         except KeyboardInterrupt:
             print()
-            # print("Program Interrupted")
-    if args.ebpf:
-        from collections import defaultdict
-        from socket import inet_ntop, AF_INET, AF_INET6
-        from struct import pack
-        import copy
-        
-        """ Collect and structure results for rwnd
-
-        """
-
-        # to hold json data of rwnd stats
-        rwnd_dict = defaultdict(lambda: {"port": None, "values": []})
-        
-        # Filter rwnd_map to get values before completed_at.value
-        # filtered_rwnd_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, rwnd_map.items()))
-        filtered_rwnd_map = list(filter(lambda x: x[0].nsecs > 0, rwnd_map.items()))
-        # We assume the last value recorded was still the value when the program was terminated
-        print(f"Length {ue_sim_time.end_time.value}")
-        # last_value = copy.deepcopy(filtered_rwnd_map[-1])
-        # last_key = last_value[0]
-        # last_key.nsecs = int(ue_sim_time.end_time.value)
-        # end_value = (last_key, last_value[1])
-        # filtered_rwnd_map.append(end_value)
-        
-        # Sort filtered_rwnd_map by key
-        sorted_rwnd_map = sorted(filtered_rwnd_map, key=lambda x: x[0].nsecs)
-        rwnd_init_nsecs_time = sorted_rwnd_map[0][0].nsecs
-        
-        for k, v in sorted_rwnd_map:
-            rwnd_dict[k.peer_port]["port"] = k.peer_port
-            rwnd_dict[k.peer_port]["values"].append({"time_ns": k.nsecs - rwnd_init_nsecs_time, "value": v.value})
-        
-        rwnd_results = list(rwnd_dict.values())
-
-        """ Collect and structure results for cwnd
-
-        """
-        cwnd_dict = defaultdict(lambda: {"address": None, "values": []})
-
-        # Filter rwnd_map to get values before completed_at.value
-        # filtered_cwnd_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, cwnd_map.items()))
-        filtered_cwnd_map = list(filter(lambda x: x[0].nsecs > 0, cwnd_map.items()))
-
-        # We assume the last value recorded was still the value when the program was terminated
-        last_value = copy.deepcopy(filtered_cwnd_map[-1])
-        last_key = last_value[0]
-        last_key.nsecs = int(ue_sim_time.end_time.value)
-        end_value = (last_key, last_value[1])
-        filtered_cwnd_map.append(end_value)
-
-        # Sort filtered_rwnd_map by key
-        sorted_cwnd_map = sorted(filtered_cwnd_map, key=lambda x: x[0].nsecs)
-        cwnd_init_nsecs_time = sorted_cwnd_map[0][0].nsecs
-        
-        for k, v in sorted_cwnd_map:
-            address = ""
-            if k.proto == AF_INET:
-                address = inet_ntop(AF_INET, pack("I", k.ipaddr[0]))
-            elif  k.proto == AF_INET6:
-                address = inet_ntop(AF_INET6, k.ipaddr)
-            cwnd_dict[address]["address"] = address
-            cwnd_dict[address]["values"].append({"time_ns": k.nsecs - cwnd_init_nsecs_time, "value": v.value})
-
-        cwnd_results = list(cwnd_dict.values())
-
-        """ Collect and structure results for rtt
-
-        """
-        rtt_dict = defaultdict(lambda: {"address": None, "values": []})
-
-        # Filter rwnd_map to get values before completed_at.value
-        # filtered_rtt_map = list(filter(lambda x: x[0].nsecs < ue_sim_time.end_time.value, rtt_map.items()))
-        filtered_rtt_map = list(filter(lambda x: x[0].nsecs > 0, rtt_map.items()))
-
-        # We assume the last value recorded was still the value when the program was terminated
-        # last_value = copy.deepcopy(filtered_rtt_map[-1])
-        # last_key = last_value[0]
-        # last_key.nsecs = int(ue_sim_time.end_time.value)
-        # end_value = (last_key, last_value[1])
-        # filtered_rtt_map.append(end_value)
-
-        # Sort filtered_rwnd_map by key
-        sorted_rtt_map = sorted(filtered_rtt_map, key=lambda x: x[0].nsecs)
-        rtt_init_nsecs_time = sorted_rtt_map[0][0].nsecs
-
-        for k, v in sorted_rtt_map:
-            address = ""
-            if k.proto == AF_INET:
-                address = inet_ntop(AF_INET, pack("I", k.ipaddr[0]))
-            elif  k.proto == AF_INET6:
-                address = inet_ntop(AF_INET6, k.ipaddr)
-            rtt_dict[address]["address"] = address
-            rtt_dict[address]["values"].append({"time_ns": k.nsecs - rtt_init_nsecs_time, "value": v.value})
-
-        rtt_results = list(rtt_dict.values())
-
-        # Plot SCTP rwnd graph using matlibplot
-        import matplotlib.pyplot as plt
-        
-        # Get the list of x and y values from the data
-        x_rwnd = [point["time_ns"] for point in rwnd_results[0]["values"]]
-        y_rwnd = [point["value"] for point in rwnd_results[0]["values"]]
-        min_index = y_rwnd.index(min(y_rwnd))
-
-        # Plot the data and format the plot
-        plt.figure()
-        plt.plot(x_rwnd, y_rwnd)
-        plt.title(f"SCTP rwnd over duration of simulation")
-        plt.xlabel("Time (ns)")
-        plt.ylabel("SCTP rwnd value (bytes)")
-
-        # Add a vertical line at the simulation start time
-        plt.axvline(x=int(ue_sim_time.start_time.value - rwnd_init_nsecs_time), color='r', linestyle='--',
-                    label='Simulation started'
-                    )
-        
-        # Add a marker at the lowest point
-        plt.plot(x_rwnd[min_index], y_rwnd[min_index], marker='o', color='red')
-
-        # Label the marker
-        plt.text(x_rwnd[min_index], y_rwnd[min_index], f'Lowest Point ({y_rwnd[min_index]})')
-        
-        # Add a legend to the plot
-        plt.legend()
-
-        plt.savefig("rwnd_plot.png")
-
-        print(f"Lowest rwnd is {y_rwnd[min_index]}")
-
-        # Get the list of x and y values from the data
-        x_cwnd = [point["time_ns"] for point in cwnd_results[0]["values"]]
-        y_cwnd = [point["value"] for point in cwnd_results[0]["values"]]
-        cwnd_min_index = y_cwnd.index(min(y_cwnd))
-        # Plot the data and format the plot
-        plt.figure()
-        plt.plot(x_cwnd, y_cwnd)
-        plt.title(f"SCTP cwnd over duration of simulation")
-        plt.xlabel("Time (ns)")
-        plt.ylabel("SCTP cwnd value (bytes)")
-
-        # Add a vertical line at the simulation start time
-        plt.axvline(x=(ue_sim_time.start_time.value - cwnd_init_nsecs_time), color='r', linestyle='--',
-                    label='Simulation started'
-                    )
-        
-        # Add a marker at the lowest point
-        plt.plot(x_cwnd[cwnd_min_index], y_cwnd[cwnd_min_index], marker='o', color='red')
-
-        # Label the marker
-        plt.text(x_cwnd[cwnd_min_index], y_cwnd[cwnd_min_index], f'Lowest Point ({y_cwnd[cwnd_min_index]})')
-        
-        # Add a legend to the plot
-        plt.legend()
-
-        plt.savefig("cwnd_plot.png")
-
-        print(f"Lowest cwnd is {y_cwnd[cwnd_min_index]}")
-
-        # ========== RTT ===============
-        # Get the list of x and y values from the data
-        x_rtt = [point["time_ns"] for point in rtt_results[0]["values"]]
-        y_rtt = [point["value"] for point in rtt_results[0]["values"]]
-        min_index = y_rtt.index(min(y_rtt))
-        max_index = y_rtt.index(max(y_rtt))
-
-        # Plot the data and format the plot
-        plt.figure()
-        plt.plot(x_rtt, y_rtt)
-        plt.title(f"SCTP rtt over duration of simulation")
-        plt.xlabel("Time (ns)")
-        plt.ylabel("SCTP rtt value (ms)")
-
-        # Add a vertical line at the simulation start time
-        plt.axvline(x=(ue_sim_time.start_time.value - rtt_init_nsecs_time), color='r', linestyle='--',
-                    label='Simulation started'
-                    )
-        
-        # Add a marker at the lowest point
-        plt.plot(x_rtt[max_index], y_rtt[max_index], marker='o', color='red')
-
-        # Label the marker
-        plt.text(x_rtt[max_index], y_rtt[max_index], f'Highest Point ({y_rtt[max_index]})')
-        
-        # Add a legend to the plot
-        plt.legend()
-
-        plt.savefig("rtt_plot.png")
-
-        print(f"Highest rtt is {y_rtt[max_index]}")
 
 # Define parser arguments
 parser = ArgumentParser(description='Run 5G Core traffic generator')
@@ -329,10 +171,8 @@ parser.add_argument('-v', '--verbose', action='count', default=0,
                     help='Increase verbosity (can be specified multiple times)')
 parser.add_argument('-s', '--statistics', action='store_true',
                     help='Enable print of statistics')
-parser.add_argument('-e', '--ebpf', action='store_true',
-                    help='Load ebpf programs to collect and graph SCTP stats')
 args = parser.parse_args()
 
 arguments = Arguments(False, False, '.',
-                      args.interval, args.ue_config_file, args.gnb_config_file, args.statistics, args.verbose, args.ebpf)
+                      args.interval, args.ue_config_file, args.gnb_config_file, args.statistics, args.verbose)
 main(arguments)

@@ -8,13 +8,20 @@ tac: 0xa000              # Tracking Area Code
 linkIp: 127.0.0.1   # gNB's local IP address for Radio Link Simulation (Usually same with local IP)
 ngapIp: 10.0.0.16  # gNB's local IP address for N2 Interface (Usually same with local IP)
 gtpIp: 10.0.0.16    # gNB's local IP address for N3 Interface (Usually same with local IP)
+gtpuConfig:
+  srcMac: '00:22:48:13:95:78'
+  srcIp: '10.0.3.4'
+  dstMac: '60:45:bd:43:3a:17'
+  dstIp: '10.0.3.5'
+  interface: 'eth2'
 
 # List of AMF address information
 amfConfigs:
-  - address: 10.0.3.5
+  - address: 10.0.2.5
     port: 38412
 
-fgcMac: 'fa:16:3e:d8:d9:80' # Mac address of the Machine with the core network
+
+fgcMac: '60:45:bd:43:3a:17' # Mac address of the Machine with the core network
 
 # List of supported S-NSSAIs by this gNB
 slices:

@@ -47,7 +47,6 @@ git submodule update
     - `cd CryptoMobile && python3 setup.py install`
 - pyyaml `pip install pyyaml`
 - tabulate `pip install tabulate`
-- matplotlib `pip install matplotlib`
 
 ## Running the traffic generator
 
