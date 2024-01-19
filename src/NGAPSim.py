@@ -5,7 +5,6 @@ import threading
 import sys
 import socket
 from src.SCTP import SCTPClient
-from src.GTPU import GTPU
 from pycrate_asn1dir import NGAP
 from pycrate_mobile.NAS import parse_NAS5G
 from pycrate_core import utils_py3
@@ -172,7 +171,7 @@ num_threads = 1
 class GNB():
     exit_flag = False
 
-    def __init__(self, sctp: SCTPClient, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose) -> None:
+    def __init__(self, sctp: SCTPClient, gtpu, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose) -> None:
         global logger
         # Set logging level based on the verbose argument
         if verbose == 0:
@@ -185,7 +184,7 @@ class GNB():
             logging.basicConfig(level=logging.DEBUG)
         global gtpIp
         gtpIp = server_config['gtpIp']
-        self.gtpu = GTPU({ 'gtpIp': gtpIp, 'fgcMac': server_config['fgcMac'] }, upf_to_ue, verbose=verbose >= 2)
+        self.gtpu = gtpu
         self.ues = {} # key -> ran_ue_ngap_id = { amf_ue_ngap_id: ue.supi[-10:], qfi,  ul_teid, dl_teid }, value -> amf_ue_ngap_id assigned by core network
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue

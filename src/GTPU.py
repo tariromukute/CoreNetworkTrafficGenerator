@@ -6,52 +6,46 @@ from scapy.contrib.gtp import (
         GTPPDUSessionContainer)
 from scapy.all import *
 import binascii
-from src.xdpgen.XDPLoader import add_ue_record, load, records
 import socket
 logger = logging.getLogger('__GPTU__')
 
 class GTPU():
-    def __init__(self, config, upf_to_ue, verbose) -> None:
+    def __init__(self, config, trafficgen, verbose):
         self.config = config
-        self.upf_to_ue = upf_to_ue
         self.verbose = verbose
         self.generate = False
+        self.gtpu_pkt = self.prepare_gtpu_pkt({
+            'src_mac': "00:22:48:13:95:78",
+            'dst_mac': "60:45:bd:43:3a:17",
+            'src_ip': "10.0.3.4",
+            'dst_ip': "10.0.3.5"
+        })
+        self.cpu_cores = [0, 1, 2, 3]
+        self.tg = trafficgen
+
+    def prepare_gtpu_pkt(self, pkt_cfg):
+        # TODO: accomodate IPv6
+        ethernet = Ether(src=pkt_cfg['src_mac'], dst=pkt_cfg['dst_mac'])
+        outerIp = IP(src=pkt_cfg['src_ip'], dst=pkt_cfg['dst_ip'])
+        outerUdp = UDP(sport=2152, dport=2152, chksum=0)
+        innerIp = IP(src="10.1.1.4", dst="10.50.100.1")
+        innerUdp = UDP(sport=12345, dport=54321)
+        gtpHeader = GTP_U_Header(teid=0, next_ex=133) / GTPPDUSessionContainer(type=1, QFI=9)
+        payload = "This is a test message"
+
+        packet = ethernet / outerIp / outerUdp / gtpHeader / innerIp / innerUdp / payload
+        logger.debug(packet.summary())
+        return bytes(packet)
 
     def send(self, ue_data, ip_pkt_data):
-        # ip_pkt = binascii.unhexlify(ip_pkt_data)
-        # ethernet = Ether(dst=self.config['fgcMac'])
-        # outerIp = IP(src=self.config['gtpIp'], dst=ue_data['upf_address'])
-        # outerUdp = UDP(sport=2152, dport=2152)
-        # innerIp = IP(ip_pkt)
-        # gtpHeader = GTP_U_Header(teid=ue_data['ul_teid'], next_ex=133)/GTPPDUSessionContainer(type=1, QFI=ue_data['qfi'])
-
-        # del outerIp[IP].chksum
-        # # Delete IP/ICMP checksum fields so that they can be recalculate by scapy
-        # del innerIp[IP].chksum
-        # if innerIp.proto == 1: 
-        #     del innerIp[ICMP].chksum
-
-        # sendingPacket = ethernet/outerIp/outerUdp/gtpHeader/innerIp
-        # logger.debug(f"Send GTPU packet \n{sendingPacket.show(dump=True)}")
-        # p = srp1(sendingPacket, verbose=self.verbose, timeout=5)
-        # if p:
-        #     self.forward(p[GTP_U_Header])
-        # else:
-        #     # Send byte 0 to UE to indicate timeout
-        #     self.upf_to_ue.send((b'0', ue_data['dl_teid']))
-        ip_addr = socket.inet_ntoa(ip_pkt_data)
-        print(f"UE ip address received {ip_addr}")
-        add_ue_record(ip_addr, ue_data['ul_teid'], ue_data['qfi'])
-        if not self.generate:
-            self.start()
-
-
-    def forward(self, gtpu_pkt):
-        # UE supi is the teid
-        supi = gtpu_pkt[GTP_U_Header].teid
-        raw_ip_pkt = raw(gtpu_pkt[IP])
-        ip_data = binascii.hexlify(raw_ip_pkt)
-        self.upf_to_ue.send((ip_data, supi))
+        try:
+            ip_addr = socket.inet_ntoa(ip_pkt_data)
+            logger.debug(f"Received request for UE with ip address {ip_addr}")
+            self.tg.add_ue_record(ip_addr, ue_data['ul_teid'], ue_data['qfi'])
+            if not self.generate:
+                self.start()
+        except Exception as e:
+            print(f"Error sending: {e}")
         
     def run_gtpu_generator(self, cpu):
         affinity_mask = { cpu } 
@@ -59,7 +53,7 @@ class GTPU():
         os.sched_setaffinity(0, affinity_mask)
         while self.generate:
             # Perform some action in a loop
-            load()
+            self.tg.run(self.gtpu_pkt)
 
     def print_stats(self):
         prev = 0
@@ -76,22 +70,19 @@ class GTPU():
 
     def start(self):
         self.generate = True
-        # Create and run thread for printing stats
-        thread = threading.Thread(target=self.print_stats)
-        thread.start()
+        logger.info("Starting GTPU traffic generator")
+        try:
+            # Create and run threads for generating traffic on different CPU
+            threads = []
+            for i in self.cpu_cores:
+                t = threading.Thread(target=self.run_gtpu_generator, args=(i,))
+                t.daemon = True
+                threads.append(t)
 
-        # Create and run threads for generating traffic on different CPU
-        threads = []
-        for i in range(4):
-            t = threading.Thread(target=self.run_gtpu_generator, args=(i,))
-            t.daemon = True
-            threads.append(t)
-
-        # start all threads
-        for t in threads:
-            t.start()
-        # ngap_to_ue_thread = threading.Thread(target=ngap_to_ue_thread_function)
-        # ngap_to_ue_thread.start()
-        # return ngap_to_ue_thread
-        return threads
+            # start all threads
+            for t in threads:
+                t.start()
+            return threads
+        except Exception as e:
+            print(f"Error starting generator: {e}")
 

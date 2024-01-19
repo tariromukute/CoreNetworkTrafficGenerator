@@ -5,12 +5,54 @@
 #include <linux/tcp.h>
 #include <linux/if_ether.h>
 
-// const volatile struct trafficgen_config config;
+struct statskey {
+    __u32 ifindex;
+    __u32 protocol;
+    __u32 cpu; /* Getting error when loading BPF_PERCPU_HASH which we need for atomic operations. 
+    Added cpu to make the operations atomic */
+    // TODO: migrate to BPF_PERCPU_HASH 
+};
+
+
+struct statsrec {
+	__u64 rx_packets;
+	__u64 rx_bytes;
+    __u64 rx_chunks; // For SCTP stats only
+};
+
+
+BPF_HASH(stats_map, struct statskey, struct statsrec);
 BPF_ARRAY(config_map, struct trafficgen_config, 1);
 BPF_ARRAY(state_map, struct trafficgen_state, 1);
 BPF_ARRAY(supi_record_map, struct supi_record_state, 100);
 BPF_PERCPU_ARRAY(txcnt, long, 1);
 
+
+static __always_inline
+__u32 record_stats(struct xdp_md *ctx, struct statskey *key, __u32 count)
+{
+	/* Lookup in kernel BPF-side return pointer to actual data record */
+	
+    struct statsrec *rec, data = {0};
+    rec = stats_map.lookup(key);
+	if (rec == 0) {
+        data.rx_packets = 1;
+        data.rx_bytes = (ctx->data_end - ctx->data);
+        if (key->protocol == IPPROTO_SCTP) {
+            data.rx_chunks = count;
+        }
+        stats_map.update(key, &data);
+        return 0;
+	}
+
+	rec->rx_packets++;
+	rec->rx_bytes += (ctx->data_end - ctx->data);
+    if (key->protocol == IPPROTO_SCTP) {
+        rec->rx_chunks += count;
+    }
+
+	return 0;
+}
 int xdp_redirect_update_gtpu(struct xdp_md *ctx)
 {
 	void *data_end = (void *)(long)ctx->data_end;
@@ -23,9 +65,9 @@ int xdp_redirect_update_gtpu(struct xdp_md *ctx)
 	struct ethhdr *eth_header;
     struct ipv6hdr *ipv6_header;
     struct iphdr *ip_header;
+	struct statskey skey = { .ifindex = ctx->ingress_ifindex, .protocol = 2152, .cpu = bpf_get_smp_processor_id() };
 	__u32 key = 0;
 
-	__u32 cpu_id = bpf_get_smp_processor_id();
     config = config_map.lookup(&key);
 	if (!config) {
 		goto out;
@@ -121,6 +163,7 @@ int xdp_redirect_update_gtpu(struct xdp_md *ctx)
 	if (state->next_supi++ >= config->supi_range - 1)
 		state->next_supi = 0;
 	action = bpf_redirect(config->ifindex_out, 0);
+	record_stats(ctx, &skey, 1);
 	long *value = txcnt.lookup(&key);
     if (value)
         *value += 1;

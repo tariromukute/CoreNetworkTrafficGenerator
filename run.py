@@ -5,16 +5,22 @@ import signal
 from src.UESim import UESim
 from src.SCTP import SCTPClient
 from src.NGAPSim import GNB
+from src.GTPU import GTPU
+from src.bpf.XDPLoader import Trafficgen
+from src.bpf.ipstats import IPStats
 from multiprocessing import Process, active_children, Pipe, Value
 import logging
 import yaml
 import json
+import netifaces
+import socket
 
 logger = logging.getLogger('__app__')
 
 # Multi process class
 class MultiProcess:
-    def __init__(self, server_config, ue_config, interval, statistics, verbose, ue_sim_time):
+    def __init__(self, gtpu, server_config, ue_config, interval, statistics, verbose, ue_sim_time):
+        # TODO: remove None and add the other configs
         self.processes = []
         for i in range(len(ue_config['ue_profiles'])):
             sctp_client = SCTPClient(server_config)
@@ -22,7 +28,7 @@ class MultiProcess:
             upf_to_ue, ue_to_upf = Pipe(duplex=True)
             config = {}
             config['ue_profiles'] = [ue_config['ue_profiles'][i]]
-            gnb = GNB(sctp_client, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose)
+            gnb = GNB(sctp_client, gtpu, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose)
             ueSim = UESim(ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, config, interval, statistics, verbose, ue_sim_time)
             self.processes.append(Process(target=gnb.run))
             self.processes.append(Process(target=ueSim.run))
@@ -49,7 +55,18 @@ class TimeRange():
         self.end_time = Value('f', end_time)
         
 
+def get_network_interfaces_map():
+    interface_map = {}
+    interfaces = netifaces.interfaces()  # Get interface names using netifaces
 
+    for interface_name in interfaces:
+        try:
+            if_index = socket.if_nametoindex(interface_name)
+            interface_map[if_index] = interface_name
+        except OSError:
+            print(f"Error retrieving if_index for interface: {interface_name}")
+
+    return interface_map
 # Main function
 def main(args: Arguments):
     # Read server configuration
@@ -68,6 +85,10 @@ def main(args: Arguments):
     if args.ebpf:
         from stats.sctp import b, rwnd_map, cwnd_map, rtt_map
 
+    interfaces_map = get_network_interfaces_map()
+    gtpuTrafficgen = Trafficgen("eth2")
+    gtpu = GTPU({ 'gtpIp': server_config['gtpIp'], 'fgcMac': server_config['fgcMac'] }, gtpuTrafficgen, args.verbose)
+
     # Calculate the number of seconds between the monotonic starting point and the Unix epoch
     epoch_to_monotonic_s = time.monotonic() - time.time()
     
@@ -77,11 +98,25 @@ def main(args: Arguments):
     # This will store the start and end time of the UE simulation/emulation
     ue_sim_time = TimeRange(0.0, 0.0)
     # # Create multi process
-    multi_process = MultiProcess(server_config, ue_config, args.interval, args.statistics, args.verbose, ue_sim_time)
+    multi_process = MultiProcess(gtpu, server_config, ue_config, args.interval, args.statistics, args.verbose, ue_sim_time)
     multi_process.run()
+
+    ipstats = IPStats()
     
+    pkt_s = "pkts/s"
+    bytes_s = "kb/s"
     while True:
+        print()
+        print(f"{'':<6} | {' '.join(f'{interfaces_map[if_index]:^20}' for if_index in sorted(interfaces_map))}") # Headers
+        print(f"{'':<6} | {' '.join(f'{pkt_s:>10}{bytes_s:>10}' for _ in sorted(interfaces_map))}") # Subheaders
         try:
+            ip_stats = ipstats.get_stats()
+            gtpu_stats = gtpuTrafficgen.get_stats()
+            for i in range(len(ip_stats)):
+                print(ip_stats[i])
+            print("----")
+            for i in range(len(gtpu_stats)):
+                print(gtpu_stats[i])
             # Check if all child processes have terminated
             if len(active_children()) == 0:
                 break

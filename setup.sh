@@ -34,10 +34,10 @@ done
 git submodule init
 git submodule update
 
-# Build the a shared c library of file src/xdpgen/xdpgen.c using clang
-clang -shared -o src/xdpgen/libxdpgen.so src/xdpgen/xdpgen.c -lbpf
+# Build the a shared c library of file src/bpf/xdpgen.c using clang
+clang -shared -o src/bpf/libxdpgen.so src/bpf/xdpgen.c -lbpf
 
-# Create an ENV variable XDP_INCLUDE_PATH that points to src/xdpgen/
+# Create an ENV variable XDP_INCLUDE_PATH that points to src/bpf/
 export APP_INCLUDE_PATH=$(pwd)
 
 echo "The value of APP_INCLUDE_PATH is: $APP_INCLUDE_PATH"
