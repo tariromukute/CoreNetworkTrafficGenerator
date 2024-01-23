@@ -37,6 +37,7 @@ git submodule update
 - headers for pysctp `sudo apt-get install python3-dev`
 - pysctp `pip install pysctp`
 - scapy `pip install scapy`
+- pyroute2 `pip install pyroute2`
 - bcc `sudo apt-get install python3-bpfcc bpfcc-tools linux-headers-$(uname -r)`
 - libbpf `sudo apt-get install libbpf-dev`
 - clang `sudo apt-get install clang-14 && sudo ln /usr/bin/clang-14 /usr/bin/clang`

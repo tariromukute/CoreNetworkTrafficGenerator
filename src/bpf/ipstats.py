@@ -3,6 +3,7 @@ import socket
 import time
 import netifaces
 import collections
+from pyroute2 import IPRoute, NetNS, IPDB, NSPopen
 
 include_path = "/home/azureuser/cn-tg"
 
@@ -56,7 +57,6 @@ class IPStats:
                     lambda: {"rx_bytes": 0, "rx_packets": 0, "tx_bytes": 0, "tx_packets": 0}
                 )
                 stats_map = self.b.get_table("stats_map")
-
                 for key, value in stats_map.items():
                     group = grouped_data[(key.ifindex, key.protocol)]
                     for field in ("rx_bytes", "rx_packets", "tx_bytes", "tx_packets"):
@@ -88,6 +88,9 @@ class IPStats:
 
             except KeyboardInterrupt:
                 break  # Exit gracefully on Ctrl+C
+
+        for if_index in self.interfaces_map.keys():
+            self.clean(if_index)
                 
     def get_stats(self):
         # Retrieve and process statistics
@@ -104,18 +107,39 @@ class IPStats:
         return grouped_data
         
     def load(self):
-        # Load the XDP program (replace with the path to your compiled program)
+        ipr = IPRoute()
+
         self.b = BPF(src_file=f"{include_path}/src/bpf/ipstats.bpf.c", cflags=[f"-I{include_path}/src/bpf", "-Wno-macro-redefined"])
-        self.b.attach_xdp("eth2", self.b.load_func("xdp_prog", BPF.XDP), XDP_FLAGS_SKB_MODE)
+        
+        ingress_fn = self.b.load_func("handle_tc_ingress", BPF.SCHED_CLS)
+        egress_fn = self.b.load_func("handle_tc_egress", BPF.SCHED_CLS)
         
         # Attach the XDP program to all the interfaces
-        for ifname in self.interfaces_map.values():
+        for if_index in self.interfaces_map.keys():
             try: 
-                self.b.attach_xdp(ifname, self.b.load_func("xdp_prog", BPF.XDP), XDP_FLAGS_SKB_MODE)
+                # Try cleaning first
+                try:
+                    self.clean(if_index)
+                except Exception as e:
+                    pass
+
+                ipr.tc("add", "ingress", if_index, "ffff:")
+                ipr.tc("add-filter", "bpf", if_index, ":1", fd=ingress_fn.fd,
+                    name=ingress_fn.name, parent="ffff:", action="ok", classid=1)
+                
+                ipr.tc("add", "sfq", if_index, "1:")
+                ipr.tc("add-filter", "bpf", if_index, ":1", fd=egress_fn.fd,
+                    name=egress_fn.name, parent="1:", action="ok", classid=1)
             except Exception as e:
-                print(f"Failed to attach XDP program on {ifname}: {e}")
+                print(f"Failed to attach XDP program on (if index) {if_index}: {e}")
+                raise e
         self.previous_data = {}  # Store previous results for delta calculations
-        
+
+    def clean(self, if_index):
+        ipr = IPRoute()
+        ipr.tc('del', 'ingress', if_index, 'ffff:')
+        ipr.tc('del', 'sfq', if_index, '1:')
+
     def detach(self):
         # Detach the XDP program when exiting
         for ifname in self.interfaces_map.values():

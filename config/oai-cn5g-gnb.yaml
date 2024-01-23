@@ -9,9 +9,9 @@ linkIp: 127.0.0.1   # gNB's local IP address for Radio Link Simulation (Usually 
 ngapIp: 10.0.0.16  # gNB's local IP address for N2 Interface (Usually same with local IP)
 gtpIp: 10.0.0.16    # gNB's local IP address for N3 Interface (Usually same with local IP)
 gtpuConfig:
-  srcMac: '00:22:48:13:95:78'
+  srcMac: '00:22:48:ce:99:e4'
   srcIp: '10.0.3.4'
-  dstMac: '60:45:bd:43:3a:17'
+  dstMac: '00:22:48:cf:71:f9'
   dstIp: '10.0.3.5'
   interface: 'eth2'
 

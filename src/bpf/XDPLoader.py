@@ -94,7 +94,7 @@ class Trafficgen:
         self.config_map = self.b.get_table("config_map")
         self.config_map[0] = self.config
 
-    def run(self, packet):
+    def run(self, packet, num_pkts = 1 << 20):
         # Load shared library
 
         lib = ctypes.CDLL(f"{include_path}/src/bpf/libxdpgen.so")
@@ -104,7 +104,6 @@ class Trafficgen:
 
         c_packet = ctypes.create_string_buffer(raw(packet), len(packet))
 
-        num_pkts = 1 << 20
         err = lib.xdp_gen(self.func.fd, num_pkts, c_packet, len(c_packet))
         if err != 0:
             print("Failed to call xdp_gen function")

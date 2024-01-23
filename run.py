@@ -18,9 +18,9 @@ import socket
 GTP_UDP_PORT = 2152
 
 protocol_names = {
-    socket.IPPROTO_TCP: "tcp",
-    socket.IPPROTO_UDP: "udp",
-    socket.IPPROTO_ICMP: "icmp",
+    # socket.IPPROTO_TCP: "tcp",
+    # socket.IPPROTO_UDP: "udp",
+    # socket.IPPROTO_ICMP: "icmp",
     socket.IPPROTO_SCTP: "sctp",
     GTP_UDP_PORT: 'gtpu',
     # ... Add other protocols as needed
@@ -99,7 +99,7 @@ def main(args: Arguments):
         dst_mac=server_config['gtpuConfig']['dstMac'],
         src_ip=server_config['gtpuConfig']['srcIp'],
         dst_ip=server_config['gtpuConfig']['dstIp'],
-        cpu_cores=[0, 1, 2, 3]
+        cpu_cores=[0]
     )
     gtpu = GTPU(gtpuConfig, gtpuTrafficgen, args.verbose)
 
