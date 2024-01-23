@@ -17,7 +17,7 @@ class GTPUConfig(NamedTuple):
     src_ip: str
     dst_ip: str
     cpu_cores: List[int]
-    pkt_core: int = 0
+    num_pkts: int = 0
 
 class GTPU():
     def __init__(self, config: GTPUConfig, trafficgen, verbose):
@@ -26,7 +26,7 @@ class GTPU():
         self.generate = False
         self.gtpu_pkt = self.prepare_gtpu_pkt(config)
         self.cpu_cores = config.cpu_cores if config.cpu_cores != None else [0, 1, 2, 3]
-        self.pkt_core = config.pkt_core if config.pkt_core != 0 else 1 << 20
+        self.num_pkts = config.num_pkts if config.num_pkts != 0 else 1 << 20
         self.tg = trafficgen
 
     def prepare_gtpu_pkt(self, pkt_cfg):
@@ -59,7 +59,7 @@ class GTPU():
         os.sched_setaffinity(0, affinity_mask)
         while self.generate:
             # Perform some action in a loop
-            self.tg.run(self.gtpu_pkt, self.pkt_core)
+            self.tg.run(self.gtpu_pkt, self.num_pkts)
             time.sleep(1)
 
     def print_stats(self):

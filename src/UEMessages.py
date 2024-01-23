@@ -175,6 +175,7 @@ def connection_release_complete(ue, IEs, Msg=None):
     return None, '5GMMANConnectionReleaseComplete'  # For internal use only, it's not a real message type
 
 def pdu_session_generate_traffic(ue, IEs, Msg=None):
+    ue.set_state(FGMMState.PDU_SESSION_TRANSMITTING)
     return ue.IpAddress['Addr'], '5GUPMessage'
 
 def up_send_data(ue, IEs, Msg=None):

@@ -9,6 +9,9 @@ from scapy.contrib.gtp import (
 
 import ipaddress
 import netifaces
+import os
+
+cwd = os.getcwd()
 
 GTP_UDP_PORT = 2152
 
@@ -17,7 +20,7 @@ protocol_names = {
     GTP_UDP_PORT: 'GTPU',
 }
 
-include_path = "/home/azureuser/cn-tg" # os.environ['APP_INCLUDE_PATH']
+include_path = cwd
 
 class IpAddress(ctypes.Structure):
     _fields_ = [

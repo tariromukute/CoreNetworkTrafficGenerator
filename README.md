@@ -64,6 +64,8 @@ cd ~/cn-tg/
 #   -h, --help            show this help message and exit
 #   -i INTERVAL, --interval INTERVAL
 #                         Interval of adding UEs in seconds
+#   -n NUM_PKTS, --num_pkts NUM_PKTS
+#                         Number of UP packets to send per second
 #   -u UE_CONFIG_FILE, --ue_config_file UE_CONFIG_FILE
 #                         UE configuration file
 #   -g GNB_CONFIG_FILE, --gnb_config_file GNB_CONFIG_FILE
@@ -76,15 +78,9 @@ cd ~/cn-tg/
 python3 run.py -u config/oai-cn5g-ue.yaml -g config/oai-cn5g-gnb.yaml -vvv
 ```
 
-### Sending user plane traffic
-
-There are two options to sending the traffic:
-1. Configuring the traffic generator to send IP packets
-2. Using the `ue_send.py` script to send traffic
-
 **Configuring the traffic generator to send IP packets**
 
-After PDU session establishment, the traffic generator can generate and send UP traffic for each UE that has established a PDU session. This is achieved by updating the procedures list to include `5GUPMessage` after `5GSMPDUSessionEstabRequest`, see the sample below. The User Plane data and count should then be provide. The upData is scapy's IP packet in bytes, see below a sample on how to the generate the IP packet using scapy. The IP header will be updated respectively by the traffic generator before sending the packets i.e., the IP source address and the checksum.
+After PDU session establishment, the traffic generator can generate and send UP traffic for each UE that has established a PDU session. This is achieved by updating the procedures list to include `5GUPMessage` after `5GSMPDUSessionEstabRequest`, see the sample below. The generator will generate at most the number of packets per second provided above. The default is (1 << 20), meaning it will generate the most it can.
 
 ```yaml
 ...
@@ -94,43 +90,6 @@ After PDU session establishment, the traffic generator can generate and send UP 
       - 5GSMPDUSessionEstabRequest
       - 5GUPMessage
       - 5GMMMODeregistrationRequest
-
-    upData: '4500001c00010000400160c10a000010080808080800f7ff00000000'
-    upCount: 5
-```
-
-Generate the IP packet using scapy
-
-```python
-from scapy.all import *
-import binascii
-
-ip_pkt = IP(dst="8.8.8.8")/ICMP()
-raw_ip_pkt = raw(ip_pkt)
-hex_ip_pkt = binascii.hexlify(raw_ip_pkt)
-print(hex_ip_pkt)
-```
-
-**Using the `ue_send.py` script to send traffic**
-
-To send UE traffic using the `ue_send.py` make sure `5GSMPDUSessionEstabRequest` is the last entry under procedures in the UE config file, if `5GMMMODeregistrationRequest` follows afterwards the session will be terminated.
-
-You can send UE traffic using the script `ue_send.py`. The scripts makes use of scapy to compose traffic to send to the core network dataplane. By default it sends a ICMP echo request to 8.8.8.8, you can modify the packet by passing an IP packet in hex format. You can generate the IP packet using scapy, see the example above.
-
-You can the send the packets by passing the parameters displayed during PDU session establishment
-
-```bash
-# Check `python3 ue_send.py --help` for description of arguments
-python3 ue_send.py -d 192.168.70.134 -m 'fa:16:3e:d8:d9:80' -s 12.1.1.35 -q 9 -t 35 -u 5 -i 1000 -p <hex_ip_pkt>
-```
-
-Enable the python to send packets with Scapy with non-root user
-
-```bash
-# find original file is execute shell command
-ls -la /usr/bin/python3
-# set capabilities for binaries running your script
-sudo setcap cap_net_raw=eip /usr/bin/python3.8
 ```
 
 ## Validation/Compliance testing of 5GC responses

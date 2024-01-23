@@ -14,6 +14,7 @@ import yaml
 import json
 import netifaces
 import socket
+import os
 
 GTP_UDP_PORT = 2152
 
@@ -49,10 +50,11 @@ class MultiProcess:
             process.start()
 
 class Arguments:
-    def __init__(self, log, console, file, interval, ue_config_file, gnb_config_file, statistics, verbose):
+    def __init__(self, log, console, file, interval, num_pkts, ue_config_file, gnb_config_file, statistics, verbose):
         self.log = log
         self.console = console
         self.interval = interval
+        self.num_pkts = num_pkts
         self.file = file
         self.ue_config_file = ue_config_file
         self.gnb_config_file = gnb_config_file
@@ -92,6 +94,9 @@ def main(args: Arguments):
         except yaml.YAMLError as exc:
             print(exc)
 
+    num_cpus = len(os.sched_getaffinity(0))
+
+    duration = 5
     interfaces_map = get_network_interfaces_map()
     gtpuTrafficgen = Trafficgen(server_config['gtpuConfig']['interface'])
     gtpuConfig = GTPUConfig(
@@ -99,7 +104,8 @@ def main(args: Arguments):
         dst_mac=server_config['gtpuConfig']['dstMac'],
         src_ip=server_config['gtpuConfig']['srcIp'],
         dst_ip=server_config['gtpuConfig']['dstIp'],
-        cpu_cores=[0]
+        cpu_cores=range(num_cpus // 2),
+        num_pkts=args.num_pkts
     )
     gtpu = GTPU(gtpuConfig, gtpuTrafficgen, args.verbose)
 
@@ -161,6 +167,8 @@ def main(args: Arguments):
 parser = ArgumentParser(description='Run 5G Core traffic generator')
 parser.add_argument('-i', '--interval', type=float, default=0,
                     help='Interval of adding UEs in seconds')
+parser.add_argument('-n', '--num_pkts', type=float, default=(1 << 20),
+                    help='Number of num-packets to send per second')
 parser.add_argument('-u', '--ue_config_file', type=str,
                     default='./config/open5gs-ue.yaml', help='UE configuration file')
 parser.add_argument('-g', '--gnb_config_file', type=str,
@@ -174,5 +182,5 @@ parser.add_argument('-s', '--statistics', action='store_true',
 args = parser.parse_args()
 
 arguments = Arguments(False, False, '.',
-                      args.interval, args.ue_config_file, args.gnb_config_file, args.statistics, args.verbose)
+                      args.interval, args.num_pkts, args.ue_config_file, args.gnb_config_file, args.statistics, args.verbose)
 main(arguments)
