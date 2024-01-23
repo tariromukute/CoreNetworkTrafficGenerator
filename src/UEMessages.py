@@ -159,7 +159,7 @@ def pdu_session_establishment_complete(ue, IEs, Msg=None):
     address = Msg['PDUAddress']['PDUAddress'].get_val_d()
     ue.IpAddress = address # Format is {'spare': 0, 'Type': 1, 'Addr': b'\x0c\x01\x01\x07'} with type of address
     ip_addr = socket.inet_ntoa(address['Addr'])
-    logger.info(f"UE {ue.supi} assigned address {ip_addr}")
+    logger.debug(f"UE {ue.supi} assigned address {ip_addr}")
     # Update the UpData, change source ip address
     upPkt = binascii.unhexlify(ue.UpData)
     ip_pkt = IP(upPkt)
@@ -173,6 +173,10 @@ def connection_release_complete(ue, IEs, Msg=None):
     ue.set_state(FGMMState.CONNECTION_RELEASED)
     ue.end_time = time.time()
     return None, '5GMMANConnectionReleaseComplete'  # For internal use only, it's not a real message type
+
+def pdu_session_generate_traffic(ue, IEs, Msg=None):
+    ue.set_state(FGMMState.PDU_SESSION_TRANSMITTING)
+    return ue.IpAddress['Addr'], '5GUPMessage'
 
 def up_send_data(ue, IEs, Msg=None):
     if Msg != None and Msg == b'0':

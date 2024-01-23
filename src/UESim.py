@@ -17,7 +17,7 @@ request_mapper = {
     '5GMMRegistrationRequest': registration_request,
     '5GSMPDUSessionEstabRequest': pdu_session_establishment_request,
     '5GMMMODeregistrationRequest': mo_deregistration_request,
-    '5GUPMessage': up_send_data
+    '5GUPMessage': pdu_session_generate_traffic # up_send_data
 }
 
 response_mapper = {

@@ -5,7 +5,6 @@ import threading
 import sys
 import socket
 from src.SCTP import SCTPClient
-from src.GTPU import GTPU
 from pycrate_asn1dir import NGAP
 from pycrate_mobile.NAS import parse_NAS5G
 from pycrate_core import utils_py3
@@ -172,7 +171,7 @@ num_threads = 1
 class GNB():
     exit_flag = False
 
-    def __init__(self, sctp: SCTPClient, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose) -> None:
+    def __init__(self, sctp: SCTPClient, gtpu, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose) -> None:
         global logger
         # Set logging level based on the verbose argument
         if verbose == 0:
@@ -185,7 +184,7 @@ class GNB():
             logging.basicConfig(level=logging.DEBUG)
         global gtpIp
         gtpIp = server_config['gtpIp']
-        self.gtpu = GTPU({ 'gtpIp': gtpIp, 'fgcMac': server_config['fgcMac'] }, upf_to_ue, verbose=verbose >= 2)
+        self.gtpu = gtpu
         self.ues = {} # key -> ran_ue_ngap_id = { amf_ue_ngap_id: ue.supi[-10:], qfi,  ul_teid, dl_teid }, value -> amf_ue_ngap_id assigned by core network
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue
@@ -283,7 +282,7 @@ class GNB():
                             ul_teid = utils_py3.bytes_to_uint(ue_['ul_up_transport_layer_information'][1]['gTP-TEID'], 32)
                             dl_teid = utils_py3.bytes_to_uint(ue_['dl_up_transport_layer_information'][1]['gTP-TEID'], 32)
                             upf_address = socket.inet_ntoa(utils_py3.uint_to_bytes(ue_['ul_up_transport_layer_information'][1]['transportLayerAddress'][0], 32))
-                            logger.info(f"UE {ue_['ran_ue_ngap_id']} PDU resource setup QOS id: {ue_['qos_identifier']} UL Address: {upf_address} UL teid {ul_teid} DL teid {dl_teid}")
+                            logger.debug(f"UE {ue_['ran_ue_ngap_id']} PDU resource setup QOS id: {ue_['qos_identifier']} UL Address: {upf_address} UL teid {ul_teid} DL teid {dl_teid}")
                             self.ues[ue_['ran_ue_ngap_id']]['qfi'] = ue_['qos_identifier']
                             self.ues[ue_['ran_ue_ngap_id']]['ul_teid'] = ul_teid
                             self.ues[ue_['ran_ue_ngap_id']]['dl_teid'] = dl_teid
@@ -367,11 +366,11 @@ class GNB():
         """
         while not GNB.exit_flag:
             try:
+                # data is the ip address in bytes
                 data, ran_ue_ngap_id = self.upf_to_ue.recv()
                 if data:
                     # ran_ue_ngap_id = int(ue.supi[-10:])
                     ue = self.ues.get(ran_ue_ngap_id)
-                    
                     self.gtpu.send(ue, data)
             except:
                 GNB.exit_flag = True
