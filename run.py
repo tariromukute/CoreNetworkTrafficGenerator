@@ -8,6 +8,7 @@ from src.NGAPSim import GNB
 from src.GTPU import GTPU, GTPUConfig
 from src.bpf.XDPLoader import Trafficgen
 from src.bpf.ipstats import IPStats
+from src.UE import *
 from multiprocessing import Process, active_children, Pipe, Value
 import logging
 import yaml
@@ -67,6 +68,21 @@ class TimeRange():
         self.end_time = Value('f', end_time)
         
 
+def read_stats(file_path):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+        stats = {}
+        for line in lines[1:]:
+            key, value = line.split()
+            stats[key] = int(value)
+    return stats
+
+def print_delta(old_stats, new_stats):
+    for key in old_stats:
+        if key in new_stats:
+            delta = new_stats[key] - old_stats[key]
+            print(f"{key}: {delta}")
+
 def get_network_interfaces_map():
     interface_map = {}
     interfaces = netifaces.interfaces()  # Get interface names using netifaces
@@ -79,6 +95,20 @@ def get_network_interfaces_map():
             print(f"Error retrieving if_index for interface: {interface_name}")
 
     return interface_map
+
+def create_ues(ue_profiles, x):
+    dict_list = [{} for _ in range(x)]
+    p = 0
+    for ue_config in ue_profiles:
+        count, base_imsi, init_imsi = ue_config['count'], ue_config['supi'][:-10], int(ue_config['supi'][-10:])
+        for i in range(init_imsi, init_imsi + count):
+            imsi = f"{base_imsi}{i:010d}"
+            ue = UE({**ue_config, 'supi': imsi})
+            dict_list[p % x][i] = ue
+            p += 1
+
+    return dict_list
+
 # Main function
 def main(args: Arguments):
     # Read server configuration
@@ -96,6 +126,7 @@ def main(args: Arguments):
 
     num_cpus = len(os.sched_getaffinity(0))
 
+    print(f"Number of child processed {len(active_children())}")
     duration = 5
     interfaces_map = get_network_interfaces_map()
     gtpuTrafficgen = Trafficgen(server_config['gtpuConfig']['interface'])
@@ -118,13 +149,43 @@ def main(args: Arguments):
     # This will store the start and end time of the UE simulation/emulation
     ue_sim_time = TimeRange(0.0, 0.0)
     # # Create multi process
-    multi_process = MultiProcess(gtpu, server_config, ue_config, args.interval, args.statistics, args.verbose, ue_sim_time)
-    multi_process.run()
+    # multi_process = MultiProcess(gtpu, server_config, ue_config, args.interval, args.statistics, args.verbose, ue_sim_time)
+    # multi_process.run()
 
+    processes = []
+    gnbProcesses = []
+    gnbExitFlags = []
+    ueProcesses = []
+    ueSims = []
+    ue_lists = create_ues(ue_config['ue_profiles'], num_cpus - 1 if num_cpus > 1 else 1)
+    for i in range(len(ue_lists)):
+        print(f"Value of i {i}")
+        sctp_client = SCTPClient(server_config)
+        ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
+        upf_to_ue, ue_to_upf = Pipe(duplex=True)
+        config = {}
+        exit_program = multiprocessing.Value('i', 0)
+        gnb_exit_program = multiprocessing.Value('i', 0)
+        gnb = GNB(gnb_exit_program, sctp_client, gtpu, server_config, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, args.verbose)
+        ueSim = UESim(exit_program, ue_lists[i], ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, args.interval, args.statistics, args.verbose, ue_sim_time)
+        ueSims.append(exit_program)
+        gnbExitFlags.append(gnb_exit_program)
+        # % num_cpus so that on single CPU, affirnity is set to CPU 0
+        gnbProcesses.append(Process(name=f"gnb-{i}", target=gnb.run, args=((i+1) % num_cpus,)))
+        ueProcesses.append(Process(name=f"ueSIM-{i}", target=ueSim.run, args=((i+1) % num_cpus,)))
+
+    for process in gnbProcesses + ueProcesses:
+        process.start()
     ipstats = IPStats()
     previous_data = {}
+    min_data = {}
+    max_data = {}
     pkt_s = "pkts/s"
     bytes_s = "kb/s"
+
+    file_path = "/proc/net/sctp/snmp"
+    old_stats = read_stats(file_path)
+    
     while True:
         print()
         print(f"{'':<8} | {' '.join(f'{interfaces_map[if_index]:^20}' for if_index in sorted(interfaces_map))}") # Headers
@@ -141,7 +202,8 @@ def main(args: Arguments):
             for proto, p_name in protocol_names.items():
                 for direction, label in ("rx", "rx"), ("tx", "tx"):
                     row_data = [
-                        f"{delta_packets:>10}{delta_bytes / 1024:>10.0f}"
+                        # f"{delta_packets:>10}{delta_bytes / 1024:>10.0f}"
+                        (delta_packets, delta_bytes / 1024)
                         for if_index in sorted(interfaces_map.keys())
                         for delta_packets, delta_bytes in [
                             (
@@ -153,7 +215,15 @@ def main(args: Arguments):
                         ]
                     ]
                     # stats.append(f"{p_name} {label} | {' '.join(row_data)}")
-                    print(f"{p_name:<6}{label:<2} | {' '.join(row_data)}")
+                    # print(f"{p_name:<6}{label:<2} | {' '.join(row_data)}")
+                    print(f"{p_name:<6}{label:<2} | {' '.join(f'{dp:>10.0f}{db:>10.0f}' for dp, db in row_data)}")
+
+                    # Update min_data and max_data
+                    for if_index, (delta_packets, delta_bytes) in enumerate(row_data):
+                        key = (if_index, proto, direction)
+                        min_data[key] = min(min_data.get(key, delta_packets), delta_packets)
+                        max_data[key] = max(max_data.get(key, delta_packets), delta_packets)
+
             previous_data = ip_stats
             
             if len(active_children()) == 0:
@@ -162,6 +232,46 @@ def main(args: Arguments):
             time.sleep(1)
         except KeyboardInterrupt:
             print()
+
+        exit_flag = True
+        for p in ueSims:
+            exit_flag = exit_flag and p.value
+
+        if exit_flag:
+            for f in  gnbExitFlags:
+                f.value = True
+            break
+            
+    # Print min_data and max_data after the loop
+    print("\nMinimum Delta Values:")
+    for proto, p_name in protocol_names.items():
+        for direction, label in ("rx", "rx"), ("tx", "tx"):
+            row_data = []
+            for if_index in sorted(interfaces_map.keys()):
+                row_data.append(min_data.get((if_index, proto, direction), 0))
+            print(f"{p_name:<6}{label:<2} | {' '.join(f'{dp:>10.0f}' for dp in row_data)}")
+
+    print("\Maximum Delta Values:")
+    for proto, p_name in protocol_names.items():
+        for direction, label in ("rx", "rx"), ("tx", "tx"):
+            row_data = []
+            for if_index in sorted(interfaces_map.keys()):
+                row_data.append(max_data.get((if_index, proto, direction), 0))
+            print(f"{p_name:<6}{label:<2} | {' '.join(f'{dp:>10.0f}' for dp in row_data)}")
+    
+    for process in gnbProcesses + ueProcesses:
+        print(f"Joining {process.name}")
+        process.join(timeout=1)
+
+    new_stats = read_stats(file_path)
+    print_delta(old_stats, new_stats)
+
+    print(f"Number of child processed {len(active_children())}")
+
+    # TODO: fix processes requiring forceful termination
+    children = multiprocessing.active_children()
+    for child in children:
+        child.terminate()
 
 # Define parser arguments
 parser = ArgumentParser(description='Run 5G Core traffic generator')

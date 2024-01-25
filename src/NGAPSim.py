@@ -8,6 +8,9 @@ from src.SCTP import SCTPClient
 from pycrate_asn1dir import NGAP
 from pycrate_mobile.NAS import parse_NAS5G
 from pycrate_core import utils_py3
+import os
+import psutil
+import multiprocessing
 
 logger = logging.getLogger('__NGAPSim__')
 
@@ -167,11 +170,10 @@ import threading
 # Create a lock object
 ue_to_ngap_lock = threading.Lock()
 ngap_to_ue_lock = threading.Lock()
-num_threads = 1
+num_threads = 2
 class GNB():
-    exit_flag = False
 
-    def __init__(self, sctp: SCTPClient, gtpu, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose) -> None:
+    def __init__(self, gnb_exit_flag, sctp: SCTPClient, gtpu, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose) -> None:
         global logger
         # Set logging level based on the verbose argument
         if verbose == 0:
@@ -182,6 +184,7 @@ class GNB():
             logging.basicConfig(level=logging.INFO)
         else:
             logging.basicConfig(level=logging.DEBUG)
+        self.exit_flag = gnb_exit_flag
         global gtpIp
         gtpIp = server_config['gtpIp']
         self.gtpu = gtpu
@@ -208,8 +211,10 @@ class GNB():
                 tAISliceSupport['sD'] = int(a['sd']).to_bytes(3, 'big')
             self.tai_slice_support_list.append(tAISliceSupport)
 
-    def run(self) -> None:
+    def run(self, cpu_core) -> None:
         """ Run the gNB """
+        affinity_mask = { cpu_core } 
+        os.sched_setaffinity(0, affinity_mask)
         logger.debug("Starting gNB")
         self.ngap_to_ue_thread = self._load_ngap_to_ue_thread(self._ngap_to_ue_thread_function)
         self.nas_dl_thread = self._load_ue_to_ngap_thread(self._ue_to_ngap_thread_function)
@@ -254,7 +259,11 @@ class GNB():
             returns an NAS PDU, it will be put in the queue to be sent to the UE
         """
         
-        while not GNB.exit_flag:
+        while not self.exit_flag.value:
+            # process = psutil.Process()
+            # cpu_affinity = process.cpu_affinity()  # Get current CPU affinity as a set
+            # cpu_core = next(iter(cpu_affinity))  # Extract any CPU core
+            # print(f"Process {multiprocessing.current_process().name} working on CPU {process.cpu_num()}, affirnity {cpu_affinity}")
             try:
                 data = None
                 with ngap_to_ue_lock:
@@ -298,7 +307,7 @@ class GNB():
                         self.ngap_to_ue.send((nas_pdu, ue_['ran_ue_ngap_id']))
             except:
                 # IF error occurs, likely from SCTP end program
-                GNB.exit_flag = True
+                self.exit_flag.value = True
     
     def _load_ue_to_ngap_thread(self, ue_to_ngap_thread_function):
         """ Load the thread that will handle NAS UpLink messages from UE """
@@ -322,7 +331,7 @@ class GNB():
             It will then select the appropriate NGAP procedure to put the NAS message in
             and put the NGAP message in the queue to be sent to 5G Core
         """
-        while not GNB.exit_flag:
+        while not self.exit_flag.value:
             try:
                 data = None
                 ran_ue_ngap_id = None
@@ -350,7 +359,9 @@ class GNB():
                     self.sctp.send(PDU.to_aper())
             except:
                 # IF error occurs, likely from SCTP end program
-                GNB.exit_flag = True
+                self.exit_flag.value = True
+        self.stop()
+        
 
     def _load_ue_to_upf_thread(self, ue_to_upf_thread_function):
         """ Load the thread that will handle NAS UpLink messages from UE """
@@ -364,7 +375,7 @@ class GNB():
             It will then select the appropriate NGAP procedure to put the NAS message in
             and put the NGAP message in the queue to be sent to 5G Core
         """
-        while not GNB.exit_flag:
+        while not self.exit_flag.value:
             try:
                 # data is the ip address in bytes
                 data, ran_ue_ngap_id = self.upf_to_ue.recv()
@@ -373,7 +384,7 @@ class GNB():
                     ue = self.ues.get(ran_ue_ngap_id)
                     self.gtpu.send(ue, data)
             except:
-                GNB.exit_flag = True
+                self.exit_flag.value = True
 
     def get_ue(self, ran_ue_ngap_id):
         return self.ues[ran_ue_ngap_id]
@@ -386,6 +397,15 @@ class GNB():
 
     def stop(self):
         print("Stopping gnb")
+        if ue_to_ngap_lock.locked():
+            ue_to_ngap_lock.release()
+            print("The NGAP  ue_to_ngap_lock lock is currently locked")
+        if ngap_to_ue_lock.locked():
+            ngap_to_ue_lock.release()
+            print("The NGAP ngap_to_ue_lock lock is currently locked")
+
+        self.sctp.disconnect()
+        sys.exit(0)
 
     def __str__(self):
         return f"<NGAP mcc={self.mcc}, mnc={self.mnc}, nci={self.nci}, id_length={self.id_length}>"
