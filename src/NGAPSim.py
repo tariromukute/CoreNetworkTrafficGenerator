@@ -260,10 +260,6 @@ class GNB():
         """
         
         while not self.exit_flag.value:
-            # process = psutil.Process()
-            # cpu_affinity = process.cpu_affinity()  # Get current CPU affinity as a set
-            # cpu_core = next(iter(cpu_affinity))  # Extract any CPU core
-            # print(f"Process {multiprocessing.current_process().name} working on CPU {process.cpu_num()}, affirnity {cpu_affinity}")
             try:
                 data = None
                 with ngap_to_ue_lock:
@@ -305,9 +301,10 @@ class GNB():
                         self.sctp.send(ngap_pdu.to_aper())
                     if nas_pdu:
                         self.ngap_to_ue.send((nas_pdu, ue_['ran_ue_ngap_id']))
-            except:
+            except Exception as e:
+                logger.error(f"Error sending message to UESim: {e}")
                 # IF error occurs, likely from SCTP end program
-                self.exit_flag.value = True
+                # self.exit_flag.value = True
     
     def _load_ue_to_ngap_thread(self, ue_to_ngap_thread_function):
         """ Load the thread that will handle NAS UpLink messages from UE """
@@ -357,9 +354,10 @@ class GNB():
 {PDU.show()}\n\
 |----------------------------------------------------------------------------------------------------------------|\n\n")
                     self.sctp.send(PDU.to_aper())
-            except:
+            except Exception as e:
+                logger.error(f"Error receiving message from UESim: {e}")
                 # IF error occurs, likely from SCTP end program
-                self.exit_flag.value = True
+                # self.exit_flag.value = True
         self.stop()
         
 
@@ -383,8 +381,9 @@ class GNB():
                     # ran_ue_ngap_id = int(ue.supi[-10:])
                     ue = self.ues.get(ran_ue_ngap_id)
                     self.gtpu.send(ue, data)
-            except:
-                self.exit_flag.value = True
+            except Exception as e:
+                # self.exit_flag.value = True
+                logger.error(f"Error receive DP message from UESim: {e}")
 
     def get_ue(self, ran_ue_ngap_id):
         return self.ues[ran_ue_ngap_id]
@@ -396,13 +395,10 @@ class GNB():
         return self.ues
 
     def stop(self):
-        print("Stopping gnb")
         if ue_to_ngap_lock.locked():
             ue_to_ngap_lock.release()
-            print("The NGAP  ue_to_ngap_lock lock is currently locked")
         if ngap_to_ue_lock.locked():
             ngap_to_ue_lock.release()
-            print("The NGAP ngap_to_ue_lock lock is currently locked")
 
         self.sctp.disconnect()
         sys.exit(0)

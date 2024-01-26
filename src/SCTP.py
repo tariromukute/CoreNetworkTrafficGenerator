@@ -39,9 +39,7 @@ class SCTPClient():
     def disconnect(self) -> None:
         logger.info("Disconnecting from 5G Core")
         if socket_lock.locked():
-            print("The lock is currently locked")
-        else:
-            print("The lock is not locked")
+            socket_lock.release()
         self.__socket.close()
 
     def _load_socket(self):

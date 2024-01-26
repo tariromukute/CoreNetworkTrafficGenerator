@@ -19,7 +19,7 @@ request_mapper = {
     '5GMMRegistrationRequest': registration_request,
     '5GSMPDUSessionEstabRequest': pdu_session_establishment_request,
     '5GMMMODeregistrationRequest': mo_deregistration_request,
-    '5GUPMessage': pdu_session_generate_traffic # up_send_data
+    '5GSMPDUSessionTransmission': pdu_session_generate_traffic
 }
 
 response_mapper = {
@@ -28,7 +28,7 @@ response_mapper = {
     '5GSMPDUSessionEstabAccept': pdu_session_establishment_complete,
     '5GMMSecurityModeCommand': security_mode_complete,
     '5GMMMODeregistrationAccept': deregistration_complete,
-    '5GMMANConnectionRelease': connection_release_complete
+    '5GMMANConnectionReleaseComplete': connection_release_complete
 }
 
 compliance_test_mapper = {
@@ -55,7 +55,7 @@ def validator(PrevMsgBytesSent, MsgRecvd):
     recv_msg_name = None
     MsgRecvdDict = {}
     if MsgRecvd == b'F':
-        recv_msg_name = '5GMMANConnectionRelease'
+        recv_msg_name = '5GMMANConnectionReleaseComplete'
     elif MsgRecvd == b'0':
          recv_msg_name = 'program teminated before receiving the expected response, the 5GC might not have responded'
          error_message = f"Expected response but {recv_msg_name}"
@@ -65,7 +65,6 @@ def validator(PrevMsgBytesSent, MsgRecvd):
         MsgRecvdDict = MsgRecvd.get_val_d()
      
     PrevMsgSentDict = PrevMsgSent.get_val_d()
-    # print(PrevMsgSentDict)
 
     # Check if the received message doesn't have a response mapped
     if not recv_msg_name in response_mapper:
@@ -127,12 +126,12 @@ def validator(PrevMsgBytesSent, MsgRecvd):
         else:
             error_message = f"Expected 5GMMMODeregistrationAccept but got {recv_msg_name}"
             return FGMMState.FAIL, error_message
-    elif recv_msg_name == '5GMMANConnectionRelease':
+    elif recv_msg_name == '5GMMANConnectionReleaseComplete':
         # Check if we received 5GMMMODeregistrationAccept
         if PrevMsgSent._name == '5GMMMODeregistrationAccept':
             return FGMMState.PASS, None
         else:
-            error_message = f"Expected 5GMMMODeregistrationAccept but got 5GMMANConnectionRelease"
+            error_message = f"Expected 5GMMMODeregistrationAccept but got 5GMMANConnectionReleaseComplete"
             return FGMMState.FAIL, error_message
 
     return FGMMState.NULL, None
@@ -175,15 +174,13 @@ class UE:
         self.supi = self.amf_ue_ngap_id = None
         self.procedure = None  # contains the request that UE is processing or has
         self.error_message = ""
-        self.current_procedure = "NULL"
+        self.current_procedure = 0
         self.procedures = config.get('procedures') if 'procedures' in config else [
             '5GMMRegistrationRequest', '5GMMMODeregistrationRequest']
         if config is None:
-            self.state = FGMMState.NULL
             # raise ValueError(f"Config is required")
             # If config is None, set some variables to None and others to default values
             self.op_type, self.state_time = 'OPC', time.time()
-            self.UpData = None
         else:
             # Otherwise, set variables based on values from config
             # The elements on procedures should be keys in request_mapper
@@ -204,17 +201,13 @@ class UE:
                           # Create dictionaries for each item in defaultNssai list
                           if 'sd' in a else {'SST': int(a['sst'])}
                           for a in config['defaultNssai']]
-            # Initialise with upData or set to ICMP echo request to 8.8.8.8
-            self.UpData = config['upData'] if config['upData'] else '4500001c00010000400160c10a000010080808080800f7ff00000000'
-            self.UpCount = config['upCount'] if config['upCount'] else 5
-            self.state, self.state_time = FGMMState.NULL, time.time()
+            self.state_time = time.time()
 
     def set_k_nas_int(self, k_nas_int):
         self.k_nas_int = k_nas_int
 
     def set_state(self, state):
         self.state_time = time.time()
-        self.state = state
 
     def set_compliance_mapper(self, mapper):
         self.compliance_mapper = mapper
@@ -263,10 +256,10 @@ class UE:
 
         # Call the procedure function and return its result
         Msg, sent_type = action_func(self, IEs, Msg)
-        if sent_type == '5GUPMessage': # Already in bytes
+        if sent_type == '5GSMPDUSessionTransmission': # Already in bytes
             return Msg, self, sent_type
         logger.debug(f" \n|----------------------------------------------------------------------------------------------------------------|\n\
-        UE {self.supi} changed to state {FGMMState(self.state).name} and sending message \n\
+        UE {self.supi} sending message \n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 \n{Msg.show() if Msg != None else None} \n\
 |----------------------------------------------------------------------------------------------------------------|\n\n")
@@ -283,7 +276,6 @@ class UE:
                 # We have reached end of test. 
                 # Validator return PASS on an expected reject is received or when succcessfully deregistered and connection release
                 # It returns None otherwise 
-                self.state = test_result
                 self.error_message = error_message
                 return None, self, None
 
@@ -309,7 +301,7 @@ class UE:
 
         # Call the procedure function and return its result
         Msg, sent_type = action_func(self, IEs, Msg)
-        logger.debug(f"UE {self.supi} change to state {FGMMState(self.state).name} and sending message \n{Msg.show() if Msg != None else None}")
+        logger.debug(f"UE {self.supi} sending message \n{Msg.show() if Msg != None else None}")
         return Msg.to_bytes() if Msg != None else None, self, sent_type
     
     def create_common_ies(self):
