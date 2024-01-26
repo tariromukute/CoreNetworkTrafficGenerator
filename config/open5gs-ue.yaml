@@ -11,11 +11,8 @@ ue_profiles:
     procedures:
       - 5GMMRegistrationRequest
       # - 5GSMPDUSessionEstabRequest
-      # - 5GUPMessage
+      # - 5GSMPDUSessionTransmission
       - 5GMMMODeregistrationRequest
-
-    upData: '4500001c00010000400160c10a000010080808080800f7ff00000000'
-    upCount: 5
 
     # Permanent subscription key
     key: '465B5CE8B199B49FAA5F0A2EE238A6BC'
