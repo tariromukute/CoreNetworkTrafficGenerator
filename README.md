@@ -80,7 +80,7 @@ python3 run.py -u config/oai-cn5g-ue.yaml -g config/oai-cn5g-gnb.yaml -vvv
 
 **Configuring the traffic generator to send IP packets**
 
-After PDU session establishment, the traffic generator can generate and send UP traffic for each UE that has established a PDU session. This is achieved by updating the procedures list to include `5GUPMessage` after `5GSMPDUSessionEstabRequest`, see the sample below. The generator will generate at most the number of packets per second provided above. The default is (1 << 20), meaning it will generate the most it can.
+After PDU session establishment, the traffic generator can generate and send UP traffic for each UE that has established a PDU session. This is achieved by updating the procedures list to include `5GSMPDUSessionTransmission` after `5GSMPDUSessionEstabRequest`, see the sample below. The generator will generate at most the number of packets per second provided above. The default is (1 << 20), meaning it will generate the most it can.
 
 ```yaml
 ...
@@ -88,7 +88,7 @@ After PDU session establishment, the traffic generator can generate and send UP 
     procedures:
       - 5GMMRegistrationRequest
       - 5GSMPDUSessionEstabRequest
-      - 5GUPMessage
+      - 5GSMPDUSessionTransmission
       - 5GMMMODeregistrationRequest
 ```
 

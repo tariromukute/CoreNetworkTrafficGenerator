@@ -41,6 +41,80 @@ class FGMMState(IntEnum):
     # Last state indicate number of states
     FGMM_STATE_MAX = 17
 
+# 3GPP TS 24.501 version 16.5.1 Section 9.7 (Table 9.7.1 + Table 9.7.2)
+# Maps the names defined by pycrate to the code
+fg_msg_names = {
+    # Message types for 5GS mobility management
+    # registration
+    65: "5GMMRegistrationRequest",
+    66: "5GMMRegistrationAccept",
+    67: "5GMMRegistrationComplete",
+    68: "5GMMRegistrationReject",
+    69: "5GMMMODeregistrationRequest",
+    70: "5GMMMODeregistrationAccept",
+    71: "5GMMMTDeregistrationRequest",
+    72: "5GMMMTDeregistrationAccept",
+    73: "5GMMMODeregistrationComplete",  # For internal use only, it's not a real message type
+    74: "5GMMANConnectionReleaseComplete",  # For internal use only, it's not a real message type
+    # # service request
+    # 76: "5GMMServiceRequest",
+    # 77: "5GMMServiceReject",
+    # 78: "5GMMServiceAccept",
+    # 79: "5GMMControlPlaneServiceRequest",
+    # # slice-specific auth
+    # 80: "5GMMNetworkSliceSpecificAuthenticationCommand",
+    # 81: "5GMMNetworkSliceSpecificAuthenticationComplete",
+    # 82: "5GMMNetworkSliceSpecificAuthenticationResult",
+    # common procedures
+    84: "5GMMConfigurationUpdateCommand",
+    85: "5GMMConfigurationUpdateComplete",
+    86: "5GMMAuthenticationRequest",
+    87: "5GMMAuthenticationResponse",
+    88: "5GMMAuthenticationReject",
+    89: "5GMMAuthenticationFailure",
+    90: "5GMMAuthenticationResult",
+    # 91: "5GMMIdentityRequest",
+    # 92: "5GMMIdentityResponse",
+    93: "5GMMSecurityModeCommand",
+    94: "5GMMSecurityModeComplete",
+    95: "5GMMSecurityModeReject",
+    # misc
+    # 100: "5GMM5GMMStatus",  # Already had "5GMM" at the beginning
+    # 101: "5GMMNotification",
+    # 102: "5GMMNotificationResponse",
+    103: "5GMMULNasTransport",
+    104: "5GMMDLNasTransport",
+
+    # Message types for 5GS session management
+    #
+    193: "5GSMPDUSessionEstabRequest",
+    194: "5GSMPDUSessionEstabAccept",
+    195: "5GSMPDUSessionEstabReject",
+    196: "5GSMPDUSessionTransmission", # For internal use only, it's not a real message type
+    # #
+    # 197: "5GSMPDUSessionAuthenticationCommand",
+    # 198: "5GSMPDUSessionAuthenticationComplete",
+    # 199: "5GSMPDUSessionAuthenticationResult",
+    # #
+    # 201: "5GSMPDUSessionModificationRequest",
+    # 202: "5GSMPDUSessionModificationReject",
+    # 203: "5GSMPDUSessionModificationCommand",
+    # 204: "5GSMPDUSessionModificationComplete",
+    # 205: "5GSMPDUSessionModificationCommandReject",
+    # #
+    # 209: "5GSMPDUSessionReleaseRequest",
+    # 210: "5GSMPDUSessionReleaseReject",
+    # 211: "5GSMPDUSessionReleaseCommand",
+    # 212: "5GSMPDUSessionReleaseComplete",
+    # #
+    # 214: "5GSM5GSMStatus"  # Already had "5GSM" at the beginning
+}
+fg_msg_codes = {value: key for key, value in fg_msg_names.items()}
+FGMM_MIN_TYPE = 65 # The minimum value of the 5G MM  Message types (registration request)
+FGSM_MIN_TYPE = 193 # he minimum value of the 5G SM Message types (PDU session establishment request)
+FGMM_MAX_TYPE = 104 # The minimum value of the 5G MM  Message types (registration request)
+FGSM_MAX_TYPE = 214 # he minimum value of the 5G SM Message types (PDU session establishment request)
+
 def security_prot_encrypt(ue, Msg):
     if ue.CiphAlgo == 0:
         return Msg
@@ -68,7 +142,6 @@ def security_prot_encrypt_ciphered(ue, Msg):
             SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=ue.IntegAlgo, seqnoff=0, bearer=1)
         return SecMsg
     except:
-        # print(f"ue.CiphAlgo {ue.CiphAlgo} ue.IntegAlgo {ue.IntegAlgo} ue.state {ue}")
         return Msg
 
 def security_prot_decrypt(Msg, ue):

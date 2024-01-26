@@ -37,7 +37,9 @@ class SCTPClient():
         self.__socket.connect((self.server_config['address'], self.server_config['port']))
 
     def disconnect(self) -> None:
-        logger.debug("Disconnecting from 5G Core")
+        logger.info("Disconnecting from 5G Core")
+        if socket_lock.locked():
+            socket_lock.release()
         self.__socket.close()
 
     def _load_socket(self):

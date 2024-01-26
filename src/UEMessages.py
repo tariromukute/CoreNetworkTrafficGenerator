@@ -95,7 +95,6 @@ def security_mode_complete(ue, IEs, Msg):
     NASSecAlgo = Msg['NASSecAlgo']['NASSecAlgo'].get_val_d()
     ue.CiphAlgo = NASSecAlgo['CiphAlgo']
     ue.IntegAlgo = NASSecAlgo['IntegAlgo']
-    # print(f"Set Algo {ue.CiphAlgo} and {ue.IntegAlgo}")
     # Get K_NAS_ENC
     ue.k_nas_enc = conv_501_A8(ue.k_amf, alg_type=1, alg_id=NASSecAlgo['CiphAlgo'])
     # Get least significate 16 bytes from K_NAS_ENC 32 bytes
@@ -129,7 +128,7 @@ def security_mode_complete(ue, IEs, Msg):
     # Encrypt NAS message
     SecMsg = security_prot_encrypt_ciphered(ue, Msg)
     ue.set_state(FGMMState.SECURITY_MODE_INITIATED)
-    return SecMsg, 'FGMMSecurityModeComplete'
+    return SecMsg, '5GMMSecurityModeComplete'
 
 def pdu_session_establishment_request(ue, IEs, Msg):
     """ 3GPP TS 24.501 version 15.7.0 6.4.1.2
@@ -160,12 +159,6 @@ def pdu_session_establishment_complete(ue, IEs, Msg=None):
     ue.IpAddress = address # Format is {'spare': 0, 'Type': 1, 'Addr': b'\x0c\x01\x01\x07'} with type of address
     ip_addr = socket.inet_ntoa(address['Addr'])
     logger.debug(f"UE {ue.supi} assigned address {ip_addr}")
-    # Update the UpData, change source ip address
-    upPkt = binascii.unhexlify(ue.UpData)
-    ip_pkt = IP(upPkt)
-    ip_pkt.src = ip_addr
-    raw_ip_pkt = raw(ip_pkt)
-    ue.UpData = binascii.hexlify(raw_ip_pkt)
     ue.set_state(FGMMState.PDU_SESSION_ESTABLISHED)
     return None, '5GSMPDUSessionEstabComplete' # For internal use only, it's not a real message type
 
@@ -176,16 +169,4 @@ def connection_release_complete(ue, IEs, Msg=None):
 
 def pdu_session_generate_traffic(ue, IEs, Msg=None):
     ue.set_state(FGMMState.PDU_SESSION_TRANSMITTING)
-    return ue.IpAddress['Addr'], '5GUPMessage'
-
-def up_send_data(ue, IEs, Msg=None):
-    if Msg != None and Msg == b'0':
-        logger.error(f"UE {ue.supi} UP request timed out")
-    elif Msg != None:
-        upPkt = binascii.unhexlify(Msg)
-        ip_pkt = IP(upPkt)
-        logger.debug(f"UE {ue.supi} received UP packet \n{ip_pkt.show(dump=True)}")
-    ue.UpCount -= 1
-    if ue.UpCount < 0:
-        return None, '5GUPMessageComplete'
-    return ue.UpData, '5GUPMessage'
+    return ue.IpAddress['Addr'], '5GSMPDUSessionTransmission'
