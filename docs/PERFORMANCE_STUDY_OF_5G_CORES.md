@@ -154,11 +154,16 @@ openstack subnet set --dns-nameserver 8.8.8.8 private-subnet
 # Get net id for private network
 PRIVATE_NET_ID=$(openstack network show private -c id -f value)
 
+openstack port create --network ${PRIVATE_NET_ID} subnet=my-subnet test-1
+
+openstack port create --network ${PRIVATE_NET_ID} --fixed-ip subnet=opencn_tg-vxlan test_0
+
 # Create server (core network)
 openstack server create --flavor m2.medium \
     --image 20.04 \
     --key-name  stack \
-    --nic net-id=${PRIVATE_NET_ID} \
+    --nic port-id=$(openstack port show test_0 -c id -f value) \
+    --nic port-id=$(openstack port show test_1 -c id -f value) \
     <server-name>
 
 openstack floating ip create --project demo --subnet public-subnet public
