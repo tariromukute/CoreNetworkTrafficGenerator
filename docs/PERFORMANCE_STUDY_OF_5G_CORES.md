@@ -154,7 +154,7 @@ openstack subnet set --dns-nameserver 8.8.8.8 private-subnet
 # Get net id for private network
 PRIVATE_NET_ID=$(openstack network show private -c id -f value)
 
-openstack port create --network ${PRIVATE_NET_ID} subnet=my-subnet test-1
+openstack port create --network ${PRIVATE_NET_ID} --fixed-ip subnet=my-subnet test-1
 
 openstack port create --network ${PRIVATE_NET_ID} --fixed-ip subnet=opencn_tg-vxlan test_0
 
