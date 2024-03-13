@@ -179,6 +179,11 @@ ping -c 4 <ip-address>
 ssh ubuntu@<float-ip>
 ```
 
+```bash
+# Set up for XDP_REDIRECT
+ sudo ethtool -L enp1s0 combined $(nproc)
+
+```
 **Uninstall Devstack**
 
 ```bash
