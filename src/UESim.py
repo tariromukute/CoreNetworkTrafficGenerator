@@ -15,6 +15,8 @@ from src.UEUtils import *
 from src.UE import *
 import psutil
 import multiprocessing
+import json
+import csv
 
 def interrupt_handler(ueSim, ask, signum, frame):
     if ask:
@@ -62,9 +64,12 @@ class UESim:
             logging.basicConfig(level=logging.DEBUG)
 
     def dispatcher(self, data: bytes, ueId):
+        received_at = time.time()
         ue = self.ue_list[ueId]
         if data == None:
-            return ue.next_action(None, None) if g_verbose <= 3 else ue.next_compliance_test(None, None)
+            tx_nas_pdu, ue, sent_type = ue.next_action(None, None) if g_verbose <= 3 else ue.next_compliance_test(None, None)
+            ue.procedure_times[fg_msg_codes[sent_type]] = time.time()
+            return tx_nas_pdu, ue, sent_type
         
         # If the gNB receives a UE Context Release Command it will send data b'F' as the (R)AN Connection Release
         # TODO: implement the appropriate message for R(AN) Connection Release
@@ -78,17 +83,30 @@ class UESim:
         msg_type = Msg._name
         
         if msg_type == '5GMMSecProtNASMessage':
-            Msg = security_prot_decrypt(Msg, ue)
-            if Msg._by_name.count('5GMMSecurityModeCommand'):
-                Msg = Msg['5GMMSecurityModeCommand']
-                msg_type = Msg._name
-            else:
-                msg_type = Msg._name
+            try:
+                Msg = security_prot_decrypt(Msg, ue)
+                if Msg and Msg._by_name.count('5GMMSecurityModeCommand'):
+                    Msg = Msg['5GMMSecurityModeCommand']
+                    msg_type = Msg._name
+                elif Msg:
+                    msg_type = Msg._name
+                else:
+                    logger.error("Unexpected None value for Decrypted 5GMMSecProtNASMessage Msg")
+                    return None, ue, None
+            except err:
+                logger.exception(err)
+                return None, ue, None
 
         if Msg._name == '5GMMDLNASTransport':
             Msg = dl_nas_transport_extract(Msg, ue)
             msg_type = Msg._name
         
+        # TODO handle recording of procedure
+        if msg_type == '5GMMConfigurationUpdateCommand': # Ignore 5GMMConfigurationUpdateCommand
+            return None, ue, None
+        
+        ue.procedure_times[fg_msg_codes[msg_type]] = received_at
+
         msg_code = fg_msg_codes[msg_type] - FGMM_MIN_TYPE
         self.procedures_count[ue.current_procedure] = self.procedures_count.get(ue.current_procedure, 1) - 1
         with self.ue_fg_msg_states.get_lock():
@@ -97,8 +115,11 @@ class UESim:
         
         self.procedures_count[msg_code] = self.procedures_count.get(msg_code, 0) + 1
         ue.current_procedure = msg_code
+
         tx_nas_pdu, ue_, sent_type = ue.next_action(Msg, msg_type) if g_verbose <= 3 else ue.next_compliance_test(Msg, msg_type)
-        
+        if sent_type:
+            ue.procedure_times[fg_msg_codes[sent_type]] = time.time()
+
         if tx_nas_pdu:
             return tx_nas_pdu, ue_, sent_type
             
@@ -149,6 +170,9 @@ class UESim:
                     elif tx_nas_pdu:
                         self.ue_to_upf.send((tx_nas_pdu, ueId))
                 
+                # TODO: handle recording of operation
+                if sent_type is None: # Leave state as is, e.g., on ConfigurationUpdateCommand
+                    continue
                 msg_code = fg_msg_codes[sent_type] - FGMM_MIN_TYPE
                 self.procedures_count[ue.current_procedure] = self.procedures_count.get(ue.current_procedure, 1) - 1
                 with self.ue_fg_msg_states.get_lock():
@@ -186,12 +210,16 @@ class UESim:
         completed = 0
         sum_interval = 0
         # Print test results in a table
+        jsonArray = []
         for supi, ue in self.ue_list.items():
+            # Write UE to file
+            ue.procedure_times['UE'] = supi
+            jsonArray.append(ue.procedure_times)
             # Get the UE that had the latest state_time and calculate the time it took all UEs to be registered
             # Don't consider UEs that didn't get a respond
             if ue.current_procedure == (fg_msg_codes["5GMMANConnectionReleaseComplete"] - FGMM_MIN_TYPE) and ue.end_time != None and ue.start_time != None:
                 latest_time = ue.state_time if latest_time < ue.state_time else latest_time
-                min_interval = ue.end_time - ue.start_time if min_interval > ue.end_time - ue.start_time else min_interval
+                min_interval = ue.end_time - ue.start_time if (min_interval > ue.end_time - ue.start_time and ue.end_time - ue.start_time != 0)  else min_interval
                 max_interval = ue.end_time - ue.start_time if max_interval < ue.end_time - ue.start_time else max_interval
                 sum_interval += ue.end_time - ue.start_time
                 with self.ue_sim_time.success.get_lock():
@@ -201,28 +229,50 @@ class UESim:
 
             if g_verbose <= 4 and ue.error_message == "":
                 continue
-            SentMsg, err = parse_NAS5G(ue.MsgInBytes)
-            if err:
-                logger.error('Failed to parse ue.MsgInBytes when print compliance test results')
-                SentMsgShow = ''
-            else:
-                SentMsgShow = SentMsg.show()
-            RcvMsg, err = parse_NAS5G(ue.RcvMsgInBytes)
-            if err:
-                logger.error('Failed to parse ue.RcvMsgInBytes when print compliance test results')
-                RcvMsgShow = ''
-            else:
-                RcvMsgShow = RcvMsg.show()
+
+            SentMsgShow = ''
+            if ue.MsgInBytes:
+                SentMsg, err = parse_NAS5G(ue.MsgInBytes)
+                if err:
+                    logger.error('Failed to parse ue.MsgInBytes when print compliance test results')
+                else:
+                    SentMsgShow = SentMsg.show()
+
+            RcvMsgShow = ''
+            if ue.RcvMsgInBytes:
+                RcvMsg, err = parse_NAS5G(ue.RcvMsgInBytes)
+                if err:
+                    logger.error('Failed to parse ue.RcvMsgInBytes when print compliance test results')
+                else:
+                    RcvMsgShow = RcvMsg.show()
+
             profile = ''
             for k, v in ue.compliance_mapper.items():
                 profile += f"Request message: {k}, Response function: {v.__name__}\n"
-            headers = ['UE', ue.supi]
+            headers = ['UE', ue.supi + f" {(ue.current_procedure)}"]
             table = [
                      ['Message', ue.error_message], 
                      ['Profile', profile], 
                      ['Sent', SentMsgShow], 
                      ['Received', RcvMsgShow] ]
             logger.info("\n" + tabulate(table, headers, tablefmt="grid"))
+
+        message_names = [
+            fg_msg_names.get(code, f"Unknown_{code}")
+            for code in range(FGMM_MIN_TYPE, FGSM_MAX_TYPE + 1)
+        ]
+        headers = ["UE"] + message_names
+        
+        message_codes = ["UE"] + list(range(FGMM_MIN_TYPE, FGSM_MAX_TYPE + 1))
+
+        with open(f'procedure_times_{psutil.Process().cpu_num()}.json', 'a+') as f:
+                json.dump(jsonArray, f)
+
+        with open(f'procedure_times_{psutil.Process().cpu_num()}.csv', 'a+') as csvfile:
+            hwriter = csv.writer(csvfile)
+            hwriter.writerow(headers)
+            writer = csv.DictWriter(csvfile, fieldnames=message_codes)
+            writer.writerows(jsonArray)
 
         with self.ue_sim_time.end_time.get_lock():
             self.ue_sim_time.end_time.value = latest_time if self.ue_sim_time.end_time.value < latest_time else self.ue_sim_time.end_time.value
@@ -258,7 +308,7 @@ class UESim:
         if self.exit_program.value == False:
             # Check if any UEs are not terminated and call validator
             for supi, ue in self.ue_list.items():
-                if ue.current_procedure != fg_msg_codes["5GMMANConnectionReleaseComplete"]: 
+                if ue.current_procedure != (fg_msg_codes["5GMMANConnectionReleaseComplete"] - FGMM_MIN_TYPE): 
                     test_result, error_message = validator(ue.MsgInBytes, b'0')
                     ue.error_message = error_message
                     ue.RcvMsgInBytes = None

@@ -25,6 +25,7 @@ request_mapper = {
 response_mapper = {
     '5GMMAuthenticationRequest': authentication_response,
     '5GMMRegistrationAccept': registration_complete,
+    '5GMMConfigurationUpdateCommand': configuration_update_complete,
     '5GSMPDUSessionEstabAccept': pdu_session_establishment_complete,
     '5GMMSecurityModeCommand': security_mode_complete,
     '5GMMMODeregistrationAccept': deregistration_complete,
@@ -165,6 +166,8 @@ class UE:
         self.IntegAlgo = None
         self.start_time = None
         self.end_time = None
+        self.state = FGMMState.NULL
+        self.procedure_times = {}
         # Set values for empty variables to all zeros in bytes
         empty_values = ['k_nas_int', 'k_nas_enc', 'k_amf', 'k_ausf', 'k_seaf', 'sqn', 'autn',
                         'mac_a', 'mac_s', 'xres_star', 'xres', 'res_star', 'res', 'rand']
@@ -206,7 +209,11 @@ class UE:
     def set_k_nas_int(self, k_nas_int):
         self.k_nas_int = k_nas_int
 
+    def set_procedure(self, code):
+        self.procedure_times[code] = time.time()
+        
     def set_state(self, state):
+        self.state = state
         self.state_time = time.time()
 
     def set_compliance_mapper(self, mapper):
@@ -224,15 +231,19 @@ class UE:
             The function corresponding to the procedure to be processed next.
         """
         if g_verbose >= 3 and Msg is not None:
-            if type(Msg) is not bytes:
-                # logger.debug("|----------------------------------------------------------------------------------------------------------------|")
-                logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
-                UE {self.supi} received message\n\
-|----------------------------------------------------------------------------------------------------------------|\n\
-{Msg.show()}\n\
-|----------------------------------------------------------------------------------------------------------------|\n\n")
 
             validator(self.MsgInBytes, Msg)
+        
+        if type(Msg) is not bytes:
+            DecryptMsg = None
+            if Msg != None and Msg._name == '5GMMSecProtNASMessage':
+                DecryptMsg = security_prot_decrypt(Msg, self)
+            # logger.debug("|----------------------------------------------------------------------------------------------------------------|")
+            logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+            UE {self.supi} received message\n\
+|----------------------------------------------------------------------------------------------------------------|\n\
+\n{DecryptMsg.show() if DecryptMsg != None else Msg.show() if Msg != None else None}\n\
+|----------------------------------------------------------------------------------------------------------------|\n\n")
 
         # Get the procedure function corresponding to the given response
         IEs = {}
@@ -246,7 +257,7 @@ class UE:
                 self.procedure) if self.procedure in self.procedures else -1
             # Get the next procedure in procedures (wrapping around if necessary)
             if (idx + 1) >= len(self.procedures):
-                return None, self, None
+                return None, self, "5GMMANConnectionReleaseComplete"
             # procedure = self.procedures[(idx + 1) % len(self.procedures)]
             procedure = self.procedures[idx+1]
             # Get the procedure function corresponding to the next procedure
@@ -258,10 +269,14 @@ class UE:
         Msg, sent_type = action_func(self, IEs, Msg)
         if sent_type == '5GSMPDUSessionTransmission': # Already in bytes
             return Msg, self, sent_type
+        
+        DecryptMsg = None
+        if Msg !=  None and Msg._name == '5GMMSecProtNASMessage':
+            DecryptMsg, e = parse_NAS5G(Msg._dec_msg)
         logger.debug(f" \n|----------------------------------------------------------------------------------------------------------------|\n\
         UE {self.supi} sending message \n\
 |----------------------------------------------------------------------------------------------------------------|\n\
-\n{Msg.show() if Msg != None else None} \n\
+\n{DecryptMsg.show() if DecryptMsg != None else Msg.show() if Msg != None else None} \n\
 |----------------------------------------------------------------------------------------------------------------|\n\n")
 
         ReturnMsg = Msg.to_bytes() if Msg != None else None                                                           

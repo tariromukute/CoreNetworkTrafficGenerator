@@ -74,6 +74,7 @@ cd ~/cn-tg/
 #   -v, --verbose         Increase verbosity (can be specified multiple times)
 #   -s, --statistics      Enable print of statistics
 #   -e, --ebpf            Load ebpf programs to collect and graph SCTP stats
+#   -p, --period          Period/interval (seconds) for printing statistics
 
 python3 run.py -u config/oai-cn5g-ue.yaml -g config/oai-cn5g-gnb.yaml -vvv
 ```
@@ -91,6 +92,16 @@ After PDU session establishment, the traffic generator can generate and send UP 
       - 5GSMPDUSessionTransmission
       - 5GMMMODeregistrationRequest
 ```
+
+## Output
+
+The traffic generator records the timestamp for each state transition for the UEs. This can be useful for analysing the performance of the Core Network, the computation cost of each prodecure, among other things. When the traffic genetaor exists, this information is stored in files `procedure_times_{cpu}` (since each CPU will act an an independent gNB). Below is a sample result analysis you can extract from the information.
+
+<p align="center">
+  <img src="docs/results/cummulative_requests_by_name.png" width="350" alt="Cummulative requests by Procedure Operation Name">
+  <img src="docs/results/active_requests_by_name.png" width="350" alt="Active requests by Procedure Operation Name">
+  <img src="docs/results/total_active_requests.png" width="350" alt="Total active requests by Procedure Operation Name">
+</p>
 
 ## Validation/Compliance testing of 5GC responses
 

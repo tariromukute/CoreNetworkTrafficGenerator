@@ -59,7 +59,7 @@ class Trafficgen:
         self.config_map = None
         self.b = None
         self.func = None
-        self.load()
+        # self.load()
         self.previous_data = {}
 
     @staticmethod
@@ -145,12 +145,13 @@ class Trafficgen:
         grouped_data = collections.defaultdict(
             lambda: {"rx_bytes": 0, "rx_packets": 0, "tx_bytes": 0, "tx_packets": 0}
         )
-        stats_map = self.b.get_table("stats_map")
+        if self.b:
+            stats_map = self.b.get_table("stats_map")
 
-        for key, value in stats_map.items():
-            group = grouped_data[(key.ifindex, key.protocol)]
-            for field in ("rx_bytes", "rx_packets", "tx_bytes", "tx_packets"):
-                group[field] += getattr(value, field)  # Dynamically access fields
+            for key, value in stats_map.items():
+                group = grouped_data[(key.ifindex, key.protocol)]
+                for field in ("rx_bytes", "rx_packets", "tx_bytes", "tx_packets"):
+                    group[field] += getattr(value, field)  # Dynamically access fields
 
         return grouped_data
 
@@ -164,10 +165,11 @@ class Trafficgen:
             try:
                 # Retrieve and process statistics
                 grouped_data = collections.defaultdict(lambda: {"rx_bytes": 0, "rx_packets": 0})
-                stats_map = self.b.get_table("stats_map")  # Assuming `b` is defined elsewhere
-                for key, value in stats_map.items():
-                    grouped_data[(key.ifindex, key.protocol)]["rx_bytes"] += value.rx_bytes
-                    grouped_data[(key.ifindex, key.protocol)]["rx_packets"] += value.rx_packets
+                if self.b:
+                    stats_map = self.b.get_table("stats_map")  # Assuming `b` is defined elsewhere
+                    for key, value in stats_map.items():
+                        grouped_data[(key.ifindex, key.protocol)]["rx_bytes"] += value.rx_bytes
+                        grouped_data[(key.ifindex, key.protocol)]["rx_packets"] += value.rx_packets
 
                 # Print data for each protocol
                 for proto, p_name in protocol_names.items():

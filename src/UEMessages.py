@@ -2,13 +2,14 @@ from src.UEUtils import *
 import socket
 from pycrate_mobile.TS24008_IE import encode_bcd
 from pycrate_mobile.TS24501_IE import FGSIDTYPE_IMEISV
-from pycrate_mobile.NAS import FGMMRegistrationRequest, FGMMMODeregistrationRequest, FGMMRegistrationComplete, FGMMAuthenticationResponse, FGMMSecProtNASMessage, FGMMSecurityModeComplete, FGMMULNASTransport
+from pycrate_mobile.NAS import FGMMRegistrationRequest, FGMMMODeregistrationRequest, FGMMRegistrationComplete, FGMMAuthenticationResponse, FGMMSecProtNASMessage, FGMMSecurityModeComplete, FGMMULNASTransport, FGMMConfigurationUpdateCommand, FGMMConfigurationUpdateComplete
 from pycrate_mobile.TS24501_FGSM import FGSMPDUSessionEstabRequest
 from pycrate_mobile.NAS5G import parse_NAS5G
 from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
 from scapy.all import *
 import binascii
+import time
 
 def registration_request(ue, IEs, Msg=None):
     IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
@@ -23,6 +24,7 @@ def registration_request(ue, IEs, Msg=None):
     Msg = FGMMRegistrationRequest(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
     ue.set_state(FGMMState.REGISTERED_INITIATED)
+    ue.set_procedure(65)
     ue.start_time = time.time()
     return Msg, '5GMMRegistrationRequest'
 
@@ -37,6 +39,17 @@ def registration_complete(ue, IEs, Msg=None):
     return SecMsg, '5GMMRegistrationComplete'
     # return Msg, '5GMMRegistrationComplete'
 
+# TODO: handle recording of operation
+def configuration_update_complete(ue, IEs, Msg=None):
+    # When UE is in 5GMM-DEREGISTERED-INITIATED state ignore request (https://itecspec.com/spec/3gpp-38-523-1-9-1-6-de-registration/)
+    if ue.state == FGMMState.DEREGISTERED_INITIATED:
+        return None, None
+    # TODO: implement action before response
+    IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 85}
+    Msg = FGMMConfigurationUpdateComplete(val=IEs)
+    ue.MsgInBytes = Msg.to_bytes()
+    SecMsg = security_prot_encrypt_ciphered(ue, Msg)
+    return SecMsg, None
 
 def mo_deregistration_request(ue, IEs, Msg=None):
     IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 69}
@@ -52,7 +65,7 @@ def mo_deregistration_request(ue, IEs, Msg=None):
 
 def deregistration_complete(ue, IEs, Msg=None):
     ue.set_state(FGMMState.DEREGISTERED)
-    return None, '5GMMMODeregistrationComplete'  # For internal use only, it's not a real message type
+    return None, '5GMMANConnectionReleaseComplete'  # For internal use only, it's not a real message type
 
 def authentication_response(ue, IEs, Msg):
     # Msg, err = parse_NAS_MO(data)
@@ -164,6 +177,7 @@ def pdu_session_establishment_complete(ue, IEs, Msg=None):
 
 def connection_release_complete(ue, IEs, Msg=None):
     ue.set_state(FGMMState.CONNECTION_RELEASED)
+    ue.set_procedure(74)
     ue.end_time = time.time()
     return None, '5GMMANConnectionReleaseComplete'  # For internal use only, it's not a real message type
 

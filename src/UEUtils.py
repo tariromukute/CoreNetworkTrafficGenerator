@@ -66,6 +66,7 @@ fg_msg_names = {
     # 81: "5GMMNetworkSliceSpecificAuthenticationComplete",
     # 82: "5GMMNetworkSliceSpecificAuthenticationResult",
     # common procedures
+    83: "5GMMConfigurationUpdateIgnore", # For internal use only, it's not a real message type
     84: "5GMMConfigurationUpdateCommand",
     85: "5GMMConfigurationUpdateComplete",
     86: "5GMMAuthenticationRequest",
@@ -113,7 +114,7 @@ fg_msg_codes = {value: key for key, value in fg_msg_names.items()}
 FGMM_MIN_TYPE = 65 # The minimum value of the 5G MM  Message types (registration request)
 FGSM_MIN_TYPE = 193 # he minimum value of the 5G SM Message types (PDU session establishment request)
 FGMM_MAX_TYPE = 104 # The minimum value of the 5G MM  Message types (registration request)
-FGSM_MAX_TYPE = 214 # he minimum value of the 5G SM Message types (PDU session establishment request)
+FGSM_MAX_TYPE = 196 # The minimum value of the 5G SM Message types (PDU session establishment request)
 
 def security_prot_encrypt(ue, Msg):
     if ue.CiphAlgo == 0:
@@ -150,11 +151,16 @@ def security_prot_decrypt(Msg, ue):
     if Msg['5GMMHeaderSec']['SecHdr'].get_val() == 2:
         # TODO: Add integrity check
         # decrypt message
-        Msg.decrypt(ue.k_nas_enc, dir=1, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
-        Msg, err = parse_NAS5G(Msg._dec_msg)
-        if err:
+        try:
+            Msg.decrypt(ue.k_nas_enc, dir=1, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
+            Msg, err = parse_NAS5G(Msg._dec_msg)
+            if err:
+                return None
+            return Msg
+        except:
+            logger.error("Failed to decrypt Msg \n\n", Msg.show())
             return None
-        return Msg
+
     else:
         return Msg
     
