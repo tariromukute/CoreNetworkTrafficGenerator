@@ -1,0 +1,42 @@
+FROM ubuntu:latest
+
+# For installing python without questions
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    git \
+    python3-dev \
+    python3-bpfcc \
+    python3.12-venv \
+    bpfcc-tools \
+    linux-headers-$(uname -r) \
+    libbpf-dev \
+    clang-14 \
+    python3-setuptools \
+    build-essential \
+    vim \
+    libsctp-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/tariromukute/CoreNetworkTrafficGenerator.git /opt/CoreNetworkTrafficGenerator \
+    && cd /opt/CoreNetworkTrafficGenerator \
+    && git submodule init \
+    && git submodule update
+
+WORKDIR /opt/CoreNetworkTrafficGenerator
+
+RUN python3 -m venv --system-site-packages /opt/CoreNetworkTrafficGenerator/.venv
+
+RUN /bin/bash -c "source .venv/bin/activate && \
+    pip install --upgrade pip setuptools && \
+    pip install pycrate tabulate scapy psutil bcc pytest pyroute2 pysctp cryptography pyyaml netifaces"
+
+RUN /bin/bash -c "source .venv/bin/activate && \
+    cd CryptoMobile && \
+    python3 setup.py install"
+
+# Entrypoint script to run at container initialization
+COPY run.sh /opt/CoreNetworkTrafficGenerator/run.sh
+RUN chmod +x /opt/CoreNetworkTrafficGenerator/run.sh
+WORKDIR /opt/CoreNetworkTrafficGenerator
+ENTRYPOINT ["/opt/CoreNetworkTrafficGenerator/run.sh"]
