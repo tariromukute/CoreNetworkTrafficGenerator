@@ -9,9 +9,9 @@
 
 ```bash
 # build image 
-sudo docker build -t core-network-traffic-generator:latest .
+docker build -t core-network-traffic-generator:latest --file docker/dockerfile .
 # run container
-sudo docker run --rm --privileged core-network-traffic-generator:latest
+docker run --rm --privileged core-network-traffic-generator:latest
 ```
 
 ## Usage

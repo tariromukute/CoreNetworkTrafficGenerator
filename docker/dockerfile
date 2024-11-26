@@ -1,4 +1,4 @@
-FROM ubuntu:latest
+FROM ubuntu:noble
 
 # For installing python without questions
 ENV DEBIAN_FRONTEND=noninteractive
@@ -18,12 +18,12 @@ RUN apt-get update && apt-get install -y \
     libsctp-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone https://github.com/tariromukute/CoreNetworkTrafficGenerator.git /opt/CoreNetworkTrafficGenerator \
-    && cd /opt/CoreNetworkTrafficGenerator \
-    && git submodule init \
-    && git submodule update
-
 WORKDIR /opt/CoreNetworkTrafficGenerator
+COPY ./config /opt/CoreNetworkTrafficGenerator/config/
+COPY ./CryptoMobile /opt/CoreNetworkTrafficGenerator/CryptoMobile/
+COPY ./pycrate /opt/CoreNetworkTrafficGenerator/pycrate/
+COPY ./src /opt/CoreNetworkTrafficGenerator/src/
+COPY ./run.py /opt/CoreNetworkTrafficGenerator/run.py
 
 RUN python3 -m venv --system-site-packages /opt/CoreNetworkTrafficGenerator/.venv
 
@@ -36,7 +36,8 @@ RUN /bin/bash -c "source .venv/bin/activate && \
     python3 setup.py install"
 
 # Entrypoint script to run at container initialization
-COPY run.sh /opt/CoreNetworkTrafficGenerator/run.sh
+COPY ./docker/run.sh /opt/CoreNetworkTrafficGenerator/run.sh
 RUN chmod +x /opt/CoreNetworkTrafficGenerator/run.sh
 WORKDIR /opt/CoreNetworkTrafficGenerator
 ENTRYPOINT ["/opt/CoreNetworkTrafficGenerator/run.sh"]
+CMD [ "python3", "run.py", "-vvv" ]
