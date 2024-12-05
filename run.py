@@ -387,14 +387,14 @@ parser.add_argument(
     "-u",
     "--ue_config_file",
     type=str,
-    default="./config/open5gs-ue.yaml",
+    default="./config/ue.yaml",
     help="UE configuration file",
 )
 parser.add_argument(
     "-g",
     "--gnb_config_file",
     type=str,
-    default="./config/open5gs-gnb.yaml",
+    default="./config/gnb.yaml",
     help="GNB configuration file",
 )
 parser.add_argument("-f", "--file", type=str, default=".", help="Log file directory")
