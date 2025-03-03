@@ -107,6 +107,37 @@ The traffic generator records the timestamp for each state transition for the UE
 
 The traffic generator can be used to validate responses from the core network. The response data is checked against what's stated in the 3GPP TS 24.501 version 15.7.0. To start validate increase the verbose of the generator: `vvvv` will print only failed validations and `vvvvv` will print all the validation results.
 
+## Running the traffic generator using Docker Compose
+
+You can also run the traffic generator using Docker Compose, which simplifies the process of setting up and running the required dependencies. Here's an example of how to run it with OAI CN and Free5GC:
+
+**OAI CN**
+
+```bash
+cd docker-compose
+
+docker compose -f docker-compose-oai.yaml  --profile oai up -d
+
+# Wait ~10 seconds for UEs to be initiased in DB
+docker compose -f docker-compose-oai.yaml  --profile cn-tg up -d
+
+# See the logs with the NGAP and NAS messages
+docker logs cn-tg
+```
+
+**free5GC**
+
+```bash
+cd docker-compose
+
+docker compose -f docker-compose-free4gc.yaml  --profile free5gc up -d
+
+# Wait ~10 seconds for UEs to be initiased in DB
+docker compose -f docker-compose-free5gc.yaml  --profile cn-tg up -d
+
+# See the logs with the NGAP and NAS messages
+docker logs cn-tg
+```
 ## Notes
 
 For a tutorial on how to run or test the traffic generator with open source 5G networks see the [Performance study of Open Source 5G Core networks](docs/PERFORMANCE_STUDY_OF_5G_CORES.md) under docs folder.
