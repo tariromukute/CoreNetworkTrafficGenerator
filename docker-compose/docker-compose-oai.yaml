@@ -4,8 +4,8 @@ services:
         container_name: "mysql"
         image: mysql:8.0
         volumes:
-            - ./database/oai_db2.sql:/docker-entrypoint-initdb.d/oai_db.sql
-            - ./healthscripts/mysql-healthcheck2.sh:/tmp/mysql-healthcheck.sh
+            - ./oai/database/oai_db2.sql:/docker-entrypoint-initdb.d/oai_db.sql
+            - ./oai/healthscripts/mysql-healthcheck2.sh:/tmp/mysql-healthcheck.sh
         environment:
             - TZ=Europe/Paris
             - MYSQL_DATABASE=oai_db
@@ -29,7 +29,7 @@ services:
             - 80/tcp
             - 8080/tcp
         volumes:
-            - ./conf/basic_nrf_config.yaml:/openair-udr/etc/config.yaml
+            - ./oai/conf/basic_nrf_config.yaml:/openair-udr/etc/config.yaml
         environment:
             - TZ=Europe/Paris
         depends_on:
@@ -47,7 +47,7 @@ services:
             - 80/tcp
             - 8080/tcp
         volumes:
-            - ./conf/basic_nrf_config.yaml:/openair-udm/etc/config.yaml
+            - ./oai/conf/basic_nrf_config.yaml:/openair-udm/etc/config.yaml
         environment:
             - TZ=Europe/Paris
         depends_on:
@@ -64,7 +64,7 @@ services:
             - 80/tcp
             - 8080/tcp
         volumes:
-            - ./conf/basic_nrf_config.yaml:/openair-ausf/etc/config.yaml
+            - ./oai/conf/basic_nrf_config.yaml:/openair-ausf/etc/config.yaml
         environment:
             - TZ=Europe/Paris
         depends_on:
@@ -81,7 +81,7 @@ services:
             - 80/tcp
             - 8080/tcp
         volumes:
-            - ./conf/basic_nrf_config.yaml:/openair-nrf/etc/config.yaml
+            - ./oai/conf/basic_nrf_config.yaml:/openair-nrf/etc/config.yaml
         environment:
             - TZ=Europe/Paris
         networks:
@@ -97,7 +97,7 @@ services:
             - 8080/tcp
             - 38412/sctp
         volumes:
-            - ./conf/basic_nrf_config.yaml:/openair-amf/etc/config.yaml
+            - ./oai/conf/basic_nrf_config.yaml:/openair-amf/etc/config.yaml
         environment:
             - TZ=Europe/Paris
         depends_on:
@@ -115,7 +115,7 @@ services:
             - 8080/tcp
             - 8805/udp
         volumes:
-            - ./conf/basic_nrf_config.yaml:/openair-smf/etc/config.yaml
+            - ./oai/conf/basic_nrf_config.yaml:/openair-smf/etc/config.yaml
         environment:
             - TZ=Europe/Paris
         depends_on:
@@ -132,7 +132,7 @@ services:
             - 2152/udp
             - 8805/udp
         volumes:
-            - ./conf/basic_nrf_config.yaml:/openair-upf/etc/config.yaml
+            - ./oai/conf/basic_nrf_config.yaml:/openair-upf/etc/config.yaml
         environment:
             - TZ=Europe/Paris
         depends_on:
@@ -158,8 +158,8 @@ services:
             - 8080/tcp
             - 8805/udp
         volumes:
-            - ./conf/oai-cn5g-ue.yaml:/opt/CoreNetworkTrafficGenerator/config/ue.yaml
-            - ./conf/oai-cn5g-gnb.yaml:/opt/CoreNetworkTrafficGenerator/config/gnb.yaml
+            - ./oai/conf/oai-cn5g-ue.yaml:/opt/CoreNetworkTrafficGenerator/config/ue.yaml
+            - ./oai/conf/oai-cn5g-gnb.yaml:/opt/CoreNetworkTrafficGenerator/config/gnb.yaml
         networks:
             public_net:
                ipv4_address: 192.168.70.140
