@@ -130,7 +130,7 @@ docker logs cn-tg
 ```bash
 cd docker-compose
 
-docker compose -f docker-compose-free4gc.yaml  --profile free5gc up -d
+docker compose -f docker-compose-free5gc.yaml  --profile free5gc up -d
 
 # Wait ~10 seconds for UEs to be initiased in DB
 docker compose -f docker-compose-free5gc.yaml  --profile cn-tg up -d
