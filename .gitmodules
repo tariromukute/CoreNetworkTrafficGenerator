@@ -4,3 +4,6 @@
 [submodule "pycrate"]
 	path = pycrate
 	url = https://github.com/tariromukute/pycrate.git
+[submodule "sctptrace"]
+	path = sctptrace
+	url = https://github.com/5G-PEX/sctptrace.git
