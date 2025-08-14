@@ -1,3 +1,7 @@
+# Output and log files
+output/*
+docker-compose/output
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
