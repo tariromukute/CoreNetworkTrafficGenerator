@@ -1,3 +1,4 @@
+# Standard library imports
 import time
 import csv
 from argparse import ArgumentParser
@@ -36,6 +37,9 @@ bytes_s = "kb/s"
 logger = logging.getLogger("__app__")
 
 
+#######################################################################
+# Data Structure Classes
+#######################################################################
 class Arguments:
     def __init__(
         self,
@@ -85,7 +89,17 @@ class TimeRange:
         self.success = Value("i", success)
         self.failed = Value("i", failed)
 
+#######################################################################
+# Network Utility Functions
+#######################################################################
 def get_network_interfaces_map():
+    """
+    Creates a mapping between interface indices and interface names.
+    
+    Returns:
+        dict: A dictionary mapping interface indices to interface names
+    """
+
     interface_map = {}
     interfaces = netifaces.interfaces()  # Get interface names using netifaces
 
@@ -99,7 +113,22 @@ def get_network_interfaces_map():
     return interface_map
 
 
+#######################################################################
+# UE Management Functions
+#######################################################################
 def create_ues(ue_profiles, x):
+    """
+    Creates UE instances based on the provided profiles and distributes them
+    across the specified number of processes.
+    
+    Args:
+        ue_profiles: List of UE configuration profiles
+        x: Number of processes to distribute UEs across
+        
+    Returns:
+        tuple: A tuple containing a list of UE dictionaries and the total number of UEs
+    """
+
     dict_list = [{} for _ in range(x)]
     p = 0
     for ue_config in ue_profiles:
@@ -118,13 +147,24 @@ def create_ues(ue_profiles, x):
     return dict_list, p
 
 
-def print_state_states(ue_fg_msg_states):
+#######################################################################
+# Statistics and Monitoring Functions
+#######################################################################
+def print_state_states(ue_fg_msg_states, state_writer):
+    """
+    Records the current UE state counts to a CSV file.
+    
+    Args:
+        ue_fg_msg_states: Array of UE state counts
+        state_writer: CSV writer for state output
+    """
+     
+    entry = {}
     for value, code in fg_msg_codes.items():
         ue_count = ue_fg_msg_states[code - FGMM_MIN_TYPE]
-        row = f"{value:{50}s} | {ue_count:{6}d}"
-        print(row)
+        entry[value] = ue_count
 
-    print()
+    state_writer.writerow(entry.values())
 
 
 def print_stats(
@@ -184,9 +224,169 @@ def print_stats(
     except KeyboardInterrupt:
         print()
 
+#######################################################################
+# SCTP Tracing Functions
+#######################################################################
+def setup_sctp_tracers(args, exit_program):
+    """
+    Sets up SCTP tracers for monitoring SCTP-related metrics.
+    
+    Args:
+        args: Command line arguments
+        exit_program: Shared value to signal program exit
+        
+    Returns:
+        Process: A process for running the tracers, or None if no tracers enabled
+    """
 
-# Main function
+    # Ensure output directory exists
+    if args.folder and not os.path.exists(args.folder):
+        os.makedirs(args.folder)
+
+    # Dictionary to hold all active tracers
+    tracers = {}
+
+    # Only import the modules when needed to avoid dependencies for users
+    # who don't use SCTP tracing
+
+    if args.sctp_rtt:
+        from sctptrace.tools.sctp_rtt import SCTPRttTracer
+
+        rtt_file = os.path.join(args.folder, "sctp_rtt.csv") if args.folder else None
+        rtt_tracer = SCTPRttTracer(
+            interval=args.period, csv_output=True, output_file=rtt_file
+        )
+        # rtt_tracer.setup()
+        tracers["RTT"] = rtt_tracer
+
+    if args.sctp_rto:
+        from sctptrace.tools.sctp_rto import SCTPRtoTracer
+
+        rto_file = os.path.join(args.folder, "sctp_rto.csv") if args.folder else None
+        rto_tracer = SCTPRtoTracer(
+            interval=args.period, csv_output=True, output_file=rto_file
+        )
+        # rto_tracer.setup()
+        tracers["RTO"] = rto_tracer
+
+    if args.sctp_bufmon:
+        from sctptrace.tools.sctp_bufmon import SCTPBufmonTracer
+
+        bufmon_file = (
+            os.path.join(args.folder, "sctp_bufmon.csv") if args.folder else None
+        )
+        bufmon_tracer = SCTPBufmonTracer(
+            interval=args.period, csv_output=True, output_file=bufmon_file
+        )
+        # bufmon_tracer.setup()
+        tracers["Buffer"] = bufmon_tracer
+
+    if args.sctp_stream:
+        from sctptrace.tools.sctp_streamutil import SCTPStreamTracer
+
+        stream_file = (
+            os.path.join(args.folder, "sctp_stream.csv") if args.folder else None
+        )
+        stream_tracer = SCTPStreamTracer(
+            interval=args.period, csv_output=True, output_file=stream_file
+        )
+        # stream_tracer.setup()
+        tracers["Stream"] = stream_tracer
+
+    if args.sctp_jitter:
+        from sctptrace.tools.sctp_jitter import SCTPJitterTracer
+
+        jitter_file = (
+            os.path.join(args.folder, "sctp_jitter.csv") if args.folder else None
+        )
+        jitter_tracer = SCTPJitterTracer(
+            interval=args.period, csv_output=True, output_file=jitter_file
+        )
+        # jitter_tracer.setup()
+        tracers["Jitter"] = jitter_tracer
+
+    # Create a process to handle all tracers with proper signal handling
+    if tracers:
+        tracer_process = Process(
+            target=run_tracers, args=(tracers, args.period, exit_program)
+        )
+        tracer_process.daemon = True
+        return tracer_process
+
+    return None
+
+
+def run_tracers(tracers, interval, exit_flag):
+    """
+    Run all tracers in a single process with proper signal handling.
+    
+    Args:
+        tracers: Dictionary of tracer instances
+        interval: Polling interval
+        exit_flag: Shared value to signal program exit
+    """
+
+    # Dictionary to track which tracers have been cleaned up
+    cleaned_tracers = {name: False for name in tracers.keys()}
+
+    # Set up signal handlers for graceful shutdown
+    def handle_exit_signal(signum, frame):
+        cleanup_tracers(tracers, cleaned_tracers)
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, handle_exit_signal)
+    signal.signal(signal.SIGINT, handle_exit_signal)
+
+    # Setup all tracers
+    for name, tracer in tracers.items():
+        tracer.setup()
+
+    try:
+        while not exit_flag.value:
+            for name, tracer in tracers.items():
+                tracer.poll_events()  # Short timeout to check exit flag
+            time.sleep(0.1)  # Small sleep to avoid CPU spinning
+    except Exception as e:
+        print(f"Error in tracer process: {e}")
+    finally:
+        cleanup_tracers(tracers, cleaned_tracers)
+
+
+def cleanup_tracers(tracers, cleaned_tracers):
+    """
+    Ensure all tracers are properly cleaned up.
+    
+    Args:
+        tracers: Dictionary of tracer instances
+        cleaned_tracers: Dictionary tracking which tracers have been cleaned
+    """
+
+    if cleaned_tracers is None:
+        cleaned_tracers = {name: False for name in tracers.keys()}
+
+    for name, tracer in tracers.items():
+        if cleaned_tracers.get(name, False):
+            continue
+        try:
+            tracer.print_summary()
+            time.sleep(2)
+            tracer.cleanup()
+            cleaned_tracers[name] = True
+            print(f"Tracer {name} cleaned up")
+        except Exception as e:
+            print(f"Error cleaning up tracer {name}: {e}")
+
+#######################################################################
+# Main Application Logic
+#######################################################################
 def main(args):
+    """
+    Main function that runs the 5G Core traffic generator.
+    
+    Args:
+        args: Command line arguments
+    """
+
     # Read server configuration
     with open(args.gnb_config_file, "r") as stream:
         try:
@@ -201,6 +401,7 @@ def main(args):
             print(exc)
 
     num_cpus = len(os.sched_getaffinity(0))
+    exit_program = multiprocessing.Value("i", 0)
 
     interfaces_map = get_network_interfaces_map()
     gtpuTrafficgen = Trafficgen(server_config["gtpuConfig"]["interface"])
@@ -214,13 +415,38 @@ def main(args):
     )
     gtpu = GTPU(gtpuConfig, gtpuTrafficgen, args.verbose)
 
+    # Start SCTP tracers if requested
+    tracer_process = None
+    if (
+        args.sctp
+        or args.sctp_rtt
+        or args.sctp_rto
+        or args.sctp_bufmon
+        or args.sctp_stream
+        or args.sctp_jitter
+    ):
+        tracer_process = setup_sctp_tracers(args, exit_program)
+        if tracer_process:
+            tracer_process.start()
+
+    # Wait a for ebpf programs to attach
+    time.sleep(5)
+
     # This will store the start and end time of the UE simulation/emulation
     ue_sim_time = TimeRange(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0, 0)
 
     ue_fg_msg_states = multiprocessing.Array(
         "i", tuple([0] * (FGSM_MAX_TYPE - FGMM_MIN_TYPE + 1)), lock=True
     )
-    exit_program = multiprocessing.Value("i", 0)
+
+    state_writer = None
+    if args.statistics:
+        state_log_file = os.path.join(args.folder, "ue_states.csv")
+        os.makedirs(os.path.dirname(state_log_file), exist_ok=True)
+        state_file = open(state_log_file, "w", newline="")
+        state_writer = csv.writer(state_file)
+        # Write headers
+        state_writer.writerow(list(fg_msg_codes.keys()))
 
     processes = []
     ue_lists, num_ues = create_ues(
@@ -276,7 +502,7 @@ def main(args):
     while True:
         try:
             if args.statistics:
-                print_state_states(ue_fg_msg_states)
+                print_state_states(ue_fg_msg_states, state_writer)
 
                 if args.ebpf:
                     print_stats(
@@ -303,6 +529,9 @@ def main(args):
 
     # Allow for sime for process to exit after setting exit_program.value = True
     time.sleep(2)
+
+    if tracer_process:
+        tracer_process.join()
 
     for process in processes:
         process.join(timeout=0.2)
@@ -332,88 +561,131 @@ def main(args):
     print("\n\n")
     print(tabulate(table, ["Item", "Results"], tablefmt="heavy_outline"))
 
-    # Post process and save to file
-    with open("summary_stats.csv", "w", newline="") as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(
-            [
-                "Duration",
-                "N# of UEs",
-                "Successful procedures",
-                "Failed procedures",
-                "Min interval",
-                "Avg interval",
-                "Max interval",
-            ]
-        )
-        writer.writerow(
-            [
-                ue_sim_time.end_time.value - ue_sim_time.start_time.value,
-                num_ues,
-                ue_sim_time.success.value,
-                num_ues - ue_sim_time.success.value,
-                ue_sim_time.min_interval.value,
-                (
-                    ue_sim_time.sum_interval.value / ue_sim_time.success.value
-                    if ue_sim_time.success.value > 0
-                    else -1
-                ),
-                ue_sim_time.max_interval.value,
-            ]
-        )
+    summary_log_file = os.path.join(args.folder, "summary_stats.csv")
+    os.makedirs(os.path.dirname(summary_log_file), exist_ok=True)
+    summary_file = open(summary_log_file, "w", newline="")
+    summary_writer = csv.writer(summary_file)
+    summary_writer.writerow(
+        [
+            "Duration",
+            "N# of UEs",
+            "Successful procedures",
+            "Failed procedures",
+            "Min interval",
+            "Avg interval",
+            "Max interval",
+        ]
+    )
+    summary_writer.writerow(
+        [
+            ue_sim_time.end_time.value - ue_sim_time.start_time.value,
+            num_ues,
+            ue_sim_time.success.value,
+            num_ues - ue_sim_time.success.value,
+            ue_sim_time.min_interval.value,
+            (
+                ue_sim_time.sum_interval.value / ue_sim_time.success.value
+                if ue_sim_time.success.value > 0
+                else -1
+            ),
+            ue_sim_time.max_interval.value,
+        ]
+    )
 
+#######################################################################
+# Entry Point
+#######################################################################
+if __name__ == "__main__":
+    # Define parser arguments
+    parser = ArgumentParser(description="Run 5G Core traffic generator")
+    parser.add_argument("-l", "--log", type=float, default=1, help="Log to file")
+    parser.add_argument("-c", "--console", action="store_true", help="Print to console")
+    parser.add_argument(
+        "-i",
+        "--interval",
+        type=bool,
+        default=False,
+        help="Interval of adding UEs in seconds",
+    )
+    parser.add_argument(
+        "-n",
+        "--num_pkts",
+        type=float,
+        default=(1 << 20),
+        help="Number of num-packets to send per second",
+    )
+    parser.add_argument(
+        "-u",
+        "--ue_config_file",
+        type=str,
+        default="./config/ue.yaml",
+        help="UE configuration file",
+    )
+    parser.add_argument(
+        "-g",
+        "--gnb_config_file",
+        type=str,
+        default="./config/gnb.yaml",
+        help="GNB configuration file",
+    )
+    parser.add_argument(
+        "-f",
+        "--folder",
+        type=str,
+        default=".",
+        help="Directory for output (stats and logs)",
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase verbosity (can be specified multiple times)",
+    )
+    parser.add_argument(
+        "-s", "--statistics", action="store_true", help="Enable print of statistics"
+    )
+    parser.add_argument(
+        "-e", "--ebpf", action="store_true", help="Enable print of ebpf statistics"
+    )
+    parser.add_argument(
+        "-p",
+        "--period",
+        type=float,
+        default=1,
+        help="Period/interval (seconds) for printing statistics",
+    )
 
-# Define parser arguments
-parser = ArgumentParser(description="Run 5G Core traffic generator")
-parser.add_argument("-l", "--log", type=float, default=1, help="Log to file")
-parser.add_argument(
-    "-c", "--console", type=bool, default=False, help="Print to console"
-)
-parser.add_argument(
-    "-i",
-    "--interval",
-    type=bool,
-    default=False,
-    help="Interval of adding UEs in seconds",
-)
-parser.add_argument(
-    "-n",
-    "--num_pkts",
-    type=float,
-    default=(1 << 20),
-    help="Number of num-packets to send per second",
-)
-parser.add_argument(
-    "-u",
-    "--ue_config_file",
-    type=str,
-    default="./config/ue.yaml",
-    help="UE configuration file",
-)
-parser.add_argument(
-    "-g",
-    "--gnb_config_file",
-    type=str,
-    default="./config/gnb.yaml",
-    help="GNB configuration file",
-)
-parser.add_argument("-f", "--file", type=str, default=".", help="Log file directory")
-parser.add_argument(
-    "-v",
-    "--verbose",
-    action="count",
-    default=0,
-    help="Increase verbosity (can be specified multiple times)",
-)
-parser.add_argument(
-    "-s", "--statistics", action="store_true", help="Enable print of statistics"
-)
-parser.add_argument(
-    "-e", "--ebpf", action="store_true", help="Enable print of ebpf statistics"
-)
-parser.add_argument(
-    "-p", "--period", type=float, default=1, help="Period/interval (seconds) for printing statistics"
-)
-args = parser.parse_args()
+    # Add SCTP-specific arguments
+    parser.add_argument(
+        "--sctp", action="store_true", help="Enable all SCTP tracing modules"
+    )
+    parser.add_argument(
+        "--sctp-rtt", action="store_true", help="Enable SCTP RTT tracing"
+    )
+    parser.add_argument(
+        "--sctp-rto", action="store_true", help="Enable SCTP RTO tracing"
+    )
+    parser.add_argument(
+        "--sctp-bufmon", action="store_true", help="Enable SCTP buffer monitoring"
+    )
+    parser.add_argument(
+        "--sctp-stream",
+        action="store_true",
+        help="Enable SCTP stream utilization analysis",
+    )
+    parser.add_argument(
+        "--sctp-jitter", action="store_true", help="Enable SCTP jitter measurement"
+    )
 
-main(args)
+    args = parser.parse_args()
+
+    # If --sctp is specified, enable all SCTP tracing modules
+    if args.sctp:
+        args.sctp_rtt = True
+        args.sctp_rto = True
+        args.sctp_bufmon = True
+        args.sctp_stream = True
+        args.sctp_jitter = True
+
+    main(args)

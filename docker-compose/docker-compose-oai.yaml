@@ -151,6 +151,7 @@ services:
         profiles:
             - oai
     cn-tg:
+        privileged: true
         container_name: "cn-tg"
         image: tariromukute/core-network-traffic-generator:latest
         expose:
@@ -158,8 +159,14 @@ services:
             - 8080/tcp
             - 8805/udp
         volumes:
+            - /lib/modules:/lib/modules:ro
+            - /usr/src:/usr/src:ro
+            - /usr/include/linux:/usr/include/linux:ro
+            - /sys/kernel/debug:/sys/kernel/debug:rw 
             - ./oai/conf/oai-cn5g-ue.yaml:/opt/CoreNetworkTrafficGenerator/config/ue.yaml
             - ./oai/conf/oai-cn5g-gnb.yaml:/opt/CoreNetworkTrafficGenerator/config/gnb.yaml
+            - ./output/:/var/log/CoreNetworkTrafficGenerator/
+        command: python3 run.py --statistics --sctp --folder=/var/log/CoreNetworkTrafficGenerator/oai
         networks:
             public_net:
                ipv4_address: 192.168.70.140

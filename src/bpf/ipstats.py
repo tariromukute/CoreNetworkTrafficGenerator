@@ -5,7 +5,7 @@ import netifaces
 import collections
 from pyroute2 import IPRoute, NetNS, IPDB, NSPopen
 
-include_path = "/home/azureuser/cn-tg"
+include_path = "/opt/CoreNetworkTrafficGenerator"
 
 XDP_FLAGS_UPDATE_IF_NOEXIST = (1 << 0)
 XDP_FLAGS_SKB_MODE = (1 << 1)
