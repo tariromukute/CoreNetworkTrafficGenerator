@@ -1,12 +1,8 @@
 # Mobile core network traffic generator
 
-The project implements a traffic generator for 5G Core Network. The traffic generator has the following features:
-1. UE emulation - mobile phone
-2. gNodeB emulation - NGAP layer
-3. gNodeB emulation - GTPU protocol
-4. Load testing of control traffic
-5. Load testing of user plane traffic
-6. Validation/Compliance testing of 5GC responses (WIP)
+A comprehensive traffic generator for 5G Core Network testing with features for UE/gNodeB emulation, control/user plane traffic generation, SCTP protocol analysis, and 5GC compliance validation.
+
+## Features
 
 UE Features
 1. Initial registration
@@ -24,30 +20,29 @@ NGAP Features
 6. PDU Session Resource Setup
 7. UE Connection Release
 
+SCTP Analysis Features
+1. Round Trip Time (RTT) measurement
+2. Retransmission Timeout (RTO) monitoring
+3. Buffer utilisation tracking
+4. Stream usage analysis
+5. Inter-packet jitter measurement
+
 ## Installing 5GC traffic generator
 
 ```bash
-# initialize your local configuration file
-git submodule init
-# fetch all the data from that submodule
-git submodule update
-```
+# Get dependencies
+git submodule init && git submodule update
 
-- pycrate `pip install pycrate`
-- headers for pysctp `sudo apt-get install python3-dev`
-- pysctp `pip install pysctp`
-- scapy `pip install scapy`
-- pyroute2 `pip install pyroute2`
-- bcc `sudo apt-get install python3-bpfcc bpfcc-tools linux-headers-$(uname -r)`
-- libbpf `sudo apt-get install libbpf-dev`
-- clang `sudo apt-get install clang-14 && sudo ln /usr/bin/clang-14 /usr/bin/clang`
-- setuptools `sudo apt install python3-setuptools`
-- CryptoMobile (See the submodule for installation)
-    - `pip install cryptography`
-    - `sudo apt-get install build-essential`
-    - `cd CryptoMobile && python3 setup.py install`
-- pyyaml `pip install pyyaml`
-- tabulate `pip install tabulate`
+# Install required packages
+sudo apt-get install python3-dev python3-bpfcc bpfcc-tools linux-headers-$(uname -r) libbpf-dev clang-14 python3-setuptools build-essential
+sudo ln /usr/bin/clang-14 /usr/bin/clang
+
+# Install Python packages
+pip install pycrate pysctp scapy pyroute2 cryptography pyyaml tabulate
+
+# Install CryptoMobile
+cd CryptoMobile && python3 setup.py install
+```
 
 ## Running the traffic generator
 
@@ -70,11 +65,19 @@ cd ~/cn-tg/
 #                         UE configuration file
 #   -g GNB_CONFIG_FILE, --gnb_config_file GNB_CONFIG_FILE
 #                         GNB configuration file
-#   -f FILE, --file FILE  Log file directory
+#   -f FOLDER, --file FOLDER
+#                         Folder to put the generated files (stats and logs)
 #   -v, --verbose         Increase verbosity (can be specified multiple times)
 #   -s, --statistics      Enable print of statistics
-#   -e, --ebpf            Load ebpf programs to collect and graph SCTP stats
-#   -p, --period          Period/interval (seconds) for printing statistics
+#   -e, --ebpf            Enable print of ebpf statistics
+#   -p PERIOD, --period PERIOD
+#                         Period/interval (seconds) for printing statistics
+#   --sctp                Enable all SCTP tracing modules
+#   --sctp-rtt            Enable SCTP RTT tracing
+#   --sctp-rto            Enable SCTP RTO tracing
+#   --sctp-bufmon         Enable SCTP buffer monitoring
+#   --sctp-stream         Enable SCTP stream utilization analysis
+#   --sctp-jitter         Enable SCTP jitter measurement
 
 python3 run.py -u config/oai-cn5g-ue.yaml -g config/oai-cn5g-gnb.yaml -vvv
 ```
@@ -92,20 +95,6 @@ After PDU session establishment, the traffic generator can generate and send UP 
       - 5GSMPDUSessionTransmission
       - 5GMMMODeregistrationRequest
 ```
-
-## Output
-
-The traffic generator records the timestamp for each state transition for the UEs. This can be useful for analysing the performance of the Core Network, the computation cost of each prodecure, among other things. When the traffic genetaor exists, this information is stored in files `procedure_times_{cpu}` (since each CPU will act an an independent gNB). Below is a sample result analysis you can extract from the information.
-
-<p align="center">
-  <img src="docs/results/cummulative_requests_by_name.png" width="350" alt="Cummulative requests by Procedure Operation Name">
-  <img src="docs/results/active_requests_by_name.png" width="350" alt="Active requests by Procedure Operation Name">
-  <img src="docs/results/total_active_requests.png" width="350" alt="Total active requests by Procedure Operation Name">
-</p>
-
-## Validation/Compliance testing of 5GC responses
-
-The traffic generator can be used to validate responses from the core network. The response data is checked against what's stated in the 3GPP TS 24.501 version 15.7.0. To start validate increase the verbose of the generator: `vvvv` will print only failed validations and `vvvvv` will print all the validation results.
 
 ## Running the traffic generator using Docker Compose
 
@@ -138,6 +127,28 @@ docker compose -f docker-compose-free5gc.yaml  --profile cn-tg up -d
 # See the logs with the NGAP and NAS messages
 docker logs cn-tg
 ```
+
+## Output
+
+The traffic generator records the timestamp for each state transition for the UEs. This can be useful for analysing the performance of the Core Network, the computation cost of each prodecure, among other things. When the traffic genetaor exists, this information is stored in files `procedure_times_{cpu}` (since each CPU will act an an independent gNB). The SCTP tracing tools generate data that can be visualised to understand protocol behavior.
+
+Below is a sample result analysis you can extract from the information.
+
+<p align="center">
+  <img src="docs/results/cummulative_requests_by_name.png" width="350" alt="Cummulative requests by Procedure Operation Name">
+  <img src="docs/results/active_requests_by_name.png" width="350" alt="Active requests by Procedure Operation Name">
+  <img src="docs/results/total_active_requests.png" width="350" alt="Total active requests by Procedure Operation Name">
+  <img src="docs/results/rtt_correlation_plot.png" width="350" alt="SCTP Round Trip Time Analysis"> 
+  <img src="docs/results/buffutil_avg_util_vs_ues.png" width="350" alt="SCTP Buffer Utilization">
+  <!-- <img src="docs/results/sctp_stream_usage.png" width="350" alt="SCTP Stream Usage Patterns"> -->
+  <img src="docs/results/jitter_correlation_plot.png" width="350" alt="SCTP Inter-Packet Jitter">
+  <img src="docs/results/rto_box_plots_unscaled.png" width="350" alt="SCTP Retransmission Events">
+</p>
+
+## Validation/Compliance testing of 5GC responses
+
+The traffic generator can be used to validate responses from the core network. The response data is checked against what's stated in the 3GPP TS 24.501 version 15.7.0. To start validate increase the verbose of the generator: `vvvv` will print only failed validations and `vvvvv` will print all the validation results.
+
 ## Notes
 
 For a tutorial on how to run or test the traffic generator with open source 5G networks see the [Performance study of Open Source 5G Core networks](docs/PERFORMANCE_STUDY_OF_5G_CORES.md) under docs folder.
