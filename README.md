@@ -27,6 +27,12 @@ SCTP Analysis Features
 4. Stream usage analysis
 5. Inter-packet jitter measurement
 
+## Architecture
+
+<p align="center">
+  <img src="images/ARCHITECTURE.png" width="350" alt="Core Network Traffic Generator diagram">
+</p>
+
 ## Installing 5GC traffic generator
 
 ```bash
@@ -48,39 +54,6 @@ cd CryptoMobile && python3 setup.py install
 
 You will need to update the ip address in the files `src/config/open5gs-ue.yaml` and  `src/config/open5gs-gnb.yaml` on the core network VM. The config files are inspired by [UERANSIM](https://github.com/aligungr/UERANSIM)'s config files.
 
-```bash
-cd ~/cn-tg/
-
-# usage: run.py [-h] [-i INTERVAL] [-u UE_CONFIG_FILE] [-g GNB_CONFIG_FILE] [-f FILE] [-v]
-
-# Run 5G Core traffic generator
-
-# optional arguments:
-#   -h, --help            show this help message and exit
-#   -i INTERVAL, --interval INTERVAL
-#                         Interval of adding UEs in seconds
-#   -n NUM_PKTS, --num_pkts NUM_PKTS
-#                         Number of UP packets to send per second
-#   -u UE_CONFIG_FILE, --ue_config_file UE_CONFIG_FILE
-#                         UE configuration file
-#   -g GNB_CONFIG_FILE, --gnb_config_file GNB_CONFIG_FILE
-#                         GNB configuration file
-#   -f FOLDER, --file FOLDER
-#                         Folder to put the generated files (stats and logs)
-#   -v, --verbose         Increase verbosity (can be specified multiple times)
-#   -s, --statistics      Enable print of statistics
-#   -e, --ebpf            Enable print of ebpf statistics
-#   -p PERIOD, --period PERIOD
-#                         Period/interval (seconds) for printing statistics
-#   --sctp                Enable all SCTP tracing modules
-#   --sctp-rtt            Enable SCTP RTT tracing
-#   --sctp-rto            Enable SCTP RTO tracing
-#   --sctp-bufmon         Enable SCTP buffer monitoring
-#   --sctp-stream         Enable SCTP stream utilization analysis
-#   --sctp-jitter         Enable SCTP jitter measurement
-
-python3 run.py -u config/oai-cn5g-ue.yaml -g config/oai-cn5g-gnb.yaml -vvv
-```
 
 **Configuring the traffic generator to send IP packets**
 
@@ -138,7 +111,7 @@ Below is a sample result analysis you can extract from the information.
   <img src="docs/results/cummulative_requests_by_name.png" width="350" alt="Cummulative requests by Procedure Operation Name">
   <img src="docs/results/active_requests_by_name.png" width="350" alt="Active requests by Procedure Operation Name">
   <img src="docs/results/total_active_requests.png" width="350" alt="Total active requests by Procedure Operation Name">
-  <img src="docs/results/rtt_correlation_plot.png" width="350" alt="SCTP Round Trip Time Analysis"> 
+  <img src="docs/results/rtt_correlation_plot.png" width="350" alt="SCTP Round Trip Time Analysis">
   <img src="docs/results/buffutil_avg_util_vs_ues.png" width="350" alt="SCTP Buffer Utilization">
   <!-- <img src="docs/results/sctp_stream_usage.png" width="350" alt="SCTP Stream Usage Patterns"> -->
   <img src="docs/results/jitter_correlation_plot.png" width="350" alt="SCTP Inter-Packet Jitter">
