@@ -138,7 +138,8 @@ def security_mode_complete(ue, IEs, Msg):
     Msg = FGMMSecurityModeComplete(val=IEs)
     Msg['NASContainer']['V'].set_val(RegMsg.to_bytes())
     ue.MsgInBytes = Msg.to_bytes()
-    # Encrypt NAS message
+    # Encrypt NAS message: the first message of the new NAS security context, uplink COUNT 0
+    ue.ul_nas_count = 0
     SecMsg = security_prot_encrypt_ciphered(ue, Msg)
     ue.set_state(FGMMState.SECURITY_MODE_INITIATED)
     return SecMsg, '5GMMSecurityModeComplete'
@@ -157,8 +158,14 @@ def pdu_session_establishment_request(ue, IEs, Msg):
     ULIEs['PayloadContainerType'] = { 'V': 1 }
     ULIEs['PDUSessID'] = 1
     ULIEs['RequestType'] = { 'Value': 1 }
-    ULIEs['RequestType'] = { 'Value': 1 }
-    ULIEs['SNSSAI'] =  ue.nssai[0]
+    # The session's DNN and S-NSSAI from the UE's configuration (sessions[0]), as UERANSIM sends
+    # them; without a DNN the AMF picks the subscriber's default
+    session = ue.sessions[0] if getattr(ue, 'sessions', None) else {}
+    s_slice = session.get('slice')
+    ULIEs['SNSSAI'] = ({'SST': int(s_slice['sst']), 'SD': int(s_slice['sd'])} if 'sd' in s_slice
+                       else {'SST': int(s_slice['sst'])}) if s_slice else ue.nssai[0]
+    if session.get('apn'):
+        ULIEs['DNN'] = session['apn']
     ULMsg = FGMMULNASTransport(val=ULIEs)
     ULMsg['PayloadContainer']['V'].set_val(Msg.to_bytes())
     # Encrypt NAS message
