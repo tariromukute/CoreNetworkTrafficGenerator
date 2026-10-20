@@ -4,8 +4,20 @@ import sctp
 from sctp import *
 import threading
 import select
+import inspect
 
 logger = logging.getLogger('__SCTPClient__')
+
+# NGAP's SCTP payload protocol identifier (TS 38.412 §7). pysctp 0.7.3 converts the
+# PPID to network byte order inside sctp_send(); 0.7.2 and earlier pass it through, so the caller
+# had to. Give sctp_send() the value its version expects: a doubly converted PPID (0x3C000000)
+# makes OAI's AMF close the association.
+NGAP_PPID = 60
+try:
+    _PYSCTP_CONVERTS_PPID = 'ntohl(ppid)' in inspect.getsource(sctp.sctpsocket.sctp_send)
+except (OSError, TypeError):
+    _PYSCTP_CONVERTS_PPID = False
+NGAP_PPID_ARG = NGAP_PPID if _PYSCTP_CONVERTS_PPID else socket.htonl(NGAP_PPID)
 
 # Create a lock to synchronize access to socket
 socket_lock = threading.Lock()
@@ -61,7 +73,7 @@ class SCTPClient():
 
         socket_lock.acquire()
         try:
-            self.__socket.sctp_send(data, ppid=socket.htonl(60))
+            self.__socket.sctp_send(data, ppid=NGAP_PPID_ARG)
         except ConnectionResetError:
             print("************ Connection reset ******************")
             self.disconnect()
