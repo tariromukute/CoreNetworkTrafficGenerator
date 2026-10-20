@@ -227,6 +227,8 @@ class UESim:
                     self.ue_fg_msg_states[msg_code] += 1
                 
                 ue.current_procedure = msg_code
+                if self.interval:
+                    time.sleep(self.interval)
 
 
     def show_results(self):
@@ -322,8 +324,9 @@ class UESim:
 
         # Wait for GNB to be ready
         time.sleep(5)
-        self.init()
+        # Handle the 5GC's answers while the UEs are still being started (-i paces the starts)
         self.ngap_to_ue_thread = self._load_ngap_to_ue_thread()
+        self.init()
         # self.upf_to_ue_thread = self._load_upf_to_ue_thread()
         while not self.exit_program.value:
             time.sleep(1)
