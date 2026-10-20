@@ -449,9 +449,8 @@ def main(args):
         state_writer.writerow(list(fg_msg_codes.keys()))
 
     processes = []
-    ue_lists, num_ues = create_ues(
-        ue_config["ue_profiles"], num_cpus - 1 if num_cpus > 1 else 1
-    )
+    num_gnbs = args.gnbs or (num_cpus - 1 if num_cpus > 1 else 1)
+    ue_lists, num_ues = create_ues(ue_config["ue_profiles"], num_gnbs)
     for i in range(len(ue_lists)):
         sctp_client = SCTPClient(server_config)
         ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
@@ -492,6 +491,12 @@ def main(args):
     for process in processes:
         process.start()
 
+    # SIGTERM (docker/nerdctl stop) ends the run like Ctrl-C. Set after the children are
+    # started, so that terminate() still ends them.
+    def handle_sigterm(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, handle_sigterm)
+
     ipstats = None
     if args.ebpf:
         ipstats = IPStats()
@@ -525,6 +530,8 @@ def main(args):
             # Wait for a short time before checking again
             time.sleep(args.period)
         except KeyboardInterrupt:
+            # Let the UE and gNB processes stop by themselves, so that they write their results
+            exit_program.value = True
             break
 
     # Allow for sime for process to exit after setting exit_program.value = True
@@ -603,9 +610,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "-i",
         "--interval",
-        type=bool,
-        default=False,
-        help="Interval of adding UEs in seconds",
+        type=float,
+        default=0,
+        help="Interval between starting UEs, in seconds (0: all at once)",
+    )
+    parser.add_argument(
+        "--gnbs",
+        type=int,
+        default=0,
+        help="Number of gNB processes, each with its own NG setup (default: one per CPU, less one)",
     )
     parser.add_argument(
         "-n",
