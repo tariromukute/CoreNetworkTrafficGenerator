@@ -17,6 +17,7 @@ import psutil
 import multiprocessing
 import json
 import csv
+import queue
 
 def interrupt_handler(ueSim, ask, signum, frame):
     if ask:
@@ -50,6 +51,9 @@ class UESim:
         self.exit_program = exit_program 
         self.procedures_count = {}
         self.ue_fg_msg_states = ue_fg_msg_states
+        # init() and the workers all write to the pipes to the gNB: one write at a time
+        self.send_lock = threading.Lock()
+        self.worker_queues = []
         global logger
         
         # Set logging level based on the verbose argument
@@ -126,60 +130,85 @@ class UESim:
         return None, ue_, sent_type
     
 
-    def _load_ngap_to_ue_thread(self):
-        """ Load the thread that will handle NAS DownLink messages from gNB """
-        threads = []
-        for i in range(num_threads):
-            t = threading.Thread(target=self._ngap_to_ue_thread_function)
-            t.daemon = True
-            threads.append(t)
+    def _send_ngap(self, msg):
+        with self.send_lock:
+            self.ue_to_ngap.send(msg)
 
-        # start all threads
+    def _send_upf(self, msg):
+        with self.send_lock:
+            self.ue_to_upf.send(msg)
+
+    def _load_ngap_to_ue_thread(self):
+        """ Load the threads that handle NAS DownLink messages from gNB
+
+            One reader hands each message to the worker of its UE (ueId % num_threads), so a UE's
+            messages are processed in order and one at a time (its state, its NAS COUNT), while
+            different UEs are processed in parallel.
+        """
+        self.worker_queues = [queue.Queue() for _ in range(num_threads)]
+        threads = [threading.Thread(target=self._ngap_to_ue_reader, daemon=True)]
+        threads += [threading.Thread(target=self._ngap_to_ue_thread_function, args=(q,), daemon=True)
+                    for q in self.worker_queues]
         for t in threads:
             t.start()
-
         return threads
 
-    def _ngap_to_ue_thread_function(self):
+    def _ngap_to_ue_reader(self):
+        """ Thread function that reads NAS DownLink messages from gNB and hands them to the workers """
+        while not self.exit_program.value:
+            if not self.ue_to_ngap.poll(0.5):   # so that the loop sees exit_program
+                continue
+            data, ueId = self.ue_to_ngap.recv()
+            self.worker_queues[ueId % len(self.worker_queues)].put((data, ueId))
+
+    def _ngap_to_ue_thread_function(self, messages):
         """ Thread function that will handle NAS DownLink messages from gNB 
 
             It will select the NAS procedure to be executed based on the NAS message type.
             When the NAS procedure is completed, the NAS message will be put on a queue 
-            that will be read by the gNB thread.
+            that will be read by the gNB thread. A message that fails is logged; the worker
+            carries on with the next one.
         """
         while not self.exit_program.value:
-            data = None
-            ueId = None
-            with lock:
-                data, ueId = self.ue_to_ngap.recv()
-            if data:
-                tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId)
-                self.ue_list[int(ue.supi[-10:])] = ue
-                if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
-                    self.ue_to_ngap.send((tx_nas_pdu, ueId))
-                elif tx_nas_pdu:
-                    self.ue_to_upf.send((tx_nas_pdu, ueId))
-                    
-                if sent_type == '5GMMRegistrationComplete' or sent_type == '5GSMPDUSessionEstabComplete' or sent_type == '5GSMPDUSessionTransmissionComplete':
-                    # send the next procedure
-                    tx_nas_pdu, ue, sent_type = self.dispatcher(None, ueId)
-                    self.ue_list[int(ue.supi[-10:])] = ue
+            try:
+                data, ueId = messages.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            if not data:
+                continue
+            try:
+                self._handle_downlink(data, ueId)
+            except Exception:
+                logger.exception(f"UE {ueId}: handling a downlink message failed")
 
-                    if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
-                        self.ue_to_ngap.send((tx_nas_pdu, ueId))
-                    elif tx_nas_pdu:
-                        self.ue_to_upf.send((tx_nas_pdu, ueId))
-                
-                # TODO: handle recording of operation
-                if sent_type is None: # Leave state as is, e.g., on ConfigurationUpdateCommand
-                    continue
-                msg_code = fg_msg_codes[sent_type] - FGMM_MIN_TYPE
-                self.procedures_count[ue.current_procedure] = self.procedures_count.get(ue.current_procedure, 1) - 1
-                with self.ue_fg_msg_states.get_lock():
-                    self.ue_fg_msg_states[ue.current_procedure] -= 1
-                    self.ue_fg_msg_states[msg_code] += 1
-                self.procedures_count[msg_code] = self.procedures_count.get(msg_code, 0) + 1
-                ue.current_procedure = msg_code     
+    def _handle_downlink(self, data, ueId):
+        tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId)
+        self.ue_list[int(ue.supi[-10:])] = ue
+        if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
+            self._send_ngap((tx_nas_pdu, ueId))
+        elif tx_nas_pdu:
+            self._send_upf((tx_nas_pdu, ueId))
+            
+        if sent_type == '5GMMRegistrationComplete' or sent_type == '5GSMPDUSessionEstabComplete' or sent_type == '5GSMPDUSessionTransmissionComplete':
+            # send the next procedure
+            tx_nas_pdu, ue, sent_type = self.dispatcher(None, ueId)
+            self.ue_list[int(ue.supi[-10:])] = ue
+
+            if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
+                self._send_ngap((tx_nas_pdu, ueId))
+            elif tx_nas_pdu:
+                self._send_upf((tx_nas_pdu, ueId))
+        
+        # TODO: handle recording of operation
+        if sent_type is None: # Leave state as is, e.g., on ConfigurationUpdateCommand
+            return
+        msg_code = fg_msg_codes[sent_type] - FGMM_MIN_TYPE
+        self.procedures_count[ue.current_procedure] = self.procedures_count.get(ue.current_procedure, 1) - 1
+        with self.ue_fg_msg_states.get_lock():
+            self.ue_fg_msg_states[ue.current_procedure] -= 1
+            self.ue_fg_msg_states[msg_code] += 1
+        self.procedures_count[msg_code] = self.procedures_count.get(msg_code, 0) + 1
+        ue.current_procedure = msg_code     
     
     def init(self):
         global start_time
@@ -189,8 +218,7 @@ class UESim:
             if (ue):
                 tx_nas_pdu, ue_, sent_type = ue.next_action(None, ) if g_verbose <= 3 else ue.next_compliance_test(None, )
                 self.ue_list[int(ue.supi[-10:])] = ue
-                self.ue_to_ngap.send(
-                    (tx_nas_pdu, int(ue.supi[-10:])))
+                self._send_ngap((tx_nas_pdu, int(ue.supi[-10:])))
 
                 msg_code = fg_msg_codes[sent_type] - FGMM_MIN_TYPE
                 self.procedures_count[ue.current_procedure] = self.procedures_count.get(ue.current_procedure, 1) - 1
