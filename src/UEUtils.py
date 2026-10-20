@@ -92,6 +92,7 @@ fg_msg_names = {
     194: "5GSMPDUSessionEstabAccept",
     195: "5GSMPDUSessionEstabReject",
     196: "5GSMPDUSessionTransmission", # For internal use only, it's not a real message type
+    200: "5GSMPDUSessionEstabComplete", # For internal use only (196 and 200 are unassigned in TS 24.501)
     # #
     # 197: "5GSMPDUSessionAuthenticationCommand",
     # 198: "5GSMPDUSessionAuthenticationComplete",
@@ -114,7 +115,7 @@ fg_msg_codes = {value: key for key, value in fg_msg_names.items()}
 FGMM_MIN_TYPE = 65 # The minimum value of the 5G MM  Message types (registration request)
 FGSM_MIN_TYPE = 193 # he minimum value of the 5G SM Message types (PDU session establishment request)
 FGMM_MAX_TYPE = 104 # The minimum value of the 5G MM  Message types (registration request)
-FGSM_MAX_TYPE = 196 # The minimum value of the 5G SM Message types (PDU session establishment request)
+FGSM_MAX_TYPE = 200 # The maximum code in fg_msg_names (5GSMPDUSessionEstabComplete, internal)
 
 def security_prot_encrypt(ue, Msg):
     if ue.CiphAlgo == 0:
@@ -127,20 +128,37 @@ def security_prot_encrypt(ue, Msg):
     SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=ue.IntegAlgo, seqnoff=0, bearer=1)
     return SecMsg
 
+def nas_plaintext(SecMsg):
+    """ The NAS message inside a 5GMMSecProtNASMessage, after encrypt() or decrypt().
+
+    pycrate sets _dec_msg only when it ciphers; with 5G-EA0 (null ciphering) encrypt() and
+    decrypt() return early and the NASMessage field already holds the plain message. """
+    plain = getattr(SecMsg, '_dec_msg', None)
+    return plain if plain is not None else SecMsg['NASMessage'].get_val()
+
 def security_prot_encrypt_ciphered(ue, Msg):
     try:
         IEs = {}
-        if ue.CiphAlgo != 0:
+        # Once a NAS security context is active, messages are integrity protected and ciphered
+        # (security header type 2), also with 5G-EA0, whose ciphering is the identity (TS 24.501)
+        if ue.CiphAlgo != 0 or ue.IntegAlgo != 0:
             IEs['5GMMHeaderSec'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 2 }
         else:
             IEs['5GMMHeaderSec'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0 }
             # return Msg
+        # Uplink NAS COUNT (TS 24.501 §4.4.3.1): NAS overflow (16 bits) and the sequence number
+        # (8 bits) carried in the header. It starts at 0 with the security context and grows by
+        # one per protected message; an AMF drops a message whose COUNT does not grow (replay).
+        count = getattr(ue, 'ul_nas_count', 0)
+        IEs['Seqn'] = count & 0xFF
+        overflow = count & ~0xFF
         SecMsg = FGMMSecProtNASMessage(val=IEs)
         SecMsg['NASMessage'].set_val(Msg.to_bytes())
         if ue.CiphAlgo != 0:
-            SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
+            SecMsg.encrypt(key=ue.k_nas_enc, dir=0, fgea=ue.CiphAlgo, seqnoff=overflow, bearer=1)
         if ue.IntegAlgo != 0:
-            SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=ue.IntegAlgo, seqnoff=0, bearer=1)
+            SecMsg.mac_compute(key=ue.k_nas_int, dir=0, fgia=ue.IntegAlgo, seqnoff=overflow, bearer=1)
+        ue.ul_nas_count = count + 1
         return SecMsg
     except:
         return Msg
@@ -153,7 +171,7 @@ def security_prot_decrypt(Msg, ue):
         # decrypt message
         try:
             Msg.decrypt(ue.k_nas_enc, dir=1, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
-            Msg, err = parse_NAS5G(Msg._dec_msg)
+            Msg, err = parse_NAS5G(nas_plaintext(Msg))
             if err:
                 return None
             return Msg
