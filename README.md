@@ -69,6 +69,55 @@ After PDU session establishment, the traffic generator can generate and send UP 
       - 5GMMMODeregistrationRequest
 ```
 
+**The user plane: providers**
+
+What happens to a PDU session once it is up is up to the gNB's user plane providers (`src/userplane`). The gNB hands each session to every configured provider as it comes up, and tells them when the UE's context is released. So UEs can be added, and removed, while others are sending.
+
+| Provider | What it does with a session |
+|---|---|
+| `xdp` | CN-TG's own GTP-U generator, in an XDP program; the default, configured by `gtpuConfig` |
+| `file` | appends it to a JSON-lines file, for a generator that reads them |
+| `trex` | gives it a TRex stream of its own, through TRex's stateless Python API |
+
+```yaml
+gtpIp: 192.168.72.142            # the downlink address given to the 5GC
+userPlane:                       # without it, gtpuConfig configures the xdp provider
+  providers:
+    - type: file
+      path: /var/log/CoreNetworkTrafficGenerator/sessions.jsonl
+    - type: trex
+      server: 192.168.70.151     # TRex's RPC server (4501)
+      port: 0                    # the TRex port on N3
+      trexClient: /opt/trex-client   # TRex's automation/trex_control_plane/interactive and external_libs
+      srcIp: 192.168.72.142      # outer source (TRex's N3 address)
+      dstIp: 10.50.73.135        # inner destination
+      pps: 1000                  # per session
+      payload: 1400
+      sequence: true             # a frame counter in the first 4 payload bytes
+      sample: 0                  # only the first K sessions get a stream (0: all)
+```
+
+How the providers run:
+- **The user plane process.** The providers run in a process of their own, fed by the gNB processes through a queue, so a slow provider never holds up NGAP. A provider that fails is logged; the others carry on.
+- **The `file` provider.** Each line holds:
+  - `supi`, `ue_ip` and `pdu_session_id`;
+  - `ul_teid`, `qfi` and `upf_address`;
+  - `dl_teid` and `gnb_address`;
+  - the NGAP UE IDs and the time.
+- **The `trex` provider.**
+  - **Profiles.** Each session is a TRex profile of its own (`0.s<ran_ue_ngap_id>_<pdu_session_id>`), so it starts and stops while the others keep sending.
+  - **Isolation.** TRex's client brings its own scapy, so the provider drives it from a worker (`trex_worker.py`) in an isolated interpreter. It works with TRex 3.06's client on Python 3.12.
+  - **Log.** `log` records when each stream started and stopped.
+- **The `xdp` provider** loads `src/bpf/xdpgen.bpf.c` and needs `src/bpf/libxdpgen.so` built from `xdpgen.c`. It cannot remove a session.
+- **A new provider** (tc-gtpu, a hardware generator ...) implements `UserPlaneProvider` (`src/userplane/base.py`), and is named as `type: package.module:Class`.
+
+Related options:
+- `-i SECONDS` paces the UEs' start;
+- `--gnbs N` sets the number of gNB processes (default: one per CPU, less one);
+- SIGTERM (`docker stop`) ends the run like Ctrl-C: the UEs write their procedure times first, and the providers stop their traffic.
+
+The DNN and S-NSSAI of the PDU session come from the UE profile's `sessions` entry (`apn`, `slice`), as in UERANSIM.
+
 ## Running the traffic generator using Docker Compose
 
 You can also run the traffic generator using Docker Compose, which simplifies the process of setting up and running the required dependencies. Here's an example of how to run it with OAI CN and Free5GC:

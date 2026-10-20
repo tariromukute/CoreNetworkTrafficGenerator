@@ -187,7 +187,7 @@ class UESim:
         if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
             self._send_ngap((tx_nas_pdu, ueId))
         elif tx_nas_pdu:
-            self._send_upf((tx_nas_pdu, ueId))
+            self._send_upf((tx_nas_pdu, ueId, ue.supi))
             
         if sent_type == '5GMMRegistrationComplete' or sent_type == '5GSMPDUSessionEstabComplete' or sent_type == '5GSMPDUSessionTransmissionComplete':
             # send the next procedure
@@ -197,7 +197,7 @@ class UESim:
             if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
                 self._send_ngap((tx_nas_pdu, ueId))
             elif tx_nas_pdu:
-                self._send_upf((tx_nas_pdu, ueId))
+                self._send_upf((tx_nas_pdu, ueId, ue.supi))
         
         # TODO: handle recording of operation
         if sent_type is None: # Leave state as is, e.g., on ConfigurationUpdateCommand
