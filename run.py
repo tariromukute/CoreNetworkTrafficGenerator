@@ -468,6 +468,7 @@ def main(args):
             upf_to_ue,
             ue_to_upf,
             args.verbose,
+            gnb_index=i,
         )
         ueSim = UESim(
             ue_fg_msg_states,
