@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import logging
@@ -36,7 +37,7 @@ class UESim:
     exit_flag = False
     global start_time
 
-    def __init__(self, ue_fg_msg_states, exit_program, ue_list, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, interval, statistics, verbose, ue_sim_time):
+    def __init__(self, ue_fg_msg_states, exit_program, ue_list, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, interval, statistics, verbose, ue_sim_time, folder='.', index=None):
         global g_verbose
         g_verbose = verbose
         self.ngap_to_ue = ngap_to_ue
@@ -48,6 +49,8 @@ class UESim:
         self.number = len(ue_list)
         self.interval = interval
         self.ue_sim_time = ue_sim_time
+        self.folder = folder   # where procedure_times_<index>.csv and .json go
+        self.index = index
         self.exit_program = exit_program 
         self.procedures_count = {}
         self.ue_fg_msg_states = ue_fg_msg_states
@@ -67,8 +70,8 @@ class UESim:
         else:
             logging.basicConfig(level=logging.DEBUG)
 
-    def dispatcher(self, data: bytes, ueId):
-        received_at = time.time()
+    def dispatcher(self, data: bytes, ueId, received_at=None):
+        received_at = received_at or time.time()
         ue = self.ue_list[ueId]
         if data == None:
             tx_nas_pdu, ue, sent_type = ue.next_action(None, None) if g_verbose <= 3 else ue.next_compliance_test(None, None)
@@ -158,8 +161,10 @@ class UESim:
         while not self.exit_program.value:
             if not self.ue_to_ngap.poll(0.5):   # so that the loop sees exit_program
                 continue
-            data, ueId = self.ue_to_ngap.recv()
-            self.worker_queues[ueId % len(self.worker_queues)].put((data, ueId))
+            msg = self.ue_to_ngap.recv()   # (NAS PDU, UE ID[, the time the gNB received it])
+            data, ueId = msg[0], msg[1]
+            received_at = msg[2] if len(msg) > 2 else None
+            self.worker_queues[ueId % len(self.worker_queues)].put((data, ueId, received_at))
 
     def _ngap_to_ue_thread_function(self, messages):
         """ Thread function that will handle NAS DownLink messages from gNB 
@@ -171,18 +176,18 @@ class UESim:
         """
         while not self.exit_program.value:
             try:
-                data, ueId = messages.get(timeout=0.5)
+                data, ueId, received_at = messages.get(timeout=0.5)
             except queue.Empty:
                 continue
             if not data:
                 continue
             try:
-                self._handle_downlink(data, ueId)
+                self._handle_downlink(data, ueId, received_at)
             except Exception:
                 logger.exception(f"UE {ueId}: handling a downlink message failed")
 
-    def _handle_downlink(self, data, ueId):
-        tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId)
+    def _handle_downlink(self, data, ueId, received_at=None):
+        tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId, received_at)
         self.ue_list[int(ue.supi[-10:])] = ue
         if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
             self._send_ngap((tx_nas_pdu, ueId))
@@ -295,10 +300,12 @@ class UESim:
         
         message_codes = ["UE"] + list(range(FGMM_MIN_TYPE, FGSM_MAX_TYPE + 1))
 
-        with open(f'procedure_times_{psutil.Process().cpu_num()}.json', 'a+') as f:
+        # One pair of files per UE simulator, in the output folder
+        name = os.path.join(self.folder, f'procedure_times_{self.index if self.index is not None else psutil.Process().cpu_num()}')
+        with open(f'{name}.json', 'w') as f:
                 json.dump(jsonArray, f)
 
-        with open(f'procedure_times_{psutil.Process().cpu_num()}.csv', 'a+') as csvfile:
+        with open(f'{name}.csv', 'w') as csvfile:
             hwriter = csv.writer(csvfile)
             hwriter.writerow(headers)
             writer = csv.DictWriter(csvfile, fieldnames=message_codes)
