@@ -484,6 +484,10 @@ def main(args):
             ue_sim_time,
             folder=args.folder,
             index=i,
+            poisson=args.poisson,
+            seed=args.seed + i,
+            inflight=args.inflight,
+            ue_timeout=args.ue_timeout,
         )
         processes.append(
             Process(name=f"ueSIM-{i}", target=ueSim.run, args=(placement[2 * i],))
@@ -619,7 +623,25 @@ if __name__ == "__main__":
         "--interval",
         type=float,
         default=0,
-        help="Interval between starting UEs, in seconds (0: all at once)",
+        help="Interval between starting UEs, in seconds, per gNB (0: all at once)",
+    )
+    parser.add_argument(
+        "--poisson",
+        action="store_true",
+        help="Start UEs as a Poisson process whose mean gap is the interval",
+    )
+    parser.add_argument("--seed", type=int, default=1, help="Seed of the Poisson starts (gNB i uses seed + i)")
+    parser.add_argument(
+        "--inflight",
+        type=int,
+        default=0,
+        help="Closed loop: at most this many UEs per gNB in their procedures at once (0: open loop)",
+    )
+    parser.add_argument(
+        "--ue-timeout",
+        type=float,
+        default=30.0,
+        help="With --inflight: free the place of a UE that has not finished after this many seconds",
     )
     parser.add_argument(
         "--gnbs",
