@@ -19,6 +19,8 @@ import multiprocessing
 import json
 import csv
 import queue
+import random
+from src.pacing import InFlight, start_offsets
 
 def interrupt_handler(ueSim, ask, signum, frame):
     if ask:
@@ -37,7 +39,8 @@ class UESim:
     exit_flag = False
     global start_time
 
-    def __init__(self, ue_fg_msg_states, exit_program, ue_list, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, interval, statistics, verbose, ue_sim_time, folder='.', index=None):
+    def __init__(self, ue_fg_msg_states, exit_program, ue_list, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, interval, statistics, verbose, ue_sim_time, folder='.', index=None,
+                 poisson=False, seed=None, inflight=0, ue_timeout=30.0):
         global g_verbose
         g_verbose = verbose
         self.ngap_to_ue = ngap_to_ue
@@ -51,6 +54,11 @@ class UESim:
         self.ue_sim_time = ue_sim_time
         self.folder = folder   # where procedure_times_<index>.csv and .json go
         self.index = index
+        # When to start the UEs (src/pacing.py): every interval s, or as a Poisson process with that mean
+        # gap; with inflight > 0, also at most inflight UEs in their procedures at once (a closed loop)
+        self.poisson = poisson
+        self.rng = random.Random(seed)
+        self.inflight = InFlight(inflight, ue_timeout) if inflight else None
         self.exit_program = exit_program 
         self.procedures_count = {}
         self.ue_fg_msg_states = ue_fg_msg_states
@@ -205,6 +213,8 @@ class UESim:
                 self._send_upf((tx_nas_pdu, ueId, ue.supi))
         
         # TODO: handle recording of operation
+        if sent_type == '5GMMANConnectionReleaseComplete' and self.inflight:
+            self.inflight.release(ueId)   # the UE has finished: the next may start
         if sent_type is None: # Leave state as is, e.g., on ConfigurationUpdateCommand
             return
         msg_code = fg_msg_codes[sent_type] - FGMM_MIN_TYPE
@@ -219,7 +229,15 @@ class UESim:
         global start_time
         start_time = time.time()
         self.procedures_count["NULL"] = len(self.ue_list.items()) # All UEs are initialised with last_procedure = NULL, set count to the number of UEs
-        for supi, ue in self.ue_list.items():
+        ues = [ue for ue in self.ue_list.values() if ue]
+        offsets = start_offsets(len(ues), self.interval, self.poisson, self.rng)
+        for ue, offset in zip(ues, offsets):
+            # An absolute schedule: a late start does not delay the later ones
+            wait = start_time + offset - time.time()
+            if wait > 0:
+                time.sleep(wait)
+            if self.inflight and not self.inflight.acquire(int(ue.supi[-10:]), stop=lambda: self.exit_program.value):
+                return
             if (ue):
                 tx_nas_pdu, ue_, sent_type = ue.next_action(None, ) if g_verbose <= 3 else ue.next_compliance_test(None, )
                 self.ue_list[int(ue.supi[-10:])] = ue
@@ -232,9 +250,14 @@ class UESim:
                     self.ue_fg_msg_states[msg_code] += 1
                 
                 ue.current_procedure = msg_code
-                if self.interval:
-                    time.sleep(self.interval)
 
+
+    def _expire_inflight(self):
+        """ Free the places of UEs that did not finish in time, so the closed loop goes on """
+        while not self.exit_program.value:
+            time.sleep(0.5)
+            for ue_id in self.inflight.expire():
+                logger.warning(f"UE {ue_id} did not finish within {self.inflight.timeout} s: its place is freed")
 
     def show_results(self):
         global start_time
@@ -333,6 +356,8 @@ class UESim:
         time.sleep(5)
         # Handle the 5GC's answers while the UEs are still being started (-i paces the starts)
         self.ngap_to_ue_thread = self._load_ngap_to_ue_thread()
+        if self.inflight:
+            threading.Thread(target=self._expire_inflight, daemon=True).start()
         self.init()
         # self.upf_to_ue_thread = self._load_upf_to_ue_thread()
         while not self.exit_program.value:
