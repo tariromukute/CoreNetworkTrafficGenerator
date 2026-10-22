@@ -35,9 +35,14 @@ def plmn_str_to_buf(s):
             ((s[3]-0x30)<<4) + (s[2]-0x30),
             ((s[5]-0x30)<<4) + (s[4]-0x30)])
 gtpIp = '127.0.0.1'
+
+def nr_cell_identity(gnb):
+    """ The gNB's one cell: a 36-bit NR Cell Identity whose leftmost 32 bits are the gNB ID (TS 38.413 §9.3.1.7) """
+    return gnb.gnb_id << 4
+
 def ng_setup_request(PDU, IEs, gNB):
-    IEs.append({'id': 27, 'criticality': 'reject', 'value': ('GlobalRANNodeID', ('globalGNB-ID', {'pLMNIdentity': gNB.plmn_identity, 'gNB-ID': ('gNB-ID', (1, 32))}))})
-    IEs.append({'id': 82, 'criticality': 'ignore', 'value': ('RANNodeName', 'CNTG-gnb-208-95-1')})
+    IEs.append({'id': 27, 'criticality': 'reject', 'value': ('GlobalRANNodeID', ('globalGNB-ID', {'pLMNIdentity': gNB.plmn_identity, 'gNB-ID': ('gNB-ID', (gNB.gnb_id, 32))}))})
+    IEs.append({'id': 82, 'criticality': 'ignore', 'value': ('RANNodeName', f'CNTG-gnb-{gNB.mcc}-{gNB.mnc}-{gNB.gnb_id}')})
     IEs.append({'id': 102, 'criticality': 'reject', 'value': ('SupportedTAList', [{'tAC': gNB.tac, 'broadcastPLMNList': [{'pLMNIdentity': gNB.plmn_identity, 'tAISliceSupportList': [ {'s-NSSAI': s } for s in gNB.tai_slice_support_list ]}]}])})
     IEs.append({'id': 21, 'criticality': 'ignore', 'value': ('PagingDRX', 'v128')})
     val = ('initiatingMessage', {'procedureCode': 21, 'criticality': 'reject', 'value': ('NGSetupRequest', {'protocolIEs': IEs})})
@@ -45,7 +50,7 @@ def ng_setup_request(PDU, IEs, gNB):
 
 def uplink_nas_transport(PDU, IEs, ue, gnb):
     curTime = int(time.time()) + 2208988800 #1900 instead of 1970
-    IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': gnb.plmn_identity, 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': gnb.plmn_identity, 'tAC': gnb.tac }, 'timeStamp': struct.pack("!I",curTime)}))})
+    IEs.append({'id': 121, 'criticality': 'ignore', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': gnb.plmn_identity, 'nRCellIdentity': (nr_cell_identity(gnb), 36)}, 'tAI': {'pLMNIdentity': gnb.plmn_identity, 'tAC': gnb.tac }, 'timeStamp': struct.pack("!I",curTime)}))})
     IEs.append({'id': 10, 'criticality': 'reject', 'value': ('AMF-UE-NGAP-ID', ue['amf_ue_ngap_id'])})
     IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', ue['ran_ue_ngap_id'])})
     val = ('initiatingMessage', {'procedureCode': 46, 'criticality': 'ignore', 'value': ('UplinkNASTransport', {'protocolIEs': IEs})})
@@ -53,7 +58,7 @@ def uplink_nas_transport(PDU, IEs, ue, gnb):
 
 def initial_ue_message(PDU, IEs, ue, gnb):
     curTime = int(time.time()) + 2208988800 #1900 instead of 1970
-    IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': gnb.plmn_identity, 'nRCellIdentity': (16, 36)}, 'tAI': {'pLMNIdentity': gnb.plmn_identity, 'tAC': gnb.tac }, 'timeStamp': struct.pack("!I",curTime)}))})
+    IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': gnb.plmn_identity, 'nRCellIdentity': (nr_cell_identity(gnb), 36)}, 'tAI': {'pLMNIdentity': gnb.plmn_identity, 'tAC': gnb.tac }, 'timeStamp': struct.pack("!I",curTime)}))})
     IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', ue['ran_ue_ngap_id'])})
     IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
     IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
@@ -188,7 +193,7 @@ ngap_pdu_lock = threading.Lock()
 num_threads = 1
 class GNB():
 
-    def __init__(self, gnb_exit_flag, sctp: SCTPClient, userplane, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose) -> None:
+    def __init__(self, gnb_exit_flag, sctp: SCTPClient, userplane, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose, gnb_index=0) -> None:
         global logger
         # Set logging level based on the verbose argument
         if verbose == 0:
@@ -212,6 +217,8 @@ class GNB():
         self.verbose = verbose
         self.mcc = server_config['mcc']
         self.mnc = server_config['mnc']
+        # Each gNB process is a gNB of its own on its own association: gNB IDs 1, 2, ...
+        self.gnb_id = 1 + gnb_index
         self.nci = server_config['nci']
         self.id_length = server_config['idLength']
         self.tac = server_config['tac'].to_bytes(3, 'big')
