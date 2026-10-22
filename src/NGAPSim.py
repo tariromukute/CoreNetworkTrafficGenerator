@@ -289,6 +289,9 @@ class GNB():
                 with ngap_to_ue_lock:
                     data = self.sctp.recv()
                 if data:
+                    # The time the gNB has the message: the UE simulator records it as the NAS message's
+                    # arrival, so its own queueing does not count as the 5GC's latency
+                    received_at = time.time()
                     with ngap_pdu_lock:
                         PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                         PDU.from_aper(data)
@@ -334,7 +337,7 @@ class GNB():
                     if ngap_aper:
                         self.sctp.send(ngap_aper)
                     if nas_pdu:
-                        self.ngap_to_ue.send((nas_pdu, ue_['ran_ue_ngap_id']))
+                        self.ngap_to_ue.send((nas_pdu, ue_['ran_ue_ngap_id'], received_at))
             except Exception as e:
                 logger.error(f"Error sending message to UESim: {e}")
                 # IF error occurs, likely from SCTP end program

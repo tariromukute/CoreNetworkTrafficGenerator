@@ -482,6 +482,8 @@ def main(args):
             args.statistics,
             args.verbose,
             ue_sim_time,
+            folder=args.folder,
+            index=i,
         )
         processes.append(
             Process(name=f"ueSIM-{i}", target=ueSim.run, args=(placement[2 * i],))
