@@ -78,9 +78,12 @@ class UESim:
         else:
             logging.basicConfig(level=logging.DEBUG)
 
-    def dispatcher(self, data: bytes, ueId, received_at=None):
+    def dispatcher(self, data: bytes, ueId, received_at=None, ul_sent=None):
         received_at = received_at or time.time()
         ue = self.ue_list[ueId]
+        # When the gNB sent the UE's uplink messages: these replace the times taken when they were built
+        for code, sent_at in ul_sent or ():
+            ue.procedure_times[code] = sent_at
         if data == None:
             tx_nas_pdu, ue, sent_type = ue.next_action(None, None) if g_verbose <= 3 else ue.next_compliance_test(None, None)
             ue.procedure_times[fg_msg_codes[sent_type]] = time.time()
@@ -169,10 +172,12 @@ class UESim:
         while not self.exit_program.value:
             if not self.ue_to_ngap.poll(0.5):   # so that the loop sees exit_program
                 continue
-            msg = self.ue_to_ngap.recv()   # (NAS PDU, UE ID[, the time the gNB received it])
+            # (NAS PDU, UE ID[, the time the gNB received it[, when it sent the UE's uplink messages]])
+            msg = self.ue_to_ngap.recv()
             data, ueId = msg[0], msg[1]
             received_at = msg[2] if len(msg) > 2 else None
-            self.worker_queues[ueId % len(self.worker_queues)].put((data, ueId, received_at))
+            ul_sent = msg[3] if len(msg) > 3 else None
+            self.worker_queues[ueId % len(self.worker_queues)].put((data, ueId, received_at, ul_sent))
 
     def _ngap_to_ue_thread_function(self, messages):
         """ Thread function that will handle NAS DownLink messages from gNB 
@@ -184,21 +189,21 @@ class UESim:
         """
         while not self.exit_program.value:
             try:
-                data, ueId, received_at = messages.get(timeout=0.5)
+                data, ueId, received_at, ul_sent = messages.get(timeout=0.5)
             except queue.Empty:
                 continue
             if not data:
                 continue
             try:
-                self._handle_downlink(data, ueId, received_at)
+                self._handle_downlink(data, ueId, received_at, ul_sent)
             except Exception:
                 logger.exception(f"UE {ueId}: handling a downlink message failed")
 
-    def _handle_downlink(self, data, ueId, received_at=None):
-        tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId, received_at)
+    def _handle_downlink(self, data, ueId, received_at=None, ul_sent=None):
+        tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId, received_at, ul_sent)
         self.ue_list[int(ue.supi[-10:])] = ue
         if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
-            self._send_ngap((tx_nas_pdu, ueId))
+            self._send_ngap((tx_nas_pdu, ueId, fg_msg_codes[sent_type]))
         elif tx_nas_pdu:
             self._send_upf((tx_nas_pdu, ueId, ue.supi))
             
@@ -208,7 +213,7 @@ class UESim:
             self.ue_list[int(ue.supi[-10:])] = ue
 
             if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
-                self._send_ngap((tx_nas_pdu, ueId))
+                self._send_ngap((tx_nas_pdu, ueId, fg_msg_codes[sent_type]))
             elif tx_nas_pdu:
                 self._send_upf((tx_nas_pdu, ueId, ue.supi))
         
@@ -241,7 +246,7 @@ class UESim:
             if (ue):
                 tx_nas_pdu, ue_, sent_type = ue.next_action(None, ) if g_verbose <= 3 else ue.next_compliance_test(None, )
                 self.ue_list[int(ue.supi[-10:])] = ue
-                self._send_ngap((tx_nas_pdu, int(ue.supi[-10:])))
+                self._send_ngap((tx_nas_pdu, int(ue.supi[-10:]), fg_msg_codes[sent_type]))
 
                 msg_code = fg_msg_codes[sent_type] - FGMM_MIN_TYPE
                 self.procedures_count[ue.current_procedure] = self.procedures_count.get(ue.current_procedure, 1) - 1

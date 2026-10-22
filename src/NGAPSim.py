@@ -209,6 +209,9 @@ class GNB():
         gtpIp = server_config['gtpIp']
         self.userplane = userplane  # src.userplane.UserPlane: the sessions' traffic
         self.ues = {} # key -> ran_ue_ngap_id = { amf_ue_ngap_id: ue.supi[-10:], qfi,  ul_teid, dl_teid }, value -> amf_ue_ngap_id assigned by core network
+        # A UE's uplink send times not yet returned to the UE simulator: [(message code, time), ...]
+        self.ul_sent = {}
+        self.ul_sent_lock = threading.Lock()
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue
         self.ue_to_ngap = ue_to_ngap
@@ -337,7 +340,8 @@ class GNB():
                     if ngap_aper:
                         self.sctp.send(ngap_aper)
                     if nas_pdu:
-                        self.ngap_to_ue.send((nas_pdu, ue_['ran_ue_ngap_id'], received_at))
+                        ul_sent = self._take_uplink_stamps(ue_['ran_ue_ngap_id'])
+                        self.ngap_to_ue.send((nas_pdu, ue_['ran_ue_ngap_id'], received_at, ul_sent))
             except Exception as e:
                 logger.error(f"Error sending message to UESim: {e}")
                 # IF error occurs, likely from SCTP end program
@@ -370,7 +374,9 @@ class GNB():
                 data = None
                 ran_ue_ngap_id = None
                 with ue_to_ngap_lock:
-                    data, ran_ue_ngap_id = self.ngap_to_ue.recv()
+                    msg = self.ngap_to_ue.recv()   # (NAS PDU, UE ID[, its message code])
+                data, ran_ue_ngap_id = msg[0], msg[1]
+                code = msg[2] if len(msg) > 2 else None
                 if data:
                     # The UE simulator's bytes go out as they are: no parse and re-encode here
                     amf_ue_ngap_id = self.ues.get(ran_ue_ngap_id).get('amf_ue_ngap_id') if self.ues.get(ran_ue_ngap_id) else None
@@ -387,6 +393,9 @@ class GNB():
 {PDU.show()}\n\
 |----------------------------------------------------------------------------------------------------------------|\n\n")
                         ngap_aper = PDU.to_aper()
+                    if code is not None:
+                        # Stamped before the send, so the stamp is in place before the 5GC's answer
+                        self._stamp_uplink(ran_ue_ngap_id, code)
                     self.sctp.send(ngap_aper)
             except Exception as e:
                 logger.error(f"Error receiving message from UESim: {e}")
@@ -423,6 +432,21 @@ class GNB():
             except Exception as e:
                 # self.exit_flag.value = True
                 logger.error(f"Error receive DP message from UESim: {e}")
+
+    def _stamp_uplink(self, ran_ue_ngap_id, code, t=None):
+        """ Record when the UE's uplink message (its message code) leaves for the 5GC
+
+            The UE simulator gets the time with the UE's next downlink message and records it as the
+            message's send time, so its own queueing and the pipe to the gNB do not count as the
+            5GC's latency.
+        """
+        with self.ul_sent_lock:
+            self.ul_sent.setdefault(ran_ue_ngap_id, []).append((code, t if t is not None else time.time()))
+
+    def _take_uplink_stamps(self, ran_ue_ngap_id):
+        """ The UE's uplink send times not yet returned to the UE simulator, oldest first """
+        with self.ul_sent_lock:
+            return self.ul_sent.pop(ran_ue_ngap_id, [])
 
     def get_ue(self, ran_ue_ngap_id):
         return self.ues[ran_ue_ngap_id]

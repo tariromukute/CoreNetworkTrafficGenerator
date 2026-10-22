@@ -26,7 +26,7 @@ def test_each_ues_messages_are_handled_in_order_by_one_worker():
     sim, gnb = make_sim()
     seen, seen_lock = [], threading.Lock()
 
-    def handle(data, ue_id, received_at=None):
+    def handle(data, ue_id, received_at=None, ul_sent=None):
         time.sleep(random.random() / 1000)   # interleave the workers
         with seen_lock:
             seen.append((ue_id, data, threading.current_thread().name))
@@ -53,7 +53,7 @@ def test_a_failing_message_does_not_stop_the_worker():
     sim, gnb = make_sim()
     handled = []
 
-    def handle(data, ue_id, received_at=None):
+    def handle(data, ue_id, received_at=None, ul_sent=None):
         if data == b"bad":
             raise ValueError("malformed")
         handled.append(data)
@@ -72,13 +72,13 @@ def test_a_failing_message_does_not_stop_the_worker():
 def test_the_gnbs_receive_time_reaches_the_handler():
     sim, gnb = make_sim()
     got = []
-    sim._handle_downlink = lambda data, ue_id, received_at=None: got.append((data, received_at))
+    sim._handle_downlink = lambda data, ue_id, received_at=None, ul_sent=None: got.append((data, received_at, ul_sent))
     sim._load_ngap_to_ue_thread()
 
-    gnb.send((b"stamped", 31, 1234.5))
+    gnb.send((b"stamped", 31, 1234.5, [(65, 1234.25)]))
     gnb.send((b"unstamped", 32))           # an older gNB: the UE simulator takes the time itself
     deadline = time.time() + 5
     while len(got) < 2 and time.time() < deadline:
         time.sleep(0.01)
     sim.exit_program.value = 1
-    assert sorted(got) == [(b"stamped", 1234.5), (b"unstamped", None)]
+    assert sorted(got) == [(b"stamped", 1234.5, [(65, 1234.25)]), (b"unstamped", None, None)]
