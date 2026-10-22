@@ -19,12 +19,19 @@ except (OSError, TypeError):
     _PYSCTP_CONVERTS_PPID = False
 NGAP_PPID_ARG = NGAP_PPID if _PYSCTP_CONVERTS_PPID else socket.htonl(NGAP_PPID)
 
+# NGAP messages are small. With Nagle's algorithm on, the kernel holds each one while earlier data
+# is unacknowledged, and the AMF delays its SACK by up to 200 ms (net.sctp.sack_timeout) when it has
+# nothing to send back: the messages then leave in bursts, and the delay counts as core latency.
+# Python's socket module has no SCTP_NODELAY; linux/sctp.h defines it as 3.
+SCTP_NODELAY = getattr(socket, 'SCTP_NODELAY', 3)
+
 # Create a lock to synchronize access to socket
 socket_lock = threading.Lock()
 
 class SCTPClient():
     """ This class is a base class for all SCTP client contexts. """
-    def __init__(self, server_config):
+    def __init__(self, server_config, nodelay=True):
+        self.nodelay = nodelay
         try:
             self.__socket = self._load_socket()
             # self.__socket.events.data_io = 1
@@ -55,8 +62,10 @@ class SCTPClient():
         self.__socket.close()
 
     def _load_socket(self):
-        # Create SCTP socket
-        return sctp.sctpsocket_tcp(socket.AF_INET)
+        # Create SCTP socket; Nagle's algorithm is off unless asked for (see SCTP_NODELAY)
+        sk = sctp.sctpsocket_tcp(socket.AF_INET)
+        sk.sock().setsockopt(socket.IPPROTO_SCTP, SCTP_NODELAY, int(self.nodelay))
+        return sk
 
     def send(self, data: bytes):
         # Acquire the socket lock before sending data
