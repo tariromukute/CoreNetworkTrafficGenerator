@@ -238,7 +238,8 @@ class GNB():
             PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
             ng_setup_request(PDU, IEs, self)
             ng_setup_pdu_aper = PDU.to_aper()
-            logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
                 gNB sending message to 5GC\n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 {PDU.show()}\n\
@@ -277,7 +278,8 @@ class GNB():
                     with ngap_pdu_lock:
                         PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                         PDU.from_aper(data)
-                        logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
                 gNB received message from 5GC\n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 {PDU.show()}\n\
@@ -290,7 +292,8 @@ class GNB():
                         ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
                         ngap_aper = None
                         if ngap_pdu:
-                            logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                            if logger.isEnabledFor(logging.DEBUG):
+                                logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
                 gNB sending message to 5GC\n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 {ngap_pdu.show()}\n\
@@ -366,7 +369,8 @@ class GNB():
                     with ngap_pdu_lock:
                         PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                         procedure_func(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id }, self)
-                        logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
                 gNB sending message to 5GC\n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 {PDU.show()}\n\

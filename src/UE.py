@@ -237,7 +237,7 @@ class UE:
 
             validator(self.MsgInBytes, Msg)
         
-        if type(Msg) is not bytes:
+        if type(Msg) is not bytes and logger.isEnabledFor(logging.DEBUG):
             DecryptMsg = None
             if Msg != None and Msg._name == '5GMMSecProtNASMessage':
                 DecryptMsg = security_prot_decrypt(Msg, self)
@@ -273,10 +273,11 @@ class UE:
         if sent_type == '5GSMPDUSessionTransmission': # Already in bytes
             return Msg, self, sent_type
         
-        DecryptMsg = None
-        if Msg !=  None and Msg._name == '5GMMSecProtNASMessage':
-            DecryptMsg, e = parse_NAS5G(nas_plaintext(Msg))
-        logger.debug(f" \n|----------------------------------------------------------------------------------------------------------------|\n\
+        if logger.isEnabledFor(logging.DEBUG):
+            DecryptMsg = None
+            if Msg !=  None and Msg._name == '5GMMSecProtNASMessage':
+                DecryptMsg, e = parse_NAS5G(nas_plaintext(Msg))
+            logger.debug(f" \n|----------------------------------------------------------------------------------------------------------------|\n\
         UE {self.supi} sending message \n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 \n{DecryptMsg.show() if DecryptMsg != None else Msg.show() if Msg != None else None} \n\
@@ -319,7 +320,8 @@ class UE:
 
         # Call the procedure function and return its result
         Msg, sent_type = action_func(self, IEs, Msg)
-        logger.debug(f"UE {self.supi} sending message \n{Msg.show() if Msg != None else None}")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"UE {self.supi} sending message \n{Msg.show() if Msg != None else None}")
         return Msg.to_bytes() if Msg != None else None, self, sent_type
     
     def create_common_ies(self):
