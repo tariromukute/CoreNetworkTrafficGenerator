@@ -221,8 +221,8 @@ class GNB():
 
     def run(self, cpu_core) -> None:
         """ Run the gNB """
-        affinity_mask = { cpu_core } 
-        os.sched_setaffinity(0, affinity_mask)
+        if cpu_core is not None:
+            os.sched_setaffinity(0, {cpu_core})
         logger.debug("Starting gNB")
         self.ngap_to_ue_thread = self._load_ngap_to_ue_thread(self._ngap_to_ue_thread_function)
         self.nas_dl_thread = self._load_ue_to_ngap_thread(self._ue_to_ngap_thread_function)

@@ -317,8 +317,8 @@ class UESim:
         
     def run(self, cpu_core):
         """ Run the NAS thread """
-        affinity_mask = { cpu_core } 
-        os.sched_setaffinity(0, affinity_mask)
+        if cpu_core is not None:
+            os.sched_setaffinity(0, {cpu_core})
         signal.signal(signal.SIGINT, partial(interrupt_handler, self, True))
         logger.info(f"Running {multiprocessing.current_process().name} with {len(self.ue_list)} UEs on CPU {psutil.Process().cpu_num()}")
 

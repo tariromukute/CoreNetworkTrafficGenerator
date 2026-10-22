@@ -7,6 +7,7 @@ from argparse import ArgumentParser, BooleanOptionalAction
 import signal
 from src.UESim import UESim
 from src.SCTP import SCTPClient
+from src.affinity import process_cpus
 from src.NGAPSim import GNB
 from src.userplane import Context, UserPlane, providers_from_config
 from src.bpf.ipstats import IPStats
@@ -399,7 +400,8 @@ def main(args):
         except yaml.YAMLError as exc:
             print(exc)
 
-    num_cpus = len(os.sched_getaffinity(0))
+    cpus = sorted(os.sched_getaffinity(0))
+    num_cpus = len(cpus)
     exit_program = multiprocessing.Value("i", 0)
 
     interfaces_map = get_network_interfaces_map()
@@ -447,8 +449,10 @@ def main(args):
         state_writer.writerow(list(fg_msg_codes.keys()))
 
     processes = []
-    num_gnbs = args.gnbs or (num_cpus - 1 if num_cpus > 1 else 1)
+    num_gnbs = args.gnbs or max(1, (num_cpus - 1) // 2)
     ue_lists, num_ues = create_ues(ue_config["ue_profiles"], num_gnbs)
+    # A CPU per process (see src/affinity.py), or no pinning
+    placement = process_cpus(len(ue_lists), cpus) if args.pin else [None] * (2 * len(ue_lists))
     for i in range(len(ue_lists)):
         sctp_client = SCTPClient(server_config, nodelay=args.sctp_nodelay)
         ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
@@ -478,12 +482,11 @@ def main(args):
             args.verbose,
             ue_sim_time,
         )
-        # % num_cpus so that on single CPU, affirnity is set to CPU 0
         processes.append(
-            Process(name=f"ueSIM-{i}", target=ueSim.run, args=((i + 1) % num_cpus,))
+            Process(name=f"ueSIM-{i}", target=ueSim.run, args=(placement[2 * i],))
         )
         processes.append(
-            Process(name=f"gnb-{i}", target=gnb.run, args=((i + 1) % num_cpus,))
+            Process(name=f"gnb-{i}", target=gnb.run, args=(placement[2 * i + 1],))
         )
 
     for process in processes:
@@ -619,7 +622,13 @@ if __name__ == "__main__":
         "--gnbs",
         type=int,
         default=0,
-        help="Number of gNB processes, each with its own NG setup (default: one per CPU, less one)",
+        help="Number of gNBs, each with its own NG setup and two processes (default: half the CPUs, less one)",
+    )
+    parser.add_argument(
+        "--pin",
+        action=BooleanOptionalAction,
+        default=True,
+        help="Pin each UE simulator and gNB process to a CPU of its own (--no-pin: let the scheduler place them)",
     )
     parser.add_argument(
         "-n",
