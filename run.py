@@ -1,7 +1,7 @@
 # Standard library imports
 import time
 import csv
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 
 # Define struct for arguments
 import signal
@@ -450,7 +450,7 @@ def main(args):
     num_gnbs = args.gnbs or (num_cpus - 1 if num_cpus > 1 else 1)
     ue_lists, num_ues = create_ues(ue_config["ue_profiles"], num_gnbs)
     for i in range(len(ue_lists)):
-        sctp_client = SCTPClient(server_config)
+        sctp_client = SCTPClient(server_config, nodelay=args.sctp_nodelay)
         ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
         upf_to_ue, ue_to_upf = Pipe(duplex=True)
         config = {}
@@ -668,6 +668,13 @@ if __name__ == "__main__":
         type=float,
         default=1,
         help="Period/interval (seconds) for printing statistics",
+    )
+
+    parser.add_argument(
+        "--sctp-nodelay",
+        action=BooleanOptionalAction,
+        default=True,
+        help="Send each NGAP message at once (SCTP_NODELAY); --no-sctp-nodelay keeps Nagle's algorithm",
     )
 
     # Add SCTP-specific arguments
