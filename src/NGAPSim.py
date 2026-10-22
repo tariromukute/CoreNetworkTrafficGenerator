@@ -7,7 +7,6 @@ import socket
 from src.SCTP import SCTPClient
 from src.userplane import Session
 from pycrate_asn1dir import NGAP
-from pycrate_mobile.NAS import parse_NAS5G
 from pycrate_core import utils_py3
 import os
 import psutil
@@ -163,9 +162,17 @@ downlink_mapper = {
 #     '5GMMSecurityModeCommand': security_mode_complete
 # }
 
-ue_uplink_mapper = {
-    '5GMMRegistrationRequest': initial_ue_message,
-}
+# The header of a plain 5GMM message (TS 24.501 §9.1.1, §9.3): the extended protocol discriminator,
+# the security header type (low half of the second octet) and the message type.
+FGMM_EPD = 0x7E
+FGMM_REGISTRATION_REQUEST = 0x41
+
+
+def is_plain_registration_request(nas_pdu: bytes) -> bool:
+    """ The UE's initial Registration Request goes in an Initial UE Message, every other NAS message in an
+    Uplink NAS Transport. Read from the header, without parsing the message. """
+    return (len(nas_pdu) >= 3 and nas_pdu[0] == FGMM_EPD and nas_pdu[1] & 0x0F == 0
+            and nas_pdu[2] == FGMM_REGISTRATION_REQUEST)
 
 import threading
 
@@ -355,17 +362,11 @@ class GNB():
                 with ue_to_ngap_lock:
                     data, ran_ue_ngap_id = self.ngap_to_ue.recv()
                 if data:
-                    # ran_ue_ngap_id = int(ue.supi[-10:])
-                    Msg, err = parse_NAS5G(data)
-                    if err:
-                        logger.error("Error parsing NAS message: %s", err)
-                        continue
+                    # The UE simulator's bytes go out as they are: no parse and re-encode here
                     amf_ue_ngap_id = self.ues.get(ran_ue_ngap_id).get('amf_ue_ngap_id') if self.ues.get(ran_ue_ngap_id) else None
                     IEs = []
-                    IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', Msg.to_bytes())})
-                    procedure_func = ue_uplink_mapper.get(Msg._name)
-                    if not procedure_func:
-                        procedure_func = uplink_nas_transport
+                    IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', data)})
+                    procedure_func = initial_ue_message if is_plain_registration_request(data) else uplink_nas_transport
                     with ngap_pdu_lock:
                         PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                         procedure_func(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id }, self)
