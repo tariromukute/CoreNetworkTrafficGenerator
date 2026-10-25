@@ -21,6 +21,7 @@ import csv
 import queue
 import random
 from src.pacing import InFlight, start_offsets
+from src import nascache
 
 def interrupt_handler(ueSim, ask, signum, frame):
     if ask:
@@ -94,7 +95,7 @@ class UESim:
         if data == b'F':
             return ue.next_action(data, '5GMMANConnectionReleaseComplete') if g_verbose <= 3 else ue.next_compliance_test(data, '5GMMANConnectionReleaseComplete')
         
-        Msg, err = parse_NAS5G(data)
+        Msg, err = nascache.parse_NAS5G(data)
         if err:
             return None, ue
         

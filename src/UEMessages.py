@@ -10,18 +10,54 @@ from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7
 from scapy.all import *
 import binascii
 import time
+from src.nascache import MessageTemplate
+
+# The messages the UEs send, with the IEs that are the same for every UE (src/nascache.py: each
+# thread reuses one object per message instead of cloning pycrate's template for every message)
+_UE_SEC_CAP = {'5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0,
+               '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0, '5G-IA6': 0, '5G-IA7': 0,
+               'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0,
+               'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0}
+REGISTRATION_REQUEST = MessageTemplate(FGMMRegistrationRequest, {
+    '5GMMHeader': {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65},
+    'NAS_KSI': {'TSC': 0, 'Value': 7},
+    '5GSRegType': {'FOR': 1, 'Value': 1},
+    'UESecCap': _UE_SEC_CAP})
+# The Registration Request in the Security Mode Complete's NAS message container
+SMC_REGISTRATION_REQUEST = MessageTemplate(FGMMRegistrationRequest, {
+    **REGISTRATION_REQUEST.fixed,
+    '5GSUpdateType': {'EPS-PNB-CIoT': 0, '5GS-PNB-CIoT': 0, 'NG-RAN-RCU': 0, 'SMSRequested': 0},
+    '5GMMCap': {'SGC': 0, '5G-HC-CP-CIoT': 0, 'N3Data': 0, '5G-CP-CIoT': 0, 'RestrictEC': 0, 'LPP': 0, 'HOAttach': 0, 'S1Mode': 0}})
+REGISTRATION_COMPLETE = MessageTemplate(FGMMRegistrationComplete, {
+    '5GMMHeader': {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 67}})
+MO_DEREGISTRATION_REQUEST = MessageTemplate(FGMMMODeregistrationRequest, {
+    '5GMMHeader': {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 69},
+    'NAS_KSI': {'TSC': 0, 'Value': 7},
+    'DeregistrationType': {'SwitchOff': 0, 'ReregistrationRequired': 0, 'AccessType': 1}})
+AUTHENTICATION_RESPONSE = MessageTemplate(FGMMAuthenticationResponse, {
+    '5GMMHeader': {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 87}})
+SECURITY_MODE_COMPLETE = MessageTemplate(FGMMSecurityModeComplete, {
+    '5GMMHeader': {'EPD': 126, 'spare': 0, 'SecHdr': 0}})
+PDU_SESSION_ESTABLISHMENT_REQUEST = MessageTemplate(FGSMPDUSessionEstabRequest, {
+    '5GSMHeader': {'EPD': 46, 'PDUSessID': 1, 'PTI': 1, 'Type': 193},
+    'PDUSessType': {'Value': 1},
+    'SSCMode': {'Value': 1}})
+UL_NAS_TRANSPORT = MessageTemplate(FGMMULNASTransport, {
+    'FGMMHeader': {'EPD': 46, 'spare': 0, 'SecHdr': 0, 'Type': 103},   # not an IE name: pycrate ignores it
+    'PayloadContainerType': {'V': 1},
+    'PDUSessID': 1,
+    'RequestType': {'Value': 1}})
+
+
+def suci(ue):
+    """ The UE's SUCI, with the null protection scheme (5GS mobile identity, TS 24.501 §9.11.3.4) """
+    return {'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': {'PLMN': ue.mcc + ue.mnc,
+            'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin)}}
+
 
 def registration_request(ue, IEs, Msg=None):
-    IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
-    IEs['NAS_KSI'] = {'TSC': 0, 'Value': 7}
-    IEs['5GSRegType'] = {'FOR': 1, 'Value': 1}
-    IEs['5GSID'] = {'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': {'PLMN': ue.mcc + ue.mnc,
-                                                                           'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin)}}
-    IEs['UESecCap'] = {'5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0,
-                       '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0, '5G-IA6': 0, '5G-IA7': 0,
-                       'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0,
-                       'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0}
-    Msg = FGMMRegistrationRequest(val=IEs)
+    IEs['5GSID'] = suci(ue)
+    Msg = REGISTRATION_REQUEST.build(IEs)
     ue.MsgInBytes = Msg.to_bytes()
     ue.set_state(FGMMState.REGISTERED_INITIATED)
     ue.set_procedure(65)
@@ -30,9 +66,8 @@ def registration_request(ue, IEs, Msg=None):
 
 
 def registration_complete(ue, IEs, Msg=None):
-    IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 67}
     # IEs['SORTransContainer'] = { 'ListInd': }
-    Msg, = FGMMRegistrationComplete(val=IEs)
+    Msg, = REGISTRATION_COMPLETE.build(IEs)
     ue.MsgInBytes = Msg.to_bytes()
     SecMsg = security_prot_encrypt_ciphered(ue, Msg)
     ue.set_state(FGMMState.REGISTERED)
@@ -52,12 +87,8 @@ def configuration_update_complete(ue, IEs, Msg=None):
     return SecMsg, None
 
 def mo_deregistration_request(ue, IEs, Msg=None):
-    IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 69}
-    IEs['NAS_KSI'] = {'TSC': 0, 'Value': 7}
-    IEs['DeregistrationType'] = {'SwitchOff': 0, 'ReregistrationRequired': 0, 'AccessType': 1 }
-    IEs['5GSID'] = {'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': {'PLMN': ue.mcc + ue.mnc,
-                                                                           'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin)}}
-    Msg = FGMMMODeregistrationRequest(val=IEs)
+    IEs['5GSID'] = suci(ue)
+    Msg = MO_DEREGISTRATION_REQUEST.build(IEs)
     ue.MsgInBytes = Msg.to_bytes()
     ue.set_state(FGMMState.DEREGISTERED_INITIATED)
     SecMsg = security_prot_encrypt_ciphered(ue, Msg)
@@ -89,9 +120,8 @@ def authentication_response(ue, IEs, Msg):
     RES, CK, IK, _ = Mil.f2345(key, rand)
     Res = conv_501_A4(CK, IK, ue.sn_name, rand, RES)
 
-    IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 87}
     IEs['RES'] = Res
-    Msg = FGMMAuthenticationResponse(val=IEs)
+    Msg = AUTHENTICATION_RESPONSE.build(IEs)
     ue.MsgInBytes = Msg.to_bytes()
     # Note: See CryptoMobile.conv for documentation of this function and arguments
     # Get K_AUSF
@@ -117,25 +147,14 @@ def security_mode_complete(ue, IEs, Msg):
     ue.set_k_nas_int(k_nas_int)
     ue.k_nas_int = ue.k_nas_int[16:]
     RegIEs = {}
-    RegIEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 65}
-    RegIEs['NAS_KSI'] = {'TSC': 0, 'Value': 7}
-    RegIEs['5GSRegType'] = {'FOR': 1, 'Value': 1}
-    RegIEs['5GSID'] = {'spare': 0, 'Fmt': 0, 'spare': 0, 'Type': 1, 'Value': {'PLMN': ue.mcc + ue.mnc,
-                                                                              'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin)}}
-    RegIEs['UESecCap'] = {'5G-EA0': 1, '5G-EA1_128': 1, '5G-EA2_128': 1, '5G-EA3_128': 1, '5G-EA4': 0, '5G-EA5': 0, '5G-EA6': 0, '5G-EA7': 0, '5G-IA0': 1, '5G-IA1_128': 1, '5G-IA2_128': 1, '5G-IA3_128': 1, '5G-IA4': 0, '5G-IA5': 0,
-                          '5G-IA6': 0, '5G-IA7': 0, 'EEA0': 1, 'EEA1_128': 1, 'EEA2_128': 1, 'EEA3_128': 1, 'EEA4': 0, 'EEA5': 0, 'EEA6': 0, 'EEA7': 0, 'EIA0': 1, 'EIA1_128': 1, 'EIA2_128': 1, 'EIA3_128': 1, 'EIA4': 0, 'EIA5': 0, 'EIA6': 0, 'EIA7': 0}
-    RegIEs['5GSUpdateType'] = {
-        'EPS-PNB-CIoT': 0, '5GS-PNB-CIoT': 0, 'NG-RAN-RCU': 0, 'SMSRequested': 0}
-    RegIEs['5GMMCap'] = {'SGC': 0, '5G-HC-CP-CIoT': 0, 'N3Data': 0,
-                         '5G-CP-CIoT': 0, 'RestrictEC': 0, 'LPP': 0, 'HOAttach': 0, 'S1Mode': 0}
+    RegIEs['5GSID'] = suci(ue)
     RegIEs['NSSAI'] = [{'SNSSAI': s} for s in ue.nssai]
 
-    RegMsg = FGMMRegistrationRequest(val=RegIEs)
-    IEs['5GMMHeader'] = { 'EPD': 126, 'spare': 0, 'SecHdr': 0 }
+    RegMsg = SMC_REGISTRATION_REQUEST.build(RegIEs)
     IEs['IMEISV'] = {'Type': FGSIDTYPE_IMEISV, 'Digit1': int(ue.imeiSv[0]), 'Digits': ue.imeiSv[1:]}
     IEs['NASContainer'] = { }
     
-    Msg = FGMMSecurityModeComplete(val=IEs)
+    Msg = SECURITY_MODE_COMPLETE.build(IEs)
     Msg['NASContainer']['V'].set_val(RegMsg.to_bytes())
     ue.MsgInBytes = Msg.to_bytes()
     # Encrypt NAS message: the first message of the new NAS security context, uplink COUNT 0
@@ -148,16 +167,9 @@ def pdu_session_establishment_request(ue, IEs, Msg):
     """ 3GPP TS 24.501 version 15.7.0 6.4.1.2
     
     """
-    IEs['5GSMHeader'] = {'EPD': 46,  'PDUSessID': 1, 'PTI': 1, 'Type': 193}
-    IEs['PDUSessType'] = { 'Value': 1 }
-    IEs['SSCMode'] = { 'Value': 1 }
-    Msg = FGSMPDUSessionEstabRequest(val=IEs)
+    Msg = PDU_SESSION_ESTABLISHMENT_REQUEST.build(IEs)
     ue.MsgInBytes = Msg.to_bytes()
     ULIEs = {}
-    ULIEs['FGMMHeader'] = {'EPD': 46, 'spare': 0, 'SecHdr': 0, 'Type': 103 }
-    ULIEs['PayloadContainerType'] = { 'V': 1 }
-    ULIEs['PDUSessID'] = 1
-    ULIEs['RequestType'] = { 'Value': 1 }
     # The session's DNN and S-NSSAI from the UE's configuration (sessions[0]), as UERANSIM sends
     # them; without a DNN the AMF picks the subscriber's default
     session = ue.sessions[0] if getattr(ue, 'sessions', None) else {}
@@ -166,8 +178,8 @@ def pdu_session_establishment_request(ue, IEs, Msg):
                        else {'SST': int(s_slice['sst'])}) if s_slice else ue.nssai[0]
     if session.get('apn'):
         ULIEs['DNN'] = session['apn']
-    ULMsg = FGMMULNASTransport(val=ULIEs)
-    ULMsg['PayloadContainer']['V'].set_val(Msg.to_bytes())
+    ULMsg = UL_NAS_TRANSPORT.build(ULIEs)
+    ULMsg['PayloadContainer']['V'].set_val(ue.MsgInBytes)
     # Encrypt NAS message
     SecMsg = security_prot_encrypt_ciphered(ue, ULMsg)
 
