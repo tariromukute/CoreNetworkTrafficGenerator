@@ -7,19 +7,32 @@ Run from the repository root (needs pycrate and CryptoMobile, as src/UESim.py do
 import random
 import threading
 import time
-from multiprocessing import Pipe, Value
+from multiprocessing import Value
 
+from src.ranlink import DL_NAS, PipeLink
 from src.UESim import UESim
 
 
+class GNBEnd:
+    """ The gNB's end of the link, sending as the gNB does """
+    def __init__(self, end):
+        self.end = end
+
+    def send(self, msg):
+        data, ue_id = msg[0], msg[1]
+        received_at = msg[2] if len(msg) > 2 else None
+        ul_sent = msg[3] if len(msg) > 3 else None
+        self.end.send(DL_NAS, ue_id, data, 0, received_at, ul_sent)
+
+
 def make_sim():
-    gnb_end, sim_end = Pipe(duplex=True)
+    link = PipeLink()
     sim = UESim.__new__(UESim)               # only what the dispatch uses
-    sim.ue_to_ngap = sim_end
+    sim.link = link.ue_end
     sim.exit_program = Value('i', 0)
     sim.send_lock = threading.Lock()
     sim.worker_queues = []
-    return sim, gnb_end
+    return sim, GNBEnd(link.ran_end)
 
 
 def test_each_ues_messages_are_handled_in_order_by_one_worker():
@@ -76,7 +89,7 @@ def test_the_gnbs_receive_time_reaches_the_handler():
     sim._load_ngap_to_ue_thread()
 
     gnb.send((b"stamped", 31, 1234.5, [(65, 1234.25)]))
-    gnb.send((b"unstamped", 32))           # an older gNB: the UE simulator takes the time itself
+    gnb.send((b"unstamped", 32))           # no time from the gNB: the UE simulator takes it itself
     deadline = time.time() + 5
     while len(got) < 2 and time.time() < deadline:
         time.sleep(0.01)

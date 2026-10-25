@@ -22,3 +22,9 @@ def test_wraps_round_when_cpus_are_short():
 
 def test_single_cpu():
     assert process_cpus(2, {3}) == [3, 3, 3, 3]
+
+
+def test_k_ue_simulators_per_gnb():
+    # --ue-procs-per-ran 3: ueSIM-0, ueSIM-1, ueSIM-2, gnb-0, ueSIM-3, ... a CPU each
+    assert process_cpus(2, set(range(9)), per_gnb=4) == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert process_cpus(2, set(range(5)), per_gnb=4) == [1, 2, 3, 4, 1, 2, 3, 4]

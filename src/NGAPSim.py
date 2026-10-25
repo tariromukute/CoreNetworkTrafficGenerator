@@ -6,6 +6,10 @@ import sys
 import socket
 from src.SCTP import SCTPClient
 from src.userplane import Session
+from src.ranlink import (CONNECT, DL_NAS, KIND_NAMES, RELEASE, UL_NAS, UP_CONTROL, UP_SESSION, LinkClosed,
+                         LinkStopped, parse_connect, parse_up_control)
+# The UE simulator now picks CONNECT (an Initial UE Message) or UL_NAS with this predicate
+from src.ranlink import FGMM_EPD, FGMM_REGISTRATION_REQUEST, is_plain_registration_request  # noqa: F401
 from pycrate_asn1dir import NGAP
 from pycrate_core import utils_py3
 import os
@@ -56,11 +60,23 @@ def uplink_nas_transport(PDU, IEs, ue, gnb):
     val = ('initiatingMessage', {'procedureCode': 46, 'criticality': 'ignore', 'value': ('UplinkNASTransport', {'protocolIEs': IEs})})
     PDU.set_val(val)
 
+# RRCEstablishmentCause (TS 38.413 §9.3.1.111), in the order of its enumeration: the cause in a CONNECT
+RRC_ESTABLISHMENT_CAUSES = ('emergency', 'highPriorityAccess', 'mt-Access', 'mo-Signalling', 'mo-Data',
+                            'mo-VoiceCall', 'mo-VideoCall', 'mo-SMS', 'mps-PriorityAccess', 'mcs-PriorityAccess')
+
 def initial_ue_message(PDU, IEs, ue, gnb):
+    """ ue: the UE's RAN UE NGAP ID, and from its CONNECT the establishment cause (an index into
+    RRC_ESTABLISHMENT_CAUSES, mo-Signalling if none) and its 5G-S-TMSI (6 octets) if it has one """
     curTime = int(time.time()) + 2208988800 #1900 instead of 1970
     IEs.append({'id': 121, 'criticality': 'reject', 'value': ('UserLocationInformation', ('userLocationInformationNR', {'nR-CGI': {'pLMNIdentity': gnb.plmn_identity, 'nRCellIdentity': (nr_cell_identity(gnb), 36)}, 'tAI': {'pLMNIdentity': gnb.plmn_identity, 'tAC': gnb.tac }, 'timeStamp': struct.pack("!I",curTime)}))})
     IEs.append({'id': 85, 'criticality': 'reject', 'value': ('RAN-UE-NGAP-ID', ue['ran_ue_ngap_id'])})
-    IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', 'mo-Signalling')})
+    IEs.append({'id': 90, 'criticality': 'ignore', 'value': ('RRCEstablishmentCause', RRC_ESTABLISHMENT_CAUSES[ue.get('cause', 3)])})
+    s_tmsi = ue.get('s_tmsi')
+    if s_tmsi:
+        # AMF Set ID (10 bits), AMF Pointer (6 bits), 5G-TMSI (TS 23.003 §2.11)
+        set_pointer = int.from_bytes(s_tmsi[:2], 'big')
+        IEs.append({'id': 26, 'criticality': 'reject', 'value': ('FiveG-S-TMSI', {
+            'aMFSetID': (set_pointer >> 6, 10), 'aMFPointer': (set_pointer & 0x3F, 6), 'fiveG-TMSI': bytes(s_tmsi[2:6])})})
     IEs.append({'id': 112, 'criticality': 'ignore', 'value': ('UEContextRequest', 'requested')})
     val = ('initiatingMessage', {'procedureCode': 15, 'criticality': 'ignore', 'value': ('InitialUEMessage', {'protocolIEs': IEs})})
     PDU.set_val(val)
@@ -151,7 +167,8 @@ def ue_connection_release_command(PDU):
 
     IEs = []
     ue_connection_release_complete(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id})
-    return PDU, b'F', { 'ran_ue_ngap_id': ran_ue_ngap_id, 'amf_ue_ngap_id': amf_ue_ngap_id }
+    # No NAS PDU: the gNB tells the UE simulator with a RELEASE
+    return PDU, None, { 'ran_ue_ngap_id': ran_ue_ngap_id, 'amf_ue_ngap_id': amf_ue_ngap_id }
 
 # The procedure codes are defined in pycrate_asn1dir/3GPP_NR_NGAP_38413/NGAP-Constants.asn
 downlink_mapper = {
@@ -167,22 +184,9 @@ downlink_mapper = {
 #     '5GMMSecurityModeCommand': security_mode_complete
 # }
 
-# The header of a plain 5GMM message (TS 24.501 §9.1.1, §9.3): the extended protocol discriminator,
-# the security header type (low half of the second octet) and the message type.
-FGMM_EPD = 0x7E
-FGMM_REGISTRATION_REQUEST = 0x41
-
-
-def is_plain_registration_request(nas_pdu: bytes) -> bool:
-    """ The UE's initial Registration Request goes in an Initial UE Message, every other NAS message in an
-    Uplink NAS Transport. Read from the header, without parsing the message. """
-    return (len(nas_pdu) >= 3 and nas_pdu[0] == FGMM_EPD and nas_pdu[1] & 0x0F == 0
-            and nas_pdu[2] == FGMM_REGISTRATION_REQUEST)
-
 import threading
 
 # Create a lock object
-ue_to_ngap_lock = threading.Lock()
 ngap_to_ue_lock = threading.Lock()
 # NGAP.NGAP_PDU_Descriptions.NGAP_PDU is one shared, stateful ASN.1 object: setting or decoding a
 # value and encoding it must not interleave between threads, or one thread encodes the other's
@@ -192,8 +196,10 @@ ngap_pdu_lock = threading.Lock()
 # encoding and decoding are serialised by ngap_pdu_lock and the GIL anyway.
 num_threads = 1
 class GNB():
+    """ The gNB adapter: NGAP towards the AMF for the UEs of one or more UE simulators, each on a
+    UE-RAN link of its own (src/ranlink.py). A UE's id on its link is its RAN UE NGAP ID. """
 
-    def __init__(self, gnb_exit_flag, sctp: SCTPClient, userplane, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose, gnb_index=0) -> None:
+    def __init__(self, gnb_exit_flag, sctp: SCTPClient, userplane, server_config: dict, links, verbose, gnb_index=0) -> None:
         global logger
         # Set logging level based on the verbose argument
         if verbose == 0:
@@ -213,10 +219,12 @@ class GNB():
         self.ul_sent = {}
         self.ul_sent_lock = threading.Lock()
         self.sctp = sctp
-        self.ngap_to_ue = ngap_to_ue
-        self.ue_to_ngap = ue_to_ngap
-        self.upf_to_ue = upf_to_ue
-        self.ue_to_upf = ue_to_upf
+        # The gNB's ends (UeLinks) of the links to its UE simulators, and the link each UE came on: a
+        # RAN UE NGAP ID belongs to one link, so the UE's downlink messages go back on it
+        self.links = list(links) if isinstance(links, (list, tuple)) else [links]
+        self.ue_links = {}
+        self.clashes = set()   # RAN UE NGAP IDs that came on two links
+        self.waiter = None
         self.verbose = verbose
         self.mcc = server_config['mcc']
         self.mnc = server_config['mnc']
@@ -241,9 +249,11 @@ class GNB():
         if cpu_core is not None:
             os.sched_setaffinity(0, {cpu_core})
         logger.debug("Starting gNB")
+        for link in self.links:
+            link.attach()
+        self.waiter = self.links[0].waiter(self.links)
         self.ngap_to_ue_thread = self._load_ngap_to_ue_thread(self._ngap_to_ue_thread_function)
         self.nas_dl_thread = self._load_ue_to_ngap_thread(self._ue_to_ngap_thread_function)
-        self.ue_up_thread = self._load_ue_to_upf_thread(self._ue_to_upf_thread_function)
         # Wait for SCTP to be connected
         time.sleep(2)
         self.initiate()
@@ -339,20 +349,24 @@ class GNB():
                             self.ues[ue_['ran_ue_ngap_id']]['pdu_session_id'] = ue_.get('pdu_session_id')
                     if ngap_aper:
                         self.sctp.send(ngap_aper)
-                    if nas_pdu:
-                        ul_sent = self._take_uplink_stamps(ue_['ran_ue_ngap_id'])
-                        self.ngap_to_ue.send((nas_pdu, ue_['ran_ue_ngap_id'], received_at, ul_sent))
+                    if procedureCode == 41 and ue_:
+                        self._to_ue(RELEASE, ue_['ran_ue_ngap_id'], b'', received_at)
+                    elif nas_pdu:
+                        self._to_ue(DL_NAS, ue_['ran_ue_ngap_id'], nas_pdu, received_at)
             except Exception as e:
                 logger.error(f"Error sending message to UESim: {e}")
                 # IF error occurs, likely from SCTP end program
                 # self.exit_flag.value = True
     
     def _load_ue_to_ngap_thread(self, ue_to_ngap_thread_function):
-        """ Load the thread that will handle NAS UpLink messages from UE """
+        """ Load the thread that will handle the UE simulators' events
+
+            Not a daemon: it keeps the gNB process (and its association) until run.py ends it.
+        """
         threads = []
         for i in range(num_threads):
             t = threading.Thread(target=ue_to_ngap_thread_function)
-            t.daemon = True
+            t.daemon = False
             threads.append(t)
 
         # start all threads
@@ -364,74 +378,121 @@ class GNB():
         return threads
 
     def _ue_to_ngap_thread_function(self) -> None:
-        """ This thread function will read from queue NAS UpLink messages from UE 
+        """ This thread function reads the UE simulators' events, waiting on all the links at once
 
-            It will then select the appropriate NGAP procedure to put the NAS message in
-            and put the NGAP message in the queue to be sent to 5G Core
+            A CONNECT becomes an Initial UE Message and an UL_NAS an Uplink NAS Transport, with the NAS
+            PDU as the UE simulator built it; an UP_CONTROL hands a PDU session to the user plane.
+            It runs until the process ends: at the end of a run, run.py stops the sessions' traffic
+            before it ends the gNB processes, and with them their associations.
         """
-        while not self.exit_flag.value:
-            try:
-                data = None
-                ran_ue_ngap_id = None
-                with ue_to_ngap_lock:
-                    msg = self.ngap_to_ue.recv()   # (NAS PDU, UE ID[, its message code])
-                data, ran_ue_ngap_id = msg[0], msg[1]
-                code = msg[2] if len(msg) > 2 else None
-                if data:
-                    # The UE simulator's bytes go out as they are: no parse and re-encode here
-                    amf_ue_ngap_id = self.ues.get(ran_ue_ngap_id).get('amf_ue_ngap_id') if self.ues.get(ran_ue_ngap_id) else None
-                    IEs = []
-                    IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', data)})
-                    procedure_func = initial_ue_message if is_plain_registration_request(data) else uplink_nas_transport
-                    with ngap_pdu_lock:
-                        PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
-                        procedure_func(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id }, self)
-                        if logger.isEnabledFor(logging.DEBUG):
-                            logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+        while True:
+            if not len(self.waiter):    # every UE simulator has gone: wait for the end of the run
+                time.sleep(0.5)
+                continue
+            for link in self.waiter.wait(0.5):
+                try:
+                    event = link.recv()
+                except LinkClosed:
+                    logger.info("A UE simulator has closed its link")
+                    self.waiter.remove(link)
+                    continue
+                except Exception as e:
+                    logger.error(f"Error receiving message from UESim: {e}")
+                    continue
+                try:
+                    self._handle_uplink(link, event)
+                except Exception as e:
+                    logger.error(f"Error receiving message from UESim: {e}")
+                    # IF error occurs, likely from SCTP end program
+                    # self.exit_flag.value = True
+
+    def _handle_uplink(self, link, event) -> None:
+        ran_ue_ngap_id = event.ue_id
+        if not self._claim(link, ran_ue_ngap_id):
+            return
+        if event.kind == CONNECT:
+            cause, s_tmsi, data = parse_connect(event.payload)
+            procedure_func = initial_ue_message
+            ue = {'ran_ue_ngap_id': ran_ue_ngap_id, 'cause': cause, 's_tmsi': s_tmsi}
+        elif event.kind == UL_NAS:
+            data = event.payload
+            procedure_func = uplink_nas_transport
+            ue = {'ran_ue_ngap_id': ran_ue_ngap_id}
+        elif event.kind == UP_CONTROL:
+            return self._up_control(ran_ue_ngap_id, event.payload)
+        else:
+            logger.debug(f"UE {ran_ue_ngap_id}: {KIND_NAMES[event.kind]} from the UE simulator ignored")
+            return
+        if not data:
+            return
+        # The UE simulator's bytes go out as they are: no parse and re-encode here
+        ue['amf_ue_ngap_id'] = self.ues.get(ran_ue_ngap_id).get('amf_ue_ngap_id') if self.ues.get(ran_ue_ngap_id) else None
+        IEs = []
+        IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', data)})
+        with ngap_pdu_lock:
+            PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+            procedure_func(PDU, IEs, ue, self)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
                 gNB sending message to 5GC\n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 {PDU.show()}\n\
 |----------------------------------------------------------------------------------------------------------------|\n\n")
-                        ngap_aper = PDU.to_aper()
-                    if code is not None:
-                        # Stamped before the send, so the stamp is in place before the 5GC's answer
-                        self._stamp_uplink(ran_ue_ngap_id, code)
-                    self.sctp.send(ngap_aper)
-            except Exception as e:
-                logger.error(f"Error receiving message from UESim: {e}")
-                # IF error occurs, likely from SCTP end program
-                # self.exit_flag.value = True
-        self.stop()
-        
+            ngap_aper = PDU.to_aper()
+        if event.code:
+            # Stamped before the send, so the stamp is in place before the 5GC's answer
+            self._stamp_uplink(ran_ue_ngap_id, event.code)
+        self.sctp.send(ngap_aper)
 
-    def _load_ue_to_upf_thread(self, ue_to_upf_thread_function):
-        """ Load the thread that will handle NAS UpLink messages from UE """
-        ue_to_upf_thread = threading.Thread(target=ue_to_upf_thread_function)
-        ue_to_upf_thread.start()
-        return ue_to_upf_thread
-    
-    def _ue_to_upf_thread_function(self) -> None:
-        """ This thread function will read from queue NAS UpLink messages from UE 
+    def _up_control(self, ran_ue_ngap_id, payload) -> None:
+        """ A UE's PDU session is up at the address the UE simulator sends (with the UE's SUPI): its
+        traffic goes to the user plane """
+        try:
+            request, address, supi = parse_up_control(payload)
+            if request == UP_SESSION and address:
+                ue = self.ues.get(ran_ue_ngap_id)
+                self.userplane.add_session(Session(
+                    supi=supi, ue_ip=socket.inet_ntoa(address),
+                    pdu_session_id=ue.get('pdu_session_id'), ul_teid=ue['ul_teid'], qfi=ue['qfi'],
+                    upf_address=ue.get('upf_address'), dl_teid=ue.get('dl_teid'), gnb_address=gtpIp,
+                    ran_ue_ngap_id=ran_ue_ngap_id, amf_ue_ngap_id=ue.get('amf_ue_ngap_id'), t=time.time()))
+        except Exception as e:
+            # self.exit_flag.value = True
+            logger.error(f"Error receive DP message from UESim: {e}")
 
-            It will then select the appropriate NGAP procedure to put the NAS message in
-            and put the NGAP message in the queue to be sent to 5G Core
-        """
-        while not self.exit_flag.value:
-            try:
-                # data is the ip address in bytes; the UE also sends its SUPI
-                msg = self.upf_to_ue.recv()
-                data, ran_ue_ngap_id = msg[0], msg[1]
-                if data:
-                    # ran_ue_ngap_id = int(ue.supi[-10:])
-                    ue = self.ues.get(ran_ue_ngap_id)
-                    self.userplane.add_session(Session(
-                        supi=msg[2] if len(msg) > 2 else None, ue_ip=socket.inet_ntoa(data),
-                        pdu_session_id=ue.get('pdu_session_id'), ul_teid=ue['ul_teid'], qfi=ue['qfi'],
-                        upf_address=ue.get('upf_address'), dl_teid=ue.get('dl_teid'), gnb_address=gtpIp,
-                        ran_ue_ngap_id=ran_ue_ngap_id, amf_ue_ngap_id=ue.get('amf_ue_ngap_id'), t=time.time()))
-            except Exception as e:
-                # self.exit_flag.value = True
-                logger.error(f"Error receive DP message from UESim: {e}")
+    def _claim(self, link, ran_ue_ngap_id) -> bool:
+        """ The UE's events come on this link: the first link a RAN UE NGAP ID comes on owns it. One that
+        comes on another link as well is a clash: reported, and its events there are dropped. """
+        owner = self.ue_links.setdefault(ran_ue_ngap_id, link)
+        if owner is link:
+            return True
+        if ran_ue_ngap_id not in self.clashes:
+            self.clashes.add(ran_ue_ngap_id)
+            logger.error(f"RAN UE NGAP ID {ran_ue_ngap_id} comes from two UE simulators: the UE ids of a "
+                         f"gNB's UE simulators must differ; the second one's messages are dropped")
+        return False
+
+    def _link_of(self, ran_ue_ngap_id):
+        """ The link a UE's downlink messages go on: the one it came on (the only one, with one) """
+        link = self.ue_links.get(ran_ue_ngap_id)
+        if link is None and len(self.links) == 1:
+            return self.links[0]
+        return link
+
+    def _to_ue(self, kind, ran_ue_ngap_id, payload, received_at) -> None:
+        """ A DL_NAS or RELEASE to the UE's simulator, with the time the gNB received the NGAP message
+        and the UE's uplink send times not yet returned """
+        link = self._link_of(ran_ue_ngap_id)
+        if link is None:
+            logger.error(f"UE {ran_ue_ngap_id}: no UE simulator has this RAN UE NGAP ID; its {KIND_NAMES[kind]} is dropped")
+            return
+        stamps = self._take_uplink_stamps(ran_ue_ngap_id)
+        try:
+            link.send(kind, ran_ue_ngap_id, payload, 0, received_at, stamps)
+        except LinkStopped:
+            logger.debug(f"UE {ran_ue_ngap_id}: the run ended before the link took its {KIND_NAMES[kind]}")
+        except LinkClosed as e:
+            logger.warning(f"UE {ran_ue_ngap_id}: its UE simulator's link has ended ({e})")
 
     def _stamp_uplink(self, ran_ue_ngap_id, code, t=None):
         """ Record when the UE's uplink message (its message code) leaves for the 5GC
@@ -458,8 +519,6 @@ class GNB():
         return self.ues
 
     def stop(self):
-        if ue_to_ngap_lock.locked():
-            ue_to_ngap_lock.release()
         if ngap_to_ue_lock.locked():
             ngap_to_ue_lock.release()
 
