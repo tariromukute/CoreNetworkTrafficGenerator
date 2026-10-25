@@ -11,6 +11,7 @@ from scapy.all import *
 import binascii
 import time
 from src.nascache import MessageTemplate
+from src import nasfast
 
 # The messages the UEs send, with the IEs that are the same for every UE (src/nascache.py: each
 # thread reuses one object per message instead of cloning pycrate's template for every message)
@@ -55,9 +56,17 @@ def suci(ue):
             'RoutingInd': b'\x00\x00', 'spare': 0, 'ProtSchemeID': 0, 'HNPKID': 0, 'Output': encode_bcd(ue.msin)}}
 
 
+def _fast(IEs):
+    """ Whether a builder may take its message from src/nasfast.py's templates, which have the IEs it
+    sets itself (and none from the caller), else it builds it with pycrate """
+    return not IEs and nasfast.enabled()
+
+
 def registration_request(ue, IEs, Msg=None):
-    IEs['5GSID'] = suci(ue)
-    Msg = REGISTRATION_REQUEST.build(IEs)
+    Msg = nasfast.build(nasfast.registration_request, ue) if _fast(IEs) else None
+    if Msg is None:
+        IEs['5GSID'] = suci(ue)
+        Msg = REGISTRATION_REQUEST.build(IEs)
     ue.MsgInBytes = Msg.to_bytes()
     ue.set_state(FGMMState.REGISTERED_INITIATED)
     ue.set_procedure(65)
@@ -67,9 +76,13 @@ def registration_request(ue, IEs, Msg=None):
 
 def registration_complete(ue, IEs, Msg=None):
     # IEs['SORTransContainer'] = { 'ListInd': }
-    Msg, = REGISTRATION_COMPLETE.build(IEs)
-    ue.MsgInBytes = Msg.to_bytes()
-    SecMsg = security_prot_encrypt_ciphered(ue, Msg)
+    SecMsg = nasfast.protect(ue, nasfast.REGISTRATION_COMPLETE) if _fast(IEs) else None
+    if SecMsg is not None:
+        ue.MsgInBytes = nasfast.REGISTRATION_COMPLETE
+    else:
+        Msg, = REGISTRATION_COMPLETE.build(IEs)
+        ue.MsgInBytes = Msg.to_bytes()
+        SecMsg = security_prot_encrypt_ciphered(ue, Msg)
     ue.set_state(FGMMState.REGISTERED)
     return SecMsg, '5GMMRegistrationComplete'
     # return Msg, '5GMMRegistrationComplete'
@@ -80,6 +93,10 @@ def configuration_update_complete(ue, IEs, Msg=None):
     if ue.state == FGMMState.DEREGISTERED_INITIATED:
         return None, None
     # TODO: implement action before response
+    SecMsg = nasfast.protect(ue, nasfast.CONFIGURATION_UPDATE_COMPLETE) if _fast(IEs) else None
+    if SecMsg is not None:
+        ue.MsgInBytes = nasfast.CONFIGURATION_UPDATE_COMPLETE
+        return SecMsg, None
     IEs['5GMMHeader'] = {'EPD': 126, 'spare': 0, 'SecHdr': 0, 'Type': 85}
     Msg = FGMMConfigurationUpdateComplete(val=IEs)
     ue.MsgInBytes = Msg.to_bytes()
@@ -87,6 +104,12 @@ def configuration_update_complete(ue, IEs, Msg=None):
     return SecMsg, None
 
 def mo_deregistration_request(ue, IEs, Msg=None):
+    plain = nasfast.build(nasfast.mo_deregistration_request, ue) if _fast(IEs) else None
+    SecMsg = nasfast.protect(ue, plain) if plain is not None else None
+    if SecMsg is not None:
+        ue.MsgInBytes = plain
+        ue.set_state(FGMMState.DEREGISTERED_INITIATED)
+        return SecMsg, '5GMMMODeregistrationRequest'
     IEs['5GSID'] = suci(ue)
     Msg = MO_DEREGISTRATION_REQUEST.build(IEs)
     ue.MsgInBytes = Msg.to_bytes()
@@ -120,8 +143,10 @@ def authentication_response(ue, IEs, Msg):
     RES, CK, IK, _ = Mil.f2345(key, rand)
     Res = conv_501_A4(CK, IK, ue.sn_name, rand, RES)
 
-    IEs['RES'] = Res
-    Msg = AUTHENTICATION_RESPONSE.build(IEs)
+    Msg = nasfast.authentication_response(Res) if _fast(IEs) else None
+    if Msg is None:
+        IEs['RES'] = Res
+        Msg = AUTHENTICATION_RESPONSE.build(IEs)
     ue.MsgInBytes = Msg.to_bytes()
     # Note: See CryptoMobile.conv for documentation of this function and arguments
     # Get K_AUSF
@@ -146,6 +171,13 @@ def security_mode_complete(ue, IEs, Msg):
     k_nas_int = conv_501_A8(ue.k_amf, alg_type=2, alg_id=NASSecAlgo['IntegAlgo'])
     ue.set_k_nas_int(k_nas_int)
     ue.k_nas_int = ue.k_nas_int[16:]
+    plain = nasfast.build(nasfast.security_mode_complete, ue) if _fast(IEs) else None
+    # the first message of the new NAS security context, uplink COUNT 0
+    SecMsg = nasfast.protect(ue, plain, count=0) if plain is not None else None
+    if SecMsg is not None:
+        ue.MsgInBytes = plain
+        ue.set_state(FGMMState.SECURITY_MODE_INITIATED)
+        return SecMsg, '5GMMSecurityModeComplete'
     RegIEs = {}
     RegIEs['5GSID'] = suci(ue)
     RegIEs['NSSAI'] = [{'SNSSAI': s} for s in ue.nssai]
@@ -167,6 +199,12 @@ def pdu_session_establishment_request(ue, IEs, Msg):
     """ 3GPP TS 24.501 version 15.7.0 6.4.1.2
     
     """
+    plain = nasfast.build(nasfast.ul_nas_transport_pdu_session_establishment_request, ue) if _fast(IEs) else None
+    SecMsg = nasfast.protect(ue, plain) if plain is not None else None
+    if SecMsg is not None:
+        ue.MsgInBytes = nasfast.PDU_SESSION_ESTABLISHMENT_REQUEST
+        ue.set_state(FGMMState.PDU_SESSION_REQUESTED)
+        return SecMsg, '5GSMPDUSessionEstabRequest'
     Msg = PDU_SESSION_ESTABLISHMENT_REQUEST.build(IEs)
     ue.MsgInBytes = Msg.to_bytes()
     ULIEs = {}

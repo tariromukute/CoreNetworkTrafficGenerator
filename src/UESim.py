@@ -21,7 +21,14 @@ import csv
 import queue
 import random
 from src.pacing import InFlight, start_offsets
-from src import nascache
+from src import nascache, nasfast
+import src.UE as ue_module
+
+def _nas_fastpath():
+    """ Whether the UEs may take their messages from src/nasfast.py, which gives the handlers the
+    fields they read and bytes, not pycrate messages: not when the messages are validated, logged or
+    used by the compliance tests """
+    return g_verbose < 3 and ue_module.g_verbose < 3 and nasfast.enabled()
 
 def interrupt_handler(ueSim, ask, signum, frame):
     if ask:
@@ -95,30 +102,35 @@ class UESim:
         if data == b'F':
             return ue.next_action(data, '5GMMANConnectionReleaseComplete') if g_verbose <= 3 else ue.next_compliance_test(data, '5GMMANConnectionReleaseComplete')
         
-        Msg, err = nascache.parse_NAS5G(data)
-        if err:
-            return None, ue
-        
-        msg_type = Msg._name
-        
-        if msg_type == '5GMMSecProtNASMessage':
-            try:
-                Msg = security_prot_decrypt(Msg, ue)
-                if Msg and Msg._by_name.count('5GMMSecurityModeCommand'):
-                    Msg = Msg['5GMMSecurityModeCommand']
-                    msg_type = Msg._name
-                elif Msg:
-                    msg_type = Msg._name
-                else:
-                    logger.error("Unexpected None value for Decrypted 5GMMSecProtNASMessage Msg")
-                    return None, ue, None
-            except err:
-                logger.exception(err)
-                return None, ue, None
+        # The messages of a registration, PDU session and deregistration without pycrate (src/nasfast.py)
+        fast = nasfast.downlink(data, ue) if _nas_fastpath() else None
+        if fast is not None:
+            Msg, msg_type = fast
+        else:
+            Msg, err = nascache.parse_NAS5G(data)
+            if err:
+                return None, ue
 
-        if Msg._name == '5GMMDLNASTransport':
-            Msg = dl_nas_transport_extract(Msg, ue)
             msg_type = Msg._name
+
+            if msg_type == '5GMMSecProtNASMessage':
+                try:
+                    Msg = security_prot_decrypt(Msg, ue)
+                    if Msg and Msg._by_name.count('5GMMSecurityModeCommand'):
+                        Msg = Msg['5GMMSecurityModeCommand']
+                        msg_type = Msg._name
+                    elif Msg:
+                        msg_type = Msg._name
+                    else:
+                        logger.error("Unexpected None value for Decrypted 5GMMSecProtNASMessage Msg")
+                        return None, ue, None
+                except err:
+                    logger.exception(err)
+                    return None, ue, None
+
+            if Msg._name == '5GMMDLNASTransport':
+                Msg = dl_nas_transport_extract(Msg, ue)
+                msg_type = Msg._name
         
         # TODO handle recording of procedure
         if msg_type == '5GMMConfigurationUpdateCommand': # Ignore 5GMMConfigurationUpdateCommand
