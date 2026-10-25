@@ -4,6 +4,7 @@ import logging
 import threading
 import sys
 import socket
+from src import ngapfast
 from src.SCTP import SCTPClient
 from src.userplane import Session
 from src.ranlink import (CONNECT, DL_NAS, KIND_NAMES, RELEASE, UL_NAS, UP_CONTROL, UP_SESSION, LinkClosed,
@@ -197,9 +198,17 @@ ngap_pdu_lock = threading.Lock()
 num_threads = 1
 class GNB():
     """ The gNB adapter: NGAP towards the AMF for the UEs of one or more UE simulators, each on a
-    UE-RAN link of its own (src/ranlink.py). A UE's id on its link is its RAN UE NGAP ID. """
+    UE-RAN link of its own (src/ranlink.py). A UE's id on its link is its RAN UE NGAP ID.
 
-    def __init__(self, gnb_exit_flag, sctp: SCTPClient, userplane, server_config: dict, links, verbose, gnb_index=0) -> None:
+    With ngap_fastpath (the default), the NGAP messages of a registration and a UE context release
+    are built from byte templates and the downlink ones parsed without pycrate (src/ngapfast.py);
+    what the fast path does not cover, and every message when messages are logged (debug), goes
+    through pycrate as before. """
+
+    ngap_fastpath = True
+
+    def __init__(self, gnb_exit_flag, sctp: SCTPClient, userplane, server_config: dict, links, verbose, gnb_index=0,
+                 ngap_fastpath=True) -> None:
         global logger
         # Set logging level based on the verbose argument
         if verbose == 0:
@@ -211,6 +220,7 @@ class GNB():
         else:
             logging.basicConfig(level=logging.DEBUG)
         self.exit_flag = gnb_exit_flag
+        self.ngap_fastpath = ngap_fastpath
         global gtpIp
         gtpIp = server_config['gtpIp']
         self.userplane = userplane  # src.userplane.UserPlane: the sessions' traffic
@@ -305,30 +315,10 @@ class GNB():
                     # The time the gNB has the message: the UE simulator records it as the NAS message's
                     # arrival, so its own queueing does not count as the 5GC's latency
                     received_at = time.time()
-                    with ngap_pdu_lock:
-                        PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
-                        PDU.from_aper(data)
-                        if logger.isEnabledFor(logging.DEBUG):
-                            logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
-                gNB received message from 5GC\n\
-|----------------------------------------------------------------------------------------------------------------|\n\
-{PDU.show()}\n\
-|----------------------------------------------------------------------------------------------------------------|\n\n")
-                        procedureCode = PDU.get_val()[1]['procedureCode']
-                        procedure_func = downlink_mapper.get(procedureCode)
-                        if not procedure_func:
-                            # logger.debug(f"Received downlink procedure {procedureCode} without handler mapped to it")
-                            continue
-                        ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
-                        ngap_aper = None
-                        if ngap_pdu:
-                            if logger.isEnabledFor(logging.DEBUG):
-                                logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
-                gNB sending message to 5GC\n\
-|----------------------------------------------------------------------------------------------------------------|\n\
-{ngap_pdu.show()}\n\
-|----------------------------------------------------------------------------------------------------------------|\n\n")
-                            ngap_aper = ngap_pdu.to_aper()
+                    handled = self._downlink(data)
+                    if handled is None:
+                        continue
+                    procedureCode, ngap_aper, nas_pdu, ue_ = handled
                     if procedureCode == 41 and ue_:
                         # UE Context Release: its sessions' traffic stops
                         self.userplane.release_ue(ue_['ran_ue_ngap_id'])
@@ -358,6 +348,81 @@ class GNB():
                 # IF error occurs, likely from SCTP end program
                 # self.exit_flag.value = True
     
+    def _fast(self) -> bool:
+        """ Whether to use the NGAP fast path: not when messages are logged, which needs pycrate objects """
+        return self.ngap_fastpath and not logger.isEnabledFor(logging.DEBUG)
+
+    def _downlink(self, data):
+        """ A downlink NGAP message handled: (procedure code, the gNB's NGAP answer encoded or None,
+        NAS PDU, the UE's NGAP IDs), or None for a procedure the gNB does not handle """
+        handled = self._downlink_fast(data) if self._fast() else None
+        return handled if handled is not None else self._downlink_pycrate(data)
+
+    def _downlink_pycrate(self, data):
+        """ _downlink() with pycrate: the message decoded, and handled by its procedure in downlink_mapper """
+        with ngap_pdu_lock:
+            PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+            PDU.from_aper(data)
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                gNB received message from 5GC\n\
+|----------------------------------------------------------------------------------------------------------------|\n\
+{PDU.show()}\n\
+|----------------------------------------------------------------------------------------------------------------|\n\n")
+            procedureCode = PDU.get_val()[1]['procedureCode']
+            procedure_func = downlink_mapper.get(procedureCode)
+            if not procedure_func:
+                # logger.debug(f"Received downlink procedure {procedureCode} without handler mapped to it")
+                return None
+            ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
+            ngap_aper = None
+            if ngap_pdu:
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                gNB sending message to 5GC\n\
+|----------------------------------------------------------------------------------------------------------------|\n\
+{ngap_pdu.show()}\n\
+|----------------------------------------------------------------------------------------------------------------|\n\n")
+                ngap_aper = ngap_pdu.to_aper()
+            if self._fast():
+                # The IEs the fast path does not read, now that pycrate has decoded them
+                ngapfast.learn(data)
+        return procedureCode, ngap_aper, nas_pdu, ue_
+
+    def _downlink_fast(self, data):
+        """ What _downlink_pycrate() gives for a DownlinkNASTransport, InitialContextSetupRequest or
+        UEContextReleaseCommand, from src/ngapfast.py's parser and templates; None for a message to
+        decode with pycrate """
+        parsed = ngapfast.downlink(data)
+        if parsed is None:
+            return None
+        procedureCode, amf_ue_ngap_id, ran_ue_ngap_id, nas_pdu = parsed
+        ue_ = {'ran_ue_ngap_id': ran_ue_ngap_id, 'amf_ue_ngap_id': amf_ue_ngap_id}
+        if procedureCode == ngapfast.DOWNLINK_NAS_TRANSPORT:
+            # as downlink_nas_transport(): nothing without a NAS PDU
+            return (procedureCode, None, nas_pdu, ue_) if nas_pdu else (procedureCode, None, None, None)
+        if procedureCode == ngapfast.INITIAL_CONTEXT_SETUP:
+            return procedureCode, ngapfast.initial_context_setup_response(amf_ue_ngap_id, ran_ue_ngap_id), nas_pdu, ue_
+        if procedureCode == ngapfast.UE_CONTEXT_RELEASE:
+            return procedureCode, ngapfast.ue_context_release_complete(amf_ue_ngap_id, ran_ue_ngap_id), None, ue_
+        return None
+
+    def _uplink_fast(self, kind, ue, data):
+        """ The Initial UE Message (CONNECT) or Uplink NAS Transport from src/ngapfast.py's templates,
+        or None for one to build with pycrate """
+        templates = self.__dict__.get('_uplink_templates')
+        if templates is None:
+            try:
+                templates = ngapfast.Uplink(self.plmn_identity, nr_cell_identity(self), self.tac)
+            except Exception:
+                templates = False          # pycrate's path for every message, as before
+            self._uplink_templates = templates
+        if not templates:
+            return None
+        if kind == CONNECT:
+            return templates.initial_ue_message(ue['ran_ue_ngap_id'], data, ue.get('cause', 3), ue.get('s_tmsi'))
+        return templates.uplink_nas_transport(ue['amf_ue_ngap_id'], ue['ran_ue_ngap_id'], data)
+
     def _load_ue_to_ngap_thread(self, ue_to_ngap_thread_function):
         """ Load the thread that will handle the UE simulators' events
 
@@ -427,18 +492,20 @@ class GNB():
             return
         # The UE simulator's bytes go out as they are: no parse and re-encode here
         ue['amf_ue_ngap_id'] = self.ues.get(ran_ue_ngap_id).get('amf_ue_ngap_id') if self.ues.get(ran_ue_ngap_id) else None
-        IEs = []
-        IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', data)})
-        with ngap_pdu_lock:
-            PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
-            procedure_func(PDU, IEs, ue, self)
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+        ngap_aper = self._uplink_fast(event.kind, ue, data) if self._fast() else None
+        if ngap_aper is None:
+            IEs = []
+            IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', data)})
+            with ngap_pdu_lock:
+                PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+                procedure_func(PDU, IEs, ue, self)
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
                 gNB sending message to 5GC\n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 {PDU.show()}\n\
 |----------------------------------------------------------------------------------------------------------------|\n\n")
-            ngap_aper = PDU.to_aper()
+                ngap_aper = PDU.to_aper()
         if event.code:
             # Stamped before the send, so the stamp is in place before the 5GC's answer
             self._stamp_uplink(ran_ue_ngap_id, event.code)
