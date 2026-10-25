@@ -1,7 +1,8 @@
 """ The UE-RAN link (src/ranlink.py): its framing, and the contract every link keeps.
 
 The contract tests take a link type from LINKS (a class whose instances have ue_end, a RanLink, and
-ran_end, a UeLink, and take stop and interval): a ShmLink goes in the same list.
+ran_end, a UeLink, and take stop and interval): PipeLink and ShmLink. tests/test_shmlink.py stresses
+ShmLink's rings.
 
 Run from the repository root:
 
@@ -19,8 +20,9 @@ import pytest
 from src import ranlink
 from src.ranlink import (CONNECT, DATA, DL_NAS, KIND_NAMES, RELEASE, SECURITY, UL_NAS, UP_CONTROL, Event,
                          FrameError, LinkClosed, LinkStopped, PipeLink, decode, encode)
+from src.shmlink import ShmLink, supported
 
-LINKS = [PipeLink]
+LINKS = [PipeLink, pytest.param(ShmLink, marks=pytest.mark.skipif(not supported(), reason='ShmLink needs Linux on x86-64'))]
 
 KINDS = sorted(KIND_NAMES)
 STAMPS = [None, [], [(65, 1761400000.25)], [(65, 1.5), (67, 2.75), (94, 3.0)]]

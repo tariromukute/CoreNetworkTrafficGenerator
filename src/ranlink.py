@@ -36,9 +36,9 @@ Semantics: reliable and ordered per UE in each direction; a full link blocks the
 drains, or until the run's exit flag (stop) is set, checked every interval seconds; nothing is
 dropped; either side's close() ends the link, and the peer gets LinkClosed instead of blocking.
 
-PipeLink carries the frames over a multiprocessing.Pipe (send_bytes/recv_bytes). A ShmLink (rings in
-shared memory, eventfd wake-ups) or a SocketLink (an adapter on another host, network byte order)
-implements the same ends.
+PipeLink carries the frames over a multiprocessing.Pipe (send_bytes/recv_bytes). ShmLink
+(src/shmlink.py: two rings in shared memory, eventfd wake-ups) implements the same ends, and a SocketLink
+(an adapter on another host, network byte order) would.
 """
 import os
 import select
@@ -230,6 +230,10 @@ class Endpoint:
     raises LinkClosed once the link has ended. One thread sends and one receives at a time (the UE
     simulator's workers send under a lock). """
 
+    # Whether fileno() polls readable whenever an event (or the link's end) is there, so that a
+    # PollWaiter can wait on it; a ShmLink's end is not (its eventfd is signalled only while it waits)
+    pollable = True
+
     def send(self, kind, ue_id, payload=b'', code=0, received_at=None, stamps=None):
         raise NotImplementedError
 
@@ -295,6 +299,8 @@ class PollWaiter(Waiter):
         super().__init__(links)
 
     def add(self, link):
+        if not link.pollable:
+            raise TypeError(f"a poll waiter cannot wait on a {type(link).__name__}: one link type per adapter")
         fd = link.fileno()
         self._poll.register(fd, select.POLLIN)
         self._by_fd[fd] = link

@@ -1,10 +1,11 @@
 """ End to end over the UE-RAN link: CN-TG (run.py) registers UEs, establishes a PDU session each and
-deregisters them against a scripted AMF (tests/amf_stub.py), with one or several UE simulators per gNB.
+deregisters them against a scripted AMF (tests/amf_stub.py), with one or several UE simulators per gNB,
+over each link type (--link pipe, shm).
 
 The uplink NGAP messages of each UE, the User Location Information's time stamp apart, must be the
-same with any number of UE simulators per gNB, and the same as before the link (705abd9, two pipes of
-pickled tuples per gNB): REFERENCE is their digest from that commit's run.py. Every UE must finish,
-and the UE simulators' results files must hold every UE once.
+same with any number of UE simulators per gNB and either link, and the same as before the link
+(705abd9, two pipes of pickled tuples per gNB): REFERENCE is their digest from that commit's run.py.
+Every UE must finish, and the UE simulators' results files must hold every UE once.
 
 Run from the repository root (needs pysctp, the kernel's SCTP module and what run.py needs; about 15 s
 per run):
@@ -100,11 +101,18 @@ def sctp_available():
         return False
 
 
+def shm_available():
+    from src.shmlink import supported
+    return supported()
+
+
 @pytest.mark.skipif(not sctp_available(), reason="needs the kernel's SCTP module")
+@pytest.mark.parametrize('link', ['pipe', pytest.param('shm', marks=pytest.mark.skipif(
+    not shm_available(), reason='ShmLink needs Linux on x86-64'))])
 @pytest.mark.parametrize('per_ran', [1, 3])
-def test_every_ue_finishes_with_the_same_ngap_bytes(tmp_path, per_ran):
-    folder = str(tmp_path / f'k{per_ran}')
-    amf, proc = run_cntg(folder, ['--ue-procs-per-ran', str(per_ran)])
+def test_every_ue_finishes_with_the_same_ngap_bytes(tmp_path, per_ran, link):
+    folder = str(tmp_path / f'k{per_ran}-{link}')
+    amf, proc = run_cntg(folder, ['--ue-procs-per-ran', str(per_ran), '--link', link])
     assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
     assert not amf.errors
     ues = [f'0/{i}' for i in range(31, 31 + NUM_UES)]

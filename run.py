@@ -10,6 +10,7 @@ from src.SCTP import SCTPClient
 from src.affinity import process_cpus
 from src.NGAPSim import GNB
 from src.ranlink import PipeLink
+from src.shmlink import ShmLink
 from src.userplane import Context, UserPlane, providers_from_config
 from src.bpf.ipstats import IPStats
 from src.UE import *
@@ -167,6 +168,19 @@ def share(total, n, j):
     if total <= 0:
         return 0
     return max(1, total // n + (1 if j < total % n else 0))
+
+
+def make_link(kind, stop, ring_kib=32):
+    """
+    A UE-RAN link of this kind (--link): pipe (PipeLink, a multiprocessing.Pipe) or shm (ShmLink, two
+    rings of ring_kib KiB in shared memory with eventfd wake-ups; Linux on x86-64). A full link blocks
+    its sender until stop().
+    """
+    if kind == "shm":
+        return ShmLink(stop=stop, size=ring_kib * 1024)
+    if kind == "pipe":
+        return PipeLink(stop=stop)
+    raise ValueError(f"unknown link type {kind!r}")
 
 
 def run_process(target, cpu, links, own):
@@ -494,7 +508,7 @@ def main(args):
         sctp_client = SCTPClient(server_config, nodelay=args.sctp_nodelay)
         # The gNB's UEs, split across its UE simulators; a full link blocks its sender until the run ends
         sims = split_ues(ue_lists[i], per_ran)
-        gnb_links = [PipeLink(stop=lambda: exit_program.value) for _ in sims]
+        gnb_links = [make_link(args.link, lambda: exit_program.value, args.link_ring_kib) for _ in sims]
         links += gnb_links
         config = {}
         gnb = GNB(
@@ -699,6 +713,20 @@ if __name__ == "__main__":
         "across them, and -i and --inflight stay per gNB (default 1)",
     )
     parser.add_argument(
+        "--link",
+        choices=["pipe", "shm"],
+        default="pipe",
+        help="The UE-RAN link between each UE simulator and its gNB: pipe (a multiprocessing pipe) or shm "
+        "(rings in shared memory, eventfd wake-ups; Linux on x86-64) (default pipe)",
+    )
+    parser.add_argument(
+        "--link-ring-kib",
+        type=int,
+        default=32,
+        help="With --link shm: each ring's size in KiB, a power of two (two rings per link); the default holds "
+        "about as many messages as a pipe (default 32)",
+    )
+    parser.add_argument(
         "--pin",
         action=BooleanOptionalAction,
         default=True,
@@ -783,6 +811,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    if args.link_ring_kib < 1 or args.link_ring_kib & (args.link_ring_kib - 1):
+        parser.error(f"--link-ring-kib must be a power of two, not {args.link_ring_kib}")
 
     # If --sctp is specified, enable all SCTP tracing modules
     if args.sctp:

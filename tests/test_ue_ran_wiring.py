@@ -11,13 +11,19 @@ import time
 from multiprocessing import Value
 from types import SimpleNamespace
 
+import pytest
 from pycrate_asn1dir import NGAP
 
 import src.NGAPSim as ngapsim
 from src import ranlink
 from src.NGAPSim import GNB, initial_ue_message, plmn_str_to_buf, uplink_nas_transport
 from src.ranlink import CONNECT, DL_NAS, RELEASE, SECURITY, UL_NAS, UP_CONTROL, Event, PipeLink
+from src.shmlink import ShmLink, supported
 from src.UESim import UESim
+
+# Each test that uses a link runs with each link type
+LINKS = [PipeLink, pytest.param(ShmLink, marks=pytest.mark.skipif(not supported(), reason='ShmLink needs Linux on x86-64'))]
+with_each_link = pytest.mark.parametrize('link_type', LINKS)
 
 REGISTRATION_REQUEST = bytes.fromhex('7e004179000d0102f8590000000000000000132e04f0f0f0f0')
 AUTHENTICATION_RESPONSE = bytes.fromhex('7e00572d1038edd5c92db1a0f041f710eb93be0316')
@@ -35,8 +41,9 @@ def make_sim(link):
     return sim
 
 
-def test_the_initial_registration_request_connects_and_the_rest_is_ul_nas():
-    link = PipeLink()
+@with_each_link
+def test_the_initial_registration_request_connects_and_the_rest_is_ul_nas(link_type):
+    link = link_type()
     sim = make_sim(link)
     sim._send_nas(31, REGISTRATION_REQUEST, 65)
     sim._send_nas(31, AUTHENTICATION_RESPONSE, 87)
@@ -52,8 +59,9 @@ def test_the_initial_registration_request_connects_and_the_rest_is_ul_nas():
     link.close()
 
 
-def test_the_reader_hands_dl_nas_and_release_to_the_ues_worker():
-    link = PipeLink()
+@with_each_link
+def test_the_reader_hands_dl_nas_and_release_to_the_ues_worker(link_type):
+    link = link_type()
     sim = make_sim(link)
     got = queue.Queue()
     sim._handle_downlink = lambda data, ue_id, received_at=None, ul_sent=None: got.put((data, ue_id, received_at, ul_sent))
@@ -70,8 +78,9 @@ def test_the_reader_hands_dl_nas_and_release_to_the_ues_worker():
     link.close()
 
 
-def test_a_closed_link_does_not_stop_the_ue_simulator(caplog):
-    link = PipeLink()
+@with_each_link
+def test_a_closed_link_does_not_stop_the_ue_simulator(caplog, link_type):
+    link = link_type()
     sim = make_sim(link)
     link.ran_end.close()
     link.ue_end.attach()
@@ -109,9 +118,10 @@ def encode(build, nas, ue, gnb):
     return pdu.to_aper()
 
 
-def test_connect_and_ul_nas_give_the_same_ngap_bytes_as_before(monkeypatch):
+@with_each_link
+def test_connect_and_ul_nas_give_the_same_ngap_bytes_as_before(monkeypatch, link_type):
     monkeypatch.setattr(ngapsim.time, 'time', lambda: 1761400000.0)
-    link = PipeLink()
+    link = link_type()
     gnb = make_gnb([link.ran_end])
     gnb._handle_uplink(link.ran_end, Event(CONNECT, 31, ranlink.connect_payload(REGISTRATION_REQUEST), 65))
     gnb.ues[31] = {'amf_ue_ngap_id': 1031}
@@ -139,8 +149,9 @@ def test_the_initial_ue_message_carries_the_cause_and_the_5g_s_tmsi():
     assert ies[26] == {'aMFSetID': (5, 10), 'aMFPointer': (1, 6), 'fiveG-TMSI': bytes.fromhex('deadbeef')}
 
 
-def test_up_control_hands_the_session_to_the_user_plane():
-    link = PipeLink()
+@with_each_link
+def test_up_control_hands_the_session_to_the_user_plane(link_type):
+    link = link_type()
     gnb = make_gnb([link.ran_end])
     gnb.ues[31] = {'amf_ue_ngap_id': 1031, 'qfi': 1, 'ul_teid': 0x10001, 'dl_teid': 31,
                    'upf_address': '127.0.0.2', 'pdu_session_id': 1}
@@ -152,8 +163,9 @@ def test_up_control_hands_the_session_to_the_user_plane():
     link.close()
 
 
-def test_downlink_goes_back_on_the_link_the_ue_came_on():
-    links = [PipeLink() for _ in range(3)]
+@with_each_link
+def test_downlink_goes_back_on_the_link_the_ue_came_on(link_type):
+    links = [link_type() for _ in range(3)]
     ends = [link.ran_end for link in links]
     gnb = make_gnb(ends)
     for k, end in enumerate(ends):
@@ -171,17 +183,19 @@ def test_downlink_goes_back_on_the_link_the_ue_came_on():
         link.close()
 
 
-def test_with_one_link_every_downlink_goes_on_it():
-    link = PipeLink()
+@with_each_link
+def test_with_one_link_every_downlink_goes_on_it(link_type):
+    link = link_type()
     gnb = make_gnb([link.ran_end])
     gnb._to_ue(DL_NAS, 99, b'unknown', 1.0)          # as the one pipe took every message
     assert link.ue_end.recv(1) == Event(DL_NAS, 99, b'unknown', 0, 1.0, [])
     link.close()
 
 
-def test_a_ue_id_on_two_links_is_reported_not_mixed(caplog, monkeypatch):
+@with_each_link
+def test_a_ue_id_on_two_links_is_reported_not_mixed(caplog, monkeypatch, link_type):
     monkeypatch.setattr(ngapsim.time, 'time', lambda: 1761400000.0)
-    links = [PipeLink() for _ in range(2)]
+    links = [link_type() for _ in range(2)]
     gnb = make_gnb([link.ran_end for link in links])
     gnb._handle_uplink(links[0].ran_end, Event(CONNECT, 31, ranlink.connect_payload(REGISTRATION_REQUEST), 65))
     with caplog.at_level(logging.ERROR):
@@ -197,9 +211,10 @@ def test_a_ue_id_on_two_links_is_reported_not_mixed(caplog, monkeypatch):
         link.close()
 
 
-def test_the_uplink_thread_serves_every_link_and_lets_closed_ones_go(monkeypatch):
+@with_each_link
+def test_the_uplink_thread_serves_every_link_and_lets_closed_ones_go(monkeypatch, link_type):
     monkeypatch.setattr(ngapsim.time, 'time', lambda: 1761400000.0)
-    links = [PipeLink() for _ in range(2)]
+    links = [link_type() for _ in range(2)]
     gnb = make_gnb([link.ran_end for link in links])
     gnb.waiter = links[0].ran_end.waiter(gnb.links)
     threading.Thread(target=gnb._ue_to_ngap_thread_function, daemon=True).start()
