@@ -519,6 +519,7 @@ def main(args):
             [link.ran_end for link in gnb_links],
             args.verbose,
             gnb_index=i,
+            ngap_fastpath=args.ngap_fastpath,
         )
         for k, (sim_ues, link) in enumerate(zip(sims, gnb_links)):
             # UE simulator j: one per gNB (j = i) by default. With several, they take turns to start
@@ -786,6 +787,13 @@ if __name__ == "__main__":
         action=BooleanOptionalAction,
         default=True,
         help="Send each NGAP message at once (SCTP_NODELAY); --no-sctp-nodelay keeps Nagle's algorithm",
+    )
+    parser.add_argument(
+        "--ngap-fastpath",
+        action=BooleanOptionalAction,
+        default=True,
+        help="Build the gNB's NGAP messages of a registration and a UE context release from byte templates and "
+        "parse the downlink ones without pycrate (src/ngapfast.py); --no-ngap-fastpath: pycrate for every message",
     )
 
     # Add SCTP-specific arguments
