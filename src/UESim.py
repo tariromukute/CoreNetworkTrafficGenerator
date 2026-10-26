@@ -48,6 +48,14 @@ num_threads = 2
 # The UE's own sign of the (R)AN connection's release (UE.py, UEMessages.py): what a RELEASE from the
 # RAN becomes for the dispatcher
 AN_RELEASE = b'F'
+# When a UE has finished, for the closed loop (--inflight): what it last "sent" frees its place.
+#   5GMMANConnectionReleaseComplete  the end of its procedure list (internal): after the Registration
+#       Complete of a registration-only profile, or after the AN release that ends a deregistration
+#   5GSMPDUSessionTransmission       it holds its PDU session (the pdu profile's last procedure, which never
+#       ends): its PDU Session Establishment Accept has come, in the PDU Session Resource Setup Request
+#       whose response the gNB sent before it handed the UE the NAS PDU (NGAPSim), and the session has
+#       gone to the user plane; the UE keeps it until CN-TG stops
+CLOSED_LOOP_DONE = frozenset(('5GMMANConnectionReleaseComplete', '5GSMPDUSessionTransmission'))
 class UESim:
     exit_flag = False
     global start_time
@@ -260,8 +268,8 @@ class UESim:
                 self._send_up_control(ueId, tx_nas_pdu, ue.supi)
         
         # TODO: handle recording of operation
-        if sent_type == '5GMMANConnectionReleaseComplete' and self.inflight:
-            self.inflight.release(ueId)   # the UE has finished: the next may start
+        if sent_type in CLOSED_LOOP_DONE and self.inflight:
+            self.inflight.release(ueId)   # the UE has finished, or holds its session: the next may start
         if sent_type is None: # Leave state as is, e.g., on ConfigurationUpdateCommand
             return
         msg_code = fg_msg_codes[sent_type] - FGMM_MIN_TYPE
