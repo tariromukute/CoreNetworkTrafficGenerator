@@ -113,13 +113,17 @@ def initial_context_setup_request(amf_id, ran_id, nas):
 
 
 def pdu_session_resource_setup_request(amf_id, ran_id, nas):
+    """ With the IEs OAI's AMF and SMF send (experiment 06's captures): the session's and the UE's
+    aggregate maximum bit rates, the UPF's tunnel, the PDU session type, one QoS flow (5QI 9) """
     transfer = ('PDUSessionResourceSetupRequestTransfer', {'protocolIEs': [
+        {'id': 130, 'criticality': 'reject', 'value': ('PDUSessionAggregateMaximumBitRate', {
+            'pDUSessionAggregateMaximumBitRateDL': 1 << 30, 'pDUSessionAggregateMaximumBitRateUL': 1 << 30})},
         {'id': 139, 'criticality': 'reject', 'value': ('UPTransportLayerInformation', ('gTPTunnel', {
             'transportLayerAddress': (0x7F000002, 32), 'gTP-TEID': (0x10000 + ran_id).to_bytes(4, 'big')}))},
         {'id': 134, 'criticality': 'reject', 'value': ('PDUSessionType', 'ipv4')},
         {'id': 136, 'criticality': 'reject', 'value': ('QosFlowSetupRequestList', [{
             'qosFlowIdentifier': 1, 'qosFlowLevelQosParameters': {
-                'qosCharacteristics': ('nonDynamic5QI', {'fiveQI': 9}),
+                'qosCharacteristics': ('nonDynamic5QI', {'fiveQI': 9, 'priorityLevelQos': 0}),
                 'allocationAndRetentionPriority': {'priorityLevelARP': 1,
                                                    'pre-emptionCapability': 'shall-not-trigger-pre-emption',
                                                    'pre-emptionVulnerability': 'not-pre-emptable'}}}])}]})
@@ -127,7 +131,9 @@ def pdu_session_resource_setup_request(amf_id, ran_id, nas):
             'pDUSessionResourceSetupRequestTransfer': transfer}
     return _encode(('initiatingMessage', {'procedureCode': 29, 'criticality': 'reject', 'value': (
         'PDUSessionResourceSetupRequest', {'protocolIEs': _ue_ids(amf_id, ran_id) + [
-            {'id': 74, 'criticality': 'reject', 'value': ('PDUSessionResourceSetupListSUReq', [item])}]})}))
+            {'id': 74, 'criticality': 'reject', 'value': ('PDUSessionResourceSetupListSUReq', [item])},
+            {'id': 110, 'criticality': 'ignore', 'value': ('UEAggregateMaximumBitRate', {
+                'uEAggregateMaximumBitRateDL': 10**9, 'uEAggregateMaximumBitRateUL': 10**9})}]})}))
 
 
 def ue_context_release_command(amf_id, ran_id):

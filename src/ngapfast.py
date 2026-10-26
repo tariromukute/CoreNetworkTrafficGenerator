@@ -1,5 +1,6 @@
 """ The gNB's NGAP messages without pycrate objects: byte templates for the uplink messages of a
-registration and a UE context release, and a light parser for the downlink messages the gNB answers.
+registration, a PDU session's setup and a UE context release, and a light parser for the downlink
+messages the gNB answers.
 
 Step 0's profile of the gNB processes put pycrate's APER codec at about a third of their CPU (encode
 22%, decode 13%), and G14 left the gNB processes with most of CN-TG's CPU. Here, as G14's
@@ -7,43 +8,57 @@ src/nasfast.py does for NAS:
 
 - Uplink: Uplink(plmn, nci, tac) holds a gNB's constant parts (the User Location Information, whose
   NR-CGI and TAI are the gNB's). Its initial_ue_message() and uplink_nas_transport(), and the module's
-  initial_context_setup_response() and ue_context_release_complete(), give the bytes pycrate gives
-  for the PDUs src/NGAPSim.py builds, with the same IEs in the same order: the UE NGAP IDs, the NAS
-  PDU, the time stamp, the establishment cause and the 5G-S-TMSI spliced in with their APER encodings
-  (X.691):
+  initial_context_setup_response(), pdu_session_resource_setup_response() and
+  ue_context_release_complete(), give the bytes pycrate gives for the PDUs src/NGAPSim.py builds,
+  with the same IEs in the same order: the UE NGAP IDs, the NAS PDU, the time stamp, the
+  establishment cause, the 5G-S-TMSI, the PDU session ID, the gNB's DL NG-U tunnel and the QoS flows
+  spliced in with their APER encodings (X.691):
     - AMF-UE-NGAP-ID, INTEGER (0..2^40-1): the number of octets less one in 3 bits, then the
       value in that many octets (at least one); RAN-UE-NGAP-ID, INTEGER (0..2^32-1): the same
       with 2 bits;
-    - the NAS-PDU (OCTET STRING), each IE's value (an open type) and the message's value (an open
-      type holding the IE container): a length determinant, one octet below 128, two below 16384,
+    - the NAS-PDU (OCTET STRING), each IE's value (an open type), the message's value (an open
+      type holding the IE container) and the PDUSessionResourceSetupResponseTransfer (an OCTET
+      STRING holding its encoding): a length determinant, one octet below 128, two below 16384,
       and from 16384 fragments of 64K, 48K, 32K and 16K octets as pycrate cuts them, each after its
       own octet (0xC4 .. 0xC1), then the rest's length (perhaps 0);
     - the 5G-S-TMSI: the AMF Set ID's 10 bits and the AMF Pointer's 6 bits after the SEQUENCE's
-      extension and option bits, padding, then the 5G-TMSI's four octets.
+      extension and option bits, padding, then the 5G-TMSI's four octets;
+    - the PDU session ID, INTEGER (0..255): an octet; the transport layer address, BIT STRING
+      (SIZE(1..160, ...)): its extension bit, its size less one in 8 bits, padding, the address's
+      octets; the GTP-TEID: its four octets; the QFIs, INTEGER (0..63, ...), in their list's bit
+      fields (see pdu_session_resource_setup_response()).
   They give None for what they do not cover (an id out of its range or not an int, an unknown
-  cause, a 5G-S-TMSI not of 6 octets, a cell identity, PLMN or TAC of another size, any exception),
-  and the caller builds the message with pycrate as before, which meets the same problem.
-- Downlink: downlink() parses a DownlinkNASTransport, an InitialContextSetupRequest and a
-  UEContextReleaseCommand into what the gNB reads from them: the procedure code, the AMF and RAN UE
-  NGAP IDs (in the UEContextReleaseCommand, its UE-NGAP-IDs' pair) and the NAS-PDU. Each IE must be
-  one of its message's (pycrate's IE set), with that set's criticality and in that set's order
-  (each at most once, as OAI's AMF sends them); every length must be in its canonical form below
-  16384 and must end where its value ends; every extension bit and padding bit must be 0. The IEs
-  the gNB does not read are not decoded: one whose type is a fixed-size BIT or OCTET STRING of whole
-  octets (SecurityKey, MaskedIMEISV) must have that size, and any other must be, byte for byte, one
-  pycrate decoded before in a message of the same procedure: learn() records them after pycrate's
-  path has decoded a message, each once pycrate's object for that IE's value has decoded all of it
-  and encoded it back the same (at most MAX_LEARNT). Anything else gives None and the caller decodes
-  the message with pycrate as before: other procedures and PDU types (the PDU Session Resource
-  Setup Request among them), fragmented lengths, an IE the parser has not seen, a UE-NGAP-IDs that
-  is not a pair, ids in a form pycrate decodes but does not encode (more octets than the value
-  needs), and any exception.
+  cause, a 5G-S-TMSI not of 6 octets, a cell identity, PLMN or TAC of another size, a QFI outside
+  0..63, an address not of 4, 16 or 20 octets, any exception), and the caller builds the message
+  with pycrate as before, which meets the same problem or encodes what the template does not.
+- Downlink: downlink() parses a DownlinkNASTransport, an InitialContextSetupRequest, a
+  PDUSessionResourceSetupRequest and a UEContextReleaseCommand into what the gNB reads from them: the
+  procedure code, the AMF and RAN UE NGAP IDs (in the UEContextReleaseCommand, its UE-NGAP-IDs'
+  pair), the NAS-PDU and, for the PDU Session Resource Setup Request, its PDU session (one, with its
+  own NAS-PDU): the PDU session ID and from its PDUSessionResourceSetupRequestTransfer the UL NG-U
+  tunnel (the UPF's transport layer address and TEID), the first QoS flow's QFI and the PDU session
+  type. Each IE, in a message or in the transfer, must be one of its IE set's (pycrate's), with that
+  set's criticality and in that set's order (each at most once, as OAI's AMF and SMF send them);
+  every length must be in its canonical form below 16384 and must end where its value ends; every
+  extension bit and padding bit must be 0. The IEs the gNB does not read are not decoded: one whose
+  type is a fixed-size BIT or OCTET STRING of whole octets (SecurityKey, MaskedIMEISV) must have
+  that size, and any other must be, byte for byte, one pycrate decoded before in a message of the
+  same procedure (or a transfer): learn() records them after pycrate's path has decoded a message,
+  each once pycrate's object for that IE's value has decoded all of it and encoded it back the same
+  (at most MAX_LEARNT). The QoS flow setup list is one of these (its QoS parameters are the SMF's,
+  the same for each session), and the parser reads its first QFI from the bytes pycrate decoded.
+  Anything else gives None and the caller decodes the message with pycrate as before: other
+  procedures and PDU types, fragmented lengths, an IE the parser has not seen, a UE-NGAP-IDs that is
+  not a pair, ids in a form pycrate decodes but does not encode (more octets than the value needs),
+  a PDU session list of more than one item or without the item's NAS-PDU, a tunnel with an address
+  of other than 32, 128 or 160 bits, IE extensions, and any exception.
 
 The NGSetupRequest stays with pycrate (once per gNB). The gNB uses pycrate's path for every message
 when messages are logged (debug), which needs pycrate objects, and with run.py --no-ngap-fastpath.
 """
 import struct
 import time
+from collections import namedtuple
 
 from pycrate_asn1dir import NGAP
 
@@ -120,6 +135,7 @@ def _message(head, ies):
 _INITIAL_UE_MESSAGE = b'\x00\x0f' + IGNORE
 _UPLINK_NAS_TRANSPORT = b'\x00\x2e' + IGNORE
 _INITIAL_CONTEXT_SETUP_RESPONSE = b'\x20\x0e' + REJECT
+_PDU_SESSION_RESOURCE_SETUP_RESPONSE = b'\x20\x1d' + REJECT
 _UE_CONTEXT_RELEASE_COMPLETE = b'\x20\x29' + REJECT
 
 # RRCEstablishmentCause ::= ENUMERATED {10 values, ...}: the extension bit 0, the index in 4 bits;
@@ -208,22 +224,76 @@ def ue_context_release_complete(amf_id, ran_id):
     return _message(_UE_CONTEXT_RELEASE_COMPLETE, ids) if ids is not None else None
 
 
+def _qos_flows(qfis):
+    """ AssociatedQosFlowList ::= SEQUENCE (SIZE(1..64)) OF AssociatedQosFlowItem, an item a SEQUENCE
+    {qosFlowIdentifier INTEGER (0..63, ...), qosFlowMappingIndication OPTIONAL, iE-Extensions
+    OPTIONAL, ...}: the count less one in 6 bits, then per flow its extension and option bits (0, 0, 0)
+    and the QFI's extension bit (0) and 6 bits, then padding to the octet; None for no flow, more
+    than 64, or a QFI that is not an int of 0..63 """
+    if type(qfis) not in (list, tuple) or not 0 < len(qfis) <= 64:
+        return None
+    bits = len(qfis) - 1
+    for qfi in qfis:
+        if type(qfi) is not int or not 0 <= qfi < 64:
+            return None
+        bits = bits << 10 | qfi
+    n = 6 + 10 * len(qfis)
+    pad = -n % 8
+    return (bits << pad).to_bytes((n + pad) >> 3, 'big')
+
+
+def pdu_session_resource_setup_response(amf_id, ran_id, pdu_session_id, address, teid, qfis):
+    """ src/NGAPSim.py's PDUSessionResourceSetupResponse: the UE NGAP IDs and one PDU session set up
+    (its ID, 0..255), whose PDUSessionResourceSetupResponseTransfer gives the gNB's DL NG-U tunnel
+    (address: its transport layer address, 4, 16 or 20 octets for IPv4, IPv6 or both; teid: its GTP
+    TEID, 4 octets) and the QFIs of the QoS flows on it """
+    try:
+        ids = _ids(IGNORE, IGNORE, amf_id, ran_id)
+        flows = _qos_flows(qfis)
+        if (ids is None or flows is None or type(pdu_session_id) is not int or not 0 <= pdu_session_id < 256
+                or type(address) is not bytes or len(address) not in (4, 16, 20)
+                or type(teid) is not bytes or len(teid) != 4):
+            return None
+        # PDUSessionResourceSetupResponseTransfer ::= SEQUENCE {dLQosFlowPerTNLInformation, three
+        # OPTIONAL, iE-Extensions OPTIONAL, ...}: its extension and option bits; the
+        # QosFlowPerTNLInformation's extension and option bits; the UPTransportLayerInformation's
+        # choice (gTPTunnel, 1 bit); the GTPTunnel's extension and option bits; the
+        # TransportLayerAddress's extension bit: 11 bits, all 0. Then the address's size less one in 8
+        # bits, padding, the address, the TEID and the QoS flows.
+        transfer = ((len(address) * 8 - 1) << 5).to_bytes(3, 'big') + address + teid + flows
+        # PDUSessionResourceSetupListSURes ::= SEQUENCE (SIZE(1..256)) OF ...: the count less one (an
+        # octet); the item's extension and option bits and padding, its PDU session ID (an octet) and
+        # the transfer (an OCTET STRING holding its encoding)
+        sessions = b'\x00\x00' + bytes((pdu_session_id,)) + wrap(transfer)
+        return _message(_PDU_SESSION_RESOURCE_SETUP_RESPONSE, [*ids, _ie(75, IGNORE, sessions)])
+    except Exception:
+        return None
+
+
 # --------------------------------------------------------------------------------------------------
 # Downlink
 # --------------------------------------------------------------------------------------------------
 
 DOWNLINK_NAS_TRANSPORT = 4
 INITIAL_CONTEXT_SETUP = 14
+PDU_SESSION_RESOURCE_SETUP = 29
 UE_CONTEXT_RELEASE = 41
 
-# How an IE is read: an id or the NAS-PDU kept, the UE-NGAP-IDs' pair, a fixed size checked, or
-# bytes pycrate decoded before
-_AMF, _RAN, _NAS, _PAIR, _FIXED, _LEARNT = range(6)
+# How an IE is read: an id or the NAS-PDU kept, the UE-NGAP-IDs' pair, a fixed size checked, bytes
+# pycrate decoded before; the PDU Session Resource Setup Request's PDU sessions, and in their
+# transfer the UL NG-U tunnel, the PDU session type and the QoS flows (bytes pycrate decoded before,
+# whose first QFI is kept)
+_AMF, _RAN, _NAS, _PAIR, _FIXED, _LEARNT, _SESSIONS, _TUNNEL, _TYPE, _FLOWS = range(10)
 _KINDS = {10: _AMF, 85: _RAN, 38: _NAS, 114: _PAIR}
 _CRITICALITY = {'reject': 0x00, 'ignore': 0x40, 'notify': 0x80}
 
 MAX_LEARNT = 4096
-_learnt = set()          # (procedure code, IE id, value bytes)
+_learnt = set()          # (procedure code or TRANSFER, IE id, value bytes)
+
+# What the gNB reads of the PDU session in a PDU Session Resource Setup Request: its ID, the UL NG-U
+# tunnel as pycrate gives it, ('gTPTunnel', {'transportLayerAddress': (address, bits), 'gTP-TEID':
+# 4 octets}), the first QoS flow's QFI and the PDU session type (its name), or None if absent
+PDUSession = namedtuple('PDUSession', 'pdu_session_id ul_tunnel qfi pdu_session_type')
 
 
 def _fixed_octets(value_type):
@@ -239,17 +309,16 @@ def _fixed_octets(value_type):
     return n
 
 
-class _Message:
-    """ A downlink message's layout from pycrate's tables: its procedure's criticality, and per IE id
-    its place in the IE set, its criticality and how it is read """
+class _IESet:
+    """ An IE set's layout from pycrate's tables: per IE id its place in the set, its criticality and
+    how it is read (kinds: the IEs read, by id; any other is checked by size or learnt) """
 
-    def __init__(self, procedure, ie_set):
-        self.criticality = _CRITICALITY[procedure._val['criticality']]
+    def __init__(self, ie_set, kinds):
         self.ies = {}
         self.values = {}            # pycrate's object for each IE's value, to check what is learnt
         for place, ie in enumerate(ie_set._val.root):
             self.values[ie['id']] = ie['Value']
-            kind, size = _KINDS.get(ie['id'], _LEARNT), None
+            kind, size = kinds.get(ie['id'], _LEARNT), None
             if kind == _LEARNT:
                 size = _fixed_octets(ie['Value'])
                 if size is not None:
@@ -257,12 +326,30 @@ class _Message:
             self.ies[ie['id']] = (place, _CRITICALITY[ie['criticality']], kind, size)
 
 
+class _Message(_IESet):
+    """ A downlink message's layout: its IE set's, and its procedure's criticality """
+
+    def __init__(self, procedure, ie_set, kinds=_KINDS):
+        super().__init__(ie_set, kinds)
+        self.criticality = _CRITICALITY[procedure._val['criticality']]
+
+
 _D, _C = NGAP.NGAP_PDU_Descriptions, NGAP.NGAP_PDU_Contents
 _DOWNLINK = {
     DOWNLINK_NAS_TRANSPORT: _Message(_D.downlinkNASTransport, _C.DownlinkNASTransport_IEs),
     INITIAL_CONTEXT_SETUP: _Message(_D.initialContextSetup, _C.InitialContextSetupRequestIEs),
+    # its message-level NAS-PDU, which src/NGAPSim.py does not read (it reads the PDU session's), is learnt
+    PDU_SESSION_RESOURCE_SETUP: _Message(_D.pDUSessionResourceSetup, _C.PDUSessionResourceSetupRequestIEs,
+                                         {10: _AMF, 85: _RAN, 74: _SESSIONS}),
     UE_CONTEXT_RELEASE: _Message(_D.uEContextRelease, _C.UEContextReleaseCommand_IEs),
 }
+# The PDUSessionResourceSetupRequestTransfer's IE set, and its key among the learnt IEs
+TRANSFER = 'PDUSessionResourceSetupRequestTransfer'
+_LAYOUTS = dict(_DOWNLINK)
+_LAYOUTS[TRANSFER] = _IESet(NGAP.NGAP_IEs.PDUSessionResourceSetupRequestTransferIEs,
+                            {139: _TUNNEL, 134: _TYPE, 136: _FLOWS})
+_SESSION_TYPES = tuple(NGAP.NGAP_IEs.PDUSessionType._root)
+_TUNNEL_BITS = (32, 128, 160)       # an IPv4 address, an IPv6 one, both (TS 38.414 §5.1)
 
 
 def _length(buf, o, end):
@@ -292,6 +379,14 @@ def _id(value, lbits, max_octets):
     return int.from_bytes(value[1:], 'big')
 
 
+def _octets(value):
+    """ An OCTET STRING's octets (the NAS-PDU) from its encoding (the whole of value), or None """
+    w = _length(value, 0, len(value))
+    if w is None or w[0] + w[1] != len(value):
+        return None
+    return value[w[0]:]
+
+
 def _pair(value):
     """ UE-NGAP-IDs ::= CHOICE {uE-NGAP-ID-pair, aMF-UE-NGAP-ID, choice-Extensions} (no extension
     marker): only a pair, without iE-Extensions or extension: (AMF, RAN) UE NGAP IDs, or None """
@@ -307,9 +402,140 @@ def _pair(value):
     return amf, ran
 
 
+def _sessions(value, learning):
+    """ PDUSessionResourceSetupListSUReq ::= SEQUENCE (SIZE(1..256)) OF PDUSessionResourceSetupItemSUReq,
+    of one item here (src/NGAPSim.py reads the first): SEQUENCE {pDUSessionID INTEGER (0..255),
+    pDUSessionNAS-PDU OPTIONAL (present here: src/NGAPSim.py reads it), s-NSSAI,
+    pDUSessionResourceSetupRequestTransfer (an OCTET STRING holding its encoding), iE-Extensions
+    OPTIONAL (absent), ...}: (the NAS-PDU, PDUSession), or None """
+    end = len(value)
+    # The count less one (an octet); the item's extension and option bits (0, 1, 0) and padding; the
+    # PDU session ID (an octet); the NAS-PDU
+    if end < 4 or value[0] != 0 or value[1] != 0x40:
+        return None
+    pdu_session_id = value[2]
+    v = _length(value, 3, end)
+    if v is None:
+        return None
+    o = v[0] + v[1]
+    if o + 2 > end:
+        return None
+    nas = value[v[0]:o]
+    # S-NSSAI ::= SEQUENCE {sST OCTET STRING (SIZE(1)), sD OCTET STRING (SIZE(3)) OPTIONAL, iE-Extensions
+    # OPTIONAL, ...}: the extension and option bits, the SST's 8 bits, padding; the SD's octets if any
+    if value[o] & 0xA0 or value[o + 1] & 0x1F:
+        return None
+    o += 5 if value[o] & 0x40 else 2
+    # PDUSessionResourceSetupRequestTransfer ::= SEQUENCE {protocolIEs, ...}: the extension bit and
+    # padding, then its IEs, which end where the OCTET STRING ends
+    v = _length(value, o, end)
+    if v is None or v[0] + v[1] != end or v[0] >= end or value[v[0]] != 0:
+        return None
+    got = {}
+    if not _container(value, v[0] + 1, end, _LAYOUTS[TRANSFER], TRANSFER, learning, got):
+        return None
+    tunnel, qfi = got.get(_TUNNEL), got.get(_FLOWS)
+    if tunnel is None or qfi is None:
+        return None
+    return nas, PDUSession(pdu_session_id, tunnel, qfi, got.get(_TYPE))
+
+
+def _tunnel(value):
+    """ UPTransportLayerInformation ::= CHOICE {gTPTunnel, choice-Extensions} (no extension marker):
+    a GTPTunnel ::= SEQUENCE {transportLayerAddress BIT STRING (SIZE(1..160, ...)), gTP-TEID OCTET
+    STRING (SIZE(4)), iE-Extensions OPTIONAL, ...} without iE-Extensions or extension, whose address
+    has 32, 128 or 160 bits: the choice, extension and option bits, the size less one in 8 bits,
+    padding, the address, the TEID. pycrate's value of it, or None. """
+    if len(value) < 2 or value[0] & 0xF0 or value[1] & 0x0F:
+        return None
+    bits = ((value[0] & 0x0F) << 4 | value[1] >> 4) + 1
+    n = bits >> 3
+    if bits not in _TUNNEL_BITS or len(value) != 2 + n + 4:
+        return None
+    return 'gTPTunnel', {'transportLayerAddress': (int.from_bytes(value[2:2 + n], 'big'), bits),
+                         'gTP-TEID': value[2 + n:]}
+
+
+def _session_type(value):
+    """ PDUSessionType ::= ENUMERATED {ipv4, ipv6, ipv4v6, ethernet, unstructured, ...}: the extension
+    bit, the index in 3 bits, padding. Its name, or None. """
+    if len(value) != 1 or value[0] & 0x8F or value[0] >> 4 >= len(_SESSION_TYPES):
+        return None
+    return _SESSION_TYPES[value[0] >> 4]
+
+
+def _first_qfi(value):
+    """ The first QoS flow's QFI in a QosFlowSetupRequestList ::= SEQUENCE (SIZE(1..64)) OF
+    QosFlowSetupRequestItem, an item a SEQUENCE {qosFlowIdentifier INTEGER (0..63, ...), ...,
+    e-RAB-ID OPTIONAL, iE-Extensions OPTIONAL, ...}: after the count (6 bits) and the item's extension
+    and option bits, the QFI's extension bit (0 here) and 6 bits. The list's bytes are ones pycrate
+    decoded before (learnt). """
+    if len(value) < 2 or value[1] & 0x40:
+        return None
+    return value[1] & 0x3F
+
+
+def _container(data, o, end, layout, key, learning, got):
+    """ A ProtocolIE-Container at o (the count in two octets, then the fields), which must end at end:
+    what the gNB reads from its IEs into got (by kind). False if the parser does not take it. With
+    learning (a list), the IEs not known yet are appended to it instead of refusing them. """
+    if o + 2 > end:
+        return False
+    count = data[o] << 8 | data[o + 1]
+    o += 2
+    place = -1
+    ies = layout.ies
+    for _ in range(count):
+        if o + 3 > end:
+            return False
+        ie_id = data[o] << 8 | data[o + 1]
+        entry = ies.get(ie_id)
+        if entry is None or entry[0] <= place or data[o + 2] != entry[1]:
+            return False
+        place, _, kind, size = entry
+        v = _length(data, o + 3, end)
+        if v is None:
+            return False
+        start, o = v[0], v[0] + v[1]
+        if o > end:
+            return False
+        value = data[start:o]
+        if kind == _FIXED:
+            if len(value) != size:
+                return False
+            continue
+        if kind == _LEARNT or kind == _FLOWS:
+            if (key, ie_id, value) not in _learnt:
+                if learning is None:
+                    return False
+                learning.append((key, ie_id, value))
+            if kind == _LEARNT:
+                continue
+        if kind == _AMF:
+            read = _id(value, 3, 5)
+        elif kind == _RAN:
+            read = _id(value, 2, 4)
+        elif kind == _NAS:
+            read = _octets(value)
+        elif kind == _PAIR:
+            read = _pair(value)
+        elif kind == _SESSIONS:
+            read = _sessions(value, learning)
+        elif kind == _TUNNEL:
+            read = _tunnel(value)
+        elif kind == _TYPE:
+            read = _session_type(value)
+        else:
+            read = _first_qfi(value)
+        if read is None:
+            return False
+        got[kind] = read
+    return o == end
+
+
 def _walk(data, learning=None):
-    """ (procedure code, AMF UE NGAP ID, RAN UE NGAP ID, NAS-PDU or None), or None. With learning (a
-    list), the IEs not known yet are appended to it instead of refusing the message. """
+    """ (procedure code, AMF UE NGAP ID, RAN UE NGAP ID, NAS-PDU or None, PDUSession or None), or None.
+    With learning (a list), the IEs not known yet are appended to it instead of refusing the message. """
     if type(data) is not bytes or len(data) < 7 or data[0] != 0:      # initiatingMessage, no extension
         return None
     code = data[1]
@@ -323,70 +549,38 @@ def _walk(data, learning=None):
     o = v[0]
     if o + 3 > end or data[o] != 0:          # the message's extension bit, padding
         return None
-    count = data[o + 1] << 8 | data[o + 2]
-    o += 3
-    place = -1
-    amf = ran = nas = None
-    ies = msg.ies
-    for _ in range(count):
-        if o + 3 > end:
-            return None
-        ie_id = data[o] << 8 | data[o + 1]
-        layout = ies.get(ie_id)
-        if layout is None or layout[0] <= place or data[o + 2] != layout[1]:
-            return None
-        place, _, kind, size = layout
-        v = _length(data, o + 3, end)
-        if v is None:
-            return None
-        start, o = v[0], v[0] + v[1]
-        if o > end:
-            return None
-        value = data[start:o]
-        if kind == _AMF:
-            amf = _id(value, 3, 5)
-            if amf is None:
-                return None
-        elif kind == _RAN:
-            ran = _id(value, 2, 4)
-            if ran is None:
-                return None
-        elif kind == _NAS:
-            w = _length(value, 0, len(value))
-            if w is None or w[0] + w[1] != len(value):
-                return None
-            nas = value[w[0]:]
-        elif kind == _PAIR:
-            ids = _pair(value)
-            if ids is None:
-                return None
-            amf, ran = ids
-        elif kind == _FIXED:
-            if len(value) != size:
-                return None
-        elif (code, ie_id, value) not in _learnt:
-            if learning is None:
-                return None
-            learning.append((code, ie_id, value))
-    if o != end or amf is None or ran is None:
+    got = {}
+    if not _container(data, o + 1, end, msg, code, learning, got):
         return None
-    return code, amf, ran, nas
+    if _PAIR in got:
+        amf, ran = got[_PAIR]
+    else:
+        amf, ran = got.get(_AMF), got.get(_RAN)
+    if amf is None or ran is None:
+        return None
+    if code == PDU_SESSION_RESOURCE_SETUP:
+        if _SESSIONS not in got:
+            return None
+        nas, session = got[_SESSIONS]
+        return code, amf, ran, nas, session
+    return code, amf, ran, got.get(_NAS), None
 
 
 def downlink(data):
     """ What the gNB reads from a downlink NGAP message, as src/NGAPSim.py gets it from pycrate:
-    (procedure code, AMF UE NGAP ID, RAN UE NGAP ID, NAS-PDU or None if absent), or None for a
-    message to decode with pycrate as before """
+    (procedure code, AMF UE NGAP ID, RAN UE NGAP ID, NAS-PDU or None if absent, and for a PDU Session
+    Resource Setup Request its PDUSession (the NAS-PDU then the PDU session's), else None), or None
+    for a message to decode with pycrate as before """
     try:
         return _walk(data)
     except Exception:
         return None
 
 
-def _canonical(code, ie_id, value):
+def _canonical(key, ie_id, value):
     """ Whether pycrate decodes value as the IE's value, all of it, and encodes it back the same: within
     a message, pycrate goes on after the end of what it decoded, not after the open type's length """
-    obj = _DOWNLINK[code].values[ie_id]
+    obj = _LAYOUTS[key].values[ie_id]
     try:
         obj.from_aper(value)
         return obj.to_aper() == value
