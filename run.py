@@ -79,8 +79,6 @@ class TimeRange:
         success,
         failed,
     ):
-        # "d", not "f": a time.time() of today needs 31 bits before the point, and a 32-bit float has 24 bits of mantissa
-        # in all, so its steps are 128 s: the duration came out as a multiple of 128 s
         self.start_time = Value("d", start_time)
         self.end_time = Value("d", end_time)
         self.min_interval = Value("d", min_interval)
