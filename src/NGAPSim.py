@@ -200,10 +200,10 @@ class GNB():
     """ The gNB adapter: NGAP towards the AMF for the UEs of one or more UE simulators, each on a
     UE-RAN link of its own (src/ranlink.py). A UE's id on its link is its RAN UE NGAP ID.
 
-    With ngap_fastpath (the default), the NGAP messages of a registration and a UE context release
-    are built from byte templates and the downlink ones parsed without pycrate (src/ngapfast.py);
-    what the fast path does not cover, and every message when messages are logged (debug), goes
-    through pycrate as before. """
+    With ngap_fastpath (the default), the NGAP messages of a registration, a PDU session's setup and
+    a UE context release are built from byte templates and the downlink ones parsed without pycrate
+    (src/ngapfast.py); what the fast path does not cover, and every message when messages are logged
+    (debug), goes through pycrate as before. """
 
     ngap_fastpath = True
 
@@ -390,22 +390,45 @@ class GNB():
         return procedureCode, ngap_aper, nas_pdu, ue_
 
     def _downlink_fast(self, data):
-        """ What _downlink_pycrate() gives for a DownlinkNASTransport, InitialContextSetupRequest or
-        UEContextReleaseCommand, from src/ngapfast.py's parser and templates; None for a message to
-        decode with pycrate """
+        """ What _downlink_pycrate() gives for a DownlinkNASTransport, InitialContextSetupRequest,
+        PDUSessionResourceSetupRequest or UEContextReleaseCommand, from src/ngapfast.py's parser and
+        templates; None for a message to decode with pycrate """
         parsed = ngapfast.downlink(data)
         if parsed is None:
             return None
-        procedureCode, amf_ue_ngap_id, ran_ue_ngap_id, nas_pdu = parsed
+        procedureCode, amf_ue_ngap_id, ran_ue_ngap_id, nas_pdu, session = parsed
         ue_ = {'ran_ue_ngap_id': ran_ue_ngap_id, 'amf_ue_ngap_id': amf_ue_ngap_id}
         if procedureCode == ngapfast.DOWNLINK_NAS_TRANSPORT:
             # as downlink_nas_transport(): nothing without a NAS PDU
             return (procedureCode, None, nas_pdu, ue_) if nas_pdu else (procedureCode, None, None, None)
         if procedureCode == ngapfast.INITIAL_CONTEXT_SETUP:
             return procedureCode, ngapfast.initial_context_setup_response(amf_ue_ngap_id, ran_ue_ngap_id), nas_pdu, ue_
+        if procedureCode == ngapfast.PDU_SESSION_RESOURCE_SETUP:
+            return self._pdu_session_resource_setup_fast(ue_, nas_pdu, session)
         if procedureCode == ngapfast.UE_CONTEXT_RELEASE:
             return procedureCode, ngapfast.ue_context_release_complete(amf_ue_ngap_id, ran_ue_ngap_id), None, ue_
         return None
+
+    @staticmethod
+    def _pdu_session_resource_setup_fast(ue_, nas_pdu, session):
+        """ What pdu_session_resource_setup() gives, from the parser's PDU session: the response from
+        src/ngapfast.py's template, with the gNB's DL NG-U tunnel (gtpIp, and the RAN UE NGAP ID as
+        its TEID) and the first QoS flow, and the session for the user plane; None for pycrate's path """
+        try:
+            address = socket.inet_aton(gtpIp)
+        except Exception:
+            return None                    # pycrate's path meets the same problem
+        teid = ue_['ran_ue_ngap_id'].to_bytes(4, 'big')
+        answer = ngapfast.pdu_session_resource_setup_response(ue_['amf_ue_ngap_id'], ue_['ran_ue_ngap_id'],
+                                                              session.pdu_session_id, address, teid, (session.qfi,))
+        if answer is None:
+            return None
+        ue_['pdu_session_id'] = session.pdu_session_id
+        ue_['qos_identifier'] = session.qfi
+        ue_['ul_up_transport_layer_information'] = session.ul_tunnel
+        ue_['dl_up_transport_layer_information'] = ('gTPTunnel', {
+            'transportLayerAddress': (int.from_bytes(address, 'big'), 32), 'gTP-TEID': teid})
+        return ngapfast.PDU_SESSION_RESOURCE_SETUP, answer, nas_pdu, ue_
 
     def _uplink_fast(self, kind, ue, data):
         """ The Initial UE Message (CONNECT) or Uplink NAS Transport from src/ngapfast.py's templates,

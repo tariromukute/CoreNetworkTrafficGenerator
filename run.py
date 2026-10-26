@@ -792,8 +792,9 @@ if __name__ == "__main__":
         "--ngap-fastpath",
         action=BooleanOptionalAction,
         default=True,
-        help="Build the gNB's NGAP messages of a registration and a UE context release from byte templates and "
-        "parse the downlink ones without pycrate (src/ngapfast.py); --no-ngap-fastpath: pycrate for every message",
+        help="Build the gNB's NGAP messages of a registration, a PDU session's setup and a UE context release from "
+        "byte templates and parse the downlink ones without pycrate (src/ngapfast.py); --no-ngap-fastpath: "
+        "pycrate for every message",
     )
 
     # Add SCTP-specific arguments
