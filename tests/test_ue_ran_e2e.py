@@ -15,6 +15,10 @@ provider) with the UPF's tunnel and QoS flow from the PDU Session Resource Setup
 gNB's tunnel, the same with either link and either NGAP path; the uplink NGAP messages must have
 SESSION_REFERENCE's digest, taken with --no-ngap-fastpath (pycrate's path).
 
+In a closed loop (--inflight K), at most K UEs of a gNB are in their procedures at once, as the AMF
+sees them arrive: a UE that holds its PDU session is done once the gNB has sent its PDU Session
+Resource Setup Response; a registration-only UE once it has sent its Registration Complete.
+
 Run from the repository root (needs pysctp, the kernel's SCTP module and what run.py needs; about 15 s
 per run):
 
@@ -67,7 +71,7 @@ def gnb_config(port, folder):
             'userPlane': {'providers': [{'type': 'file', 'path': os.path.join(folder, 'sessions.jsonl')}]}}
 
 
-def run_cntg(folder, args=(), tree=ROOT, n=NUM_UES, timeout=120):
+def run_cntg(folder, args=(), tree=ROOT, n=NUM_UES, timeout=120, procedures=None):
     """ run.py from tree against an AMFStub until every UE has finished; the stub's records and run.py's
     output """
     from amf_stub import AMFStub
@@ -75,7 +79,7 @@ def run_cntg(folder, args=(), tree=ROOT, n=NUM_UES, timeout=120):
     amf = AMFStub().start()
     try:
         with open(os.path.join(folder, 'ue.yaml'), 'w') as f:
-            yaml.safe_dump(ue_config(n), f)
+            yaml.safe_dump(ue_config(n, procedures) if procedures else ue_config(n), f)
         with open(os.path.join(folder, 'gnb.yaml'), 'w') as f:
             yaml.safe_dump(gnb_config(amf.port, folder), f)
         env = dict(os.environ, PYTHONPATH=os.pathsep.join(
@@ -214,3 +218,54 @@ def test_every_session_reaches_the_user_plane_with_the_same_ngap_bytes(tmp_path,
     # Response
     assert all(len(records[f'0/{r}']) == 7 for r in ues)
     assert digest(records) == SESSION_REFERENCE
+
+
+def max_in_flight(arrivals, started, done):
+    """ The most UEs at once between their started and their done message, in the order the AMF
+    received them (AMFStub.arrivals) """
+    now, most = set(), 0
+    for assoc, ran_id, what in arrivals:
+        if what == started:
+            now.add((assoc, ran_id))
+            most = max(most, len(now))
+        elif what == done:
+            now.discard((assoc, ran_id))
+    return most
+
+
+@pytest.mark.skipif(not sctp_available(), reason="needs the kernel's SCTP module")
+@pytest.mark.parametrize('inflight', [1, 2])
+def test_the_closed_loop_frees_a_place_once_the_session_is_held(tmp_path, inflight):
+    """ --inflight with the profile that holds its PDU session: a UE's place is freed once its PDU Session
+    Establishment Accept has come, in the PDU Session Resource Setup Request whose response the gNB
+    sends first, and the session is held. The UE timeout is far longer than the run, so no place is freed
+    by its expiry (the only way a place was freed before, once per UE timeout) """
+    folder = str(tmp_path / f'inflight-{inflight}')
+    amf, sessions, returncode = run_until_sessions(folder, ['--inflight', str(inflight), '--ue-timeout', '600'],
+                                                   timeout=40)
+    with open(os.path.join(folder, 'run.log')) as f:
+        log = f.read()
+    assert returncode == 0, log[-3000:]
+    assert not amf.errors
+    assert sorted(s['ran_ue_ngap_id'] for s in sessions) == list(range(31, 31 + NUM_UES)), log[-3000:]
+    assert 'did not finish within' not in log
+    # the next UE's Initial UE Message comes only after a UE's PDU Session Resource Setup Response
+    assert max_in_flight(amf.arrivals, 'initial-ue', 'setup-response') == inflight
+    # held: no UE asked to deregister, no UE context released
+    assert not [a for a in amf.arrivals if a[2] in ('nas-0x45', 'release-complete')]
+
+
+@pytest.mark.skipif(not sctp_available(), reason="needs the kernel's SCTP module")
+@pytest.mark.parametrize('inflight', [1, 2])
+def test_the_closed_loop_of_registrations_is_unchanged(tmp_path, inflight):
+    """ --inflight with registration only: a UE's place is freed at the end of its procedures, once it
+    has sent its Registration Complete, and CN-TG ends by itself once every UE has registered """
+    folder = str(tmp_path / f'registration-inflight-{inflight}')
+    amf, proc = run_cntg(folder, ['--inflight', str(inflight), '--ue-timeout', '600'], timeout=60,
+                         procedures=['5GMMRegistrationRequest'])
+    assert proc.returncode == 0, proc.stdout[-2000:] + proc.stderr[-2000:]
+    assert not amf.errors
+    assert 'did not finish within' not in proc.stdout + proc.stderr
+    ues = [a[1] for a in amf.arrivals if a[2] == 'nas-0x43']
+    assert sorted(ues) == list(range(31, 31 + NUM_UES))
+    assert max_in_flight(amf.arrivals, 'initial-ue', 'nas-0x43') == inflight

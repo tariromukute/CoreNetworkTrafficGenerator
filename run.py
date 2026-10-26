@@ -691,7 +691,9 @@ if __name__ == "__main__":
         "--inflight",
         type=int,
         default=0,
-        help="Closed loop: at most this many UEs per gNB in their procedures at once (0: open loop)",
+        help="Closed loop: at most this many UEs per gNB in their procedures at once (0: open loop); a UE "
+        "is done at the end of its procedures or, with 5GSMPDUSessionTransmission, once it holds its PDU "
+        "session (at its PDU Session Establishment Accept)",
     )
     parser.add_argument(
         "--ue-timeout",

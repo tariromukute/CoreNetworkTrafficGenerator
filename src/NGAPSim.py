@@ -337,6 +337,9 @@ class GNB():
                             self.ues[ue_['ran_ue_ngap_id']]['dl_teid'] = dl_teid
                             self.ues[ue_['ran_ue_ngap_id']]['upf_address'] = upf_address
                             self.ues[ue_['ran_ue_ngap_id']]['pdu_session_id'] = ue_.get('pdu_session_id')
+                    # The gNB's answer goes before the NAS PDU reaches the UE: a UE that holds its PDU
+                    # session frees its closed-loop place at the PDU Session Establishment Accept
+                    # (UESim.CLOSED_LOOP_DONE), when its PDU Session Resource Setup Response is already sent
                     if ngap_aper:
                         self.sctp.send(ngap_aper)
                     if procedureCode == 41 and ue_:

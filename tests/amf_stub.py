@@ -85,6 +85,17 @@ def nas_type(nas):
 
 # NGAP
 
+UPLINK_NAMES = {('initiatingMessage', 15): 'initial-ue', ('successfulOutcome', 14): 'context-setup-response',
+                ('successfulOutcome', 29): 'setup-response', ('successfulOutcome', 41): 'release-complete'}
+
+
+def _what(kind, code, ies):
+    """ An uplink message's name in AMFStub.arrivals """
+    if kind == 'initiatingMessage' and code == 46:
+        return f'nas-0x{nas_type(ies[38]):02x}'
+    return UPLINK_NAMES.get((kind, code), f'{kind}-{code}')
+
+
 def _ies(pdu):
     return {ie['id']: ie['value'][1] for ie in pdu.get_val()[1]['value'][1]['protocolIEs']}
 
@@ -157,6 +168,10 @@ class AMFStub:
         self.uplink = {}        # (association, RAN UE NGAP ID) -> [uplink NGAP, hex, time stamp zeroed]
         self.setups = {}        # association -> its NG Setup Request
         self.released = set()   # (association, RAN UE NGAP ID) that completed the UE context release
+        # (association, RAN UE NGAP ID, what) per uplink message, in arrival order: what is the NGAP
+        # message (initial-ue, setup-response for the PDU Session Resource Setup Response, ...), or
+        # nas-0x<type> for an Uplink NAS Transport (nas-0x43: the Registration Complete)
+        self.arrivals = []
         self.errors = []
         self._stop = threading.Event()
         self._threads = []
@@ -235,6 +250,7 @@ class AMFStub:
                 ran_id = ies[114][1]['rAN-UE-NGAP-ID']
             with self.lock:
                 self.uplink.setdefault((assoc, ran_id), []).append(masked.hex())
+                self.arrivals.append((assoc, ran_id, _what(kind, code, ies)))
             amf_id = ran_id + AMF_ID_OFFSET
             if kind == 'initiatingMessage' and code == 15:          # Initial UE Message
                 return [downlink_nas_transport(amf_id, ran_id, authentication_request())]
