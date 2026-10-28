@@ -79,13 +79,13 @@ class TimeRange:
         success,
         failed,
     ):
-        self.start_time = Value("f", start_time)
-        self.end_time = Value("f", end_time)
-        self.min_interval = Value("f", min_interval)
-        self.sum_interval = Value("f", sum_interval)
-        self.max_interval = Value("f", max_interval)
-        self.duration = Value("f", duration)
-        self.completed_in = Value("f", completed_in)
+        self.start_time = Value("d", start_time)
+        self.end_time = Value("d", end_time)
+        self.min_interval = Value("d", min_interval)
+        self.sum_interval = Value("d", sum_interval)
+        self.max_interval = Value("d", max_interval)
+        self.duration = Value("d", duration)
+        self.completed_in = Value("d", completed_in)
         self.success = Value("i", success)
         self.failed = Value("i", failed)
 
