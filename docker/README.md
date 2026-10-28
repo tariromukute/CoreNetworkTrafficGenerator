@@ -4,6 +4,8 @@
 
 1. Docker installed
 2. SCTP activated
+3. Host kernel headers installed for the running kernel, for example `linux-headers-$(uname -r)`
+4. Host kernel paths mounted into the container when SCTP tracers are enabled
 
 ## Building
 
@@ -11,8 +13,14 @@
 # build image 
 docker build -t core-network-traffic-generator:latest --file docker/dockerfile .
 # run container
-docker run --rm --privileged core-network-traffic-generator:latest
+docker run --rm --privileged \
+	-v /lib/modules:/lib/modules:ro \
+	-v /usr/src:/usr/src:ro \
+	-v /sys/kernel/debug:/sys/kernel/debug:rw \
+	core-network-traffic-generator:latest
 ```
+
+If the host does not have matching headers for `uname -r`, the SCTP eBPF tracers will be skipped and the traffic generator will continue without them.
 
 ## Usage
 

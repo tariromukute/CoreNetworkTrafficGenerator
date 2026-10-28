@@ -19,6 +19,7 @@ import json
 import netifaces
 import socket
 import os
+import sys
 
 GTP_UDP_PORT = 2152
 
@@ -246,64 +247,56 @@ def setup_sctp_tracers(args, exit_program):
     # Dictionary to hold all active tracers
     tracers = {}
 
+    def register_tracer(name, module_name, class_name, output_name):
+        output_file = os.path.join(args.folder, output_name) if args.folder else None
+
+        try:
+            module = __import__(module_name, fromlist=[class_name])
+            tracer_class = getattr(module, class_name)
+            tracers[name] = tracer_class(
+                interval=args.period, csv_output=True, output_file=output_file
+            )
+        except Exception as exc:
+            print(
+                f"Warning: disabling SCTP {name.lower()} tracer: {exc}",
+                file=sys.stderr,
+            )
+
     # Only import the modules when needed to avoid dependencies for users
     # who don't use SCTP tracing
-
     if args.sctp_rtt:
-        from sctptrace.tools.sctp_rtt import SCTPRttTracer
-
-        rtt_file = os.path.join(args.folder, "sctp_rtt.csv") if args.folder else None
-        rtt_tracer = SCTPRttTracer(
-            interval=args.period, csv_output=True, output_file=rtt_file
+        register_tracer(
+            "RTT", "sctptrace.tools.sctp_rtt", "SCTPRttTracer", "sctp_rtt.csv"
         )
-        # rtt_tracer.setup()
-        tracers["RTT"] = rtt_tracer
 
     if args.sctp_rto:
-        from sctptrace.tools.sctp_rto import SCTPRtoTracer
-
-        rto_file = os.path.join(args.folder, "sctp_rto.csv") if args.folder else None
-        rto_tracer = SCTPRtoTracer(
-            interval=args.period, csv_output=True, output_file=rto_file
+        register_tracer(
+            "RTO", "sctptrace.tools.sctp_rto", "SCTPRtoTracer", "sctp_rto.csv"
         )
-        # rto_tracer.setup()
-        tracers["RTO"] = rto_tracer
 
     if args.sctp_bufmon:
-        from sctptrace.tools.sctp_bufmon import SCTPBufmonTracer
-
-        bufmon_file = (
-            os.path.join(args.folder, "sctp_bufmon.csv") if args.folder else None
+        register_tracer(
+            "Buffer",
+            "sctptrace.tools.sctp_bufmon",
+            "SCTPBufmonTracer",
+            "sctp_bufmon.csv",
         )
-        bufmon_tracer = SCTPBufmonTracer(
-            interval=args.period, csv_output=True, output_file=bufmon_file
-        )
-        # bufmon_tracer.setup()
-        tracers["Buffer"] = bufmon_tracer
 
     if args.sctp_stream:
-        from sctptrace.tools.sctp_streamutil import SCTPStreamTracer
-
-        stream_file = (
-            os.path.join(args.folder, "sctp_stream.csv") if args.folder else None
+        register_tracer(
+            "Stream",
+            "sctptrace.tools.sctp_streamutil",
+            "SCTPStreamTracer",
+            "sctp_stream.csv",
         )
-        stream_tracer = SCTPStreamTracer(
-            interval=args.period, csv_output=True, output_file=stream_file
-        )
-        # stream_tracer.setup()
-        tracers["Stream"] = stream_tracer
 
     if args.sctp_jitter:
-        from sctptrace.tools.sctp_jitter import SCTPJitterTracer
-
-        jitter_file = (
-            os.path.join(args.folder, "sctp_jitter.csv") if args.folder else None
+        register_tracer(
+            "Jitter",
+            "sctptrace.tools.sctp_jitter",
+            "SCTPJitterTracer",
+            "sctp_jitter.csv",
         )
-        jitter_tracer = SCTPJitterTracer(
-            interval=args.period, csv_output=True, output_file=jitter_file
-        )
-        # jitter_tracer.setup()
-        tracers["Jitter"] = jitter_tracer
 
     # Create a process to handle all tracers with proper signal handling
     if tracers:
@@ -326,12 +319,11 @@ def run_tracers(tracers, interval, exit_flag):
         exit_flag: Shared value to signal program exit
     """
 
-    # Dictionary to track which tracers have been cleaned up
-    cleaned_tracers = {name: False for name in tracers.keys()}
+    active_tracers = {}
 
     # Set up signal handlers for graceful shutdown
     def handle_exit_signal(signum, frame):
-        cleanup_tracers(tracers, cleaned_tracers)
+        cleanup_tracers(active_tracers, None)
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, handle_exit_signal)
@@ -339,17 +331,27 @@ def run_tracers(tracers, interval, exit_flag):
 
     # Setup all tracers
     for name, tracer in tracers.items():
-        tracer.setup()
+        try:
+            tracer.setup()
+            active_tracers[name] = tracer
+        except Exception as e:
+            print(f"Warning: tracer {name} disabled during setup: {e}")
+
+    if not active_tracers:
+        print("Warning: no SCTP tracers could be started")
+        return
+
+    cleaned_tracers = {name: False for name in active_tracers.keys()}
 
     try:
         while not exit_flag.value:
-            for name, tracer in tracers.items():
+            for name, tracer in active_tracers.items():
                 tracer.poll_events()  # Short timeout to check exit flag
             time.sleep(0.1)  # Small sleep to avoid CPU spinning
     except Exception as e:
         print(f"Error in tracer process: {e}")
     finally:
-        cleanup_tracers(tracers, cleaned_tracers)
+        cleanup_tracers(active_tracers, cleaned_tracers)
 
 
 def cleanup_tracers(tracers, cleaned_tracers):

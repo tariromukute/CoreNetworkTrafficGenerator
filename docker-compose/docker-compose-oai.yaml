@@ -19,7 +19,7 @@ services:
             retries: 30
         networks:
             public_net:
-               ipv4_address: 192.168.70.131
+                ipv4_address: 192.168.70.131
         profiles:
             - oai
     oai-udr:
@@ -37,7 +37,7 @@ services:
             - oai-nrf
         networks:
             public_net:
-               ipv4_address: 192.168.70.136
+                ipv4_address: 192.168.70.136
         profiles:
             - oai
     oai-udm:
@@ -54,7 +54,7 @@ services:
             - oai-nrf
         networks:
             public_net:
-               ipv4_address: 192.168.70.137
+                ipv4_address: 192.168.70.137
         profiles:
             - oai
     oai-ausf:
@@ -71,7 +71,7 @@ services:
             - oai-nrf
         networks:
             public_net:
-               ipv4_address: 192.168.70.138
+                ipv4_address: 192.168.70.138
         profiles:
             - oai
     oai-nrf:
@@ -86,7 +86,7 @@ services:
             - TZ=Europe/Paris
         networks:
             public_net:
-               ipv4_address: 192.168.70.130
+                ipv4_address: 192.168.70.130
         profiles:
             - oai
     oai-amf:
@@ -104,7 +104,7 @@ services:
             - oai-nrf
         networks:
             public_net:
-               ipv4_address: 192.168.70.132
+                ipv4_address: 192.168.70.132
         profiles:
             - oai
     oai-smf:
@@ -122,7 +122,7 @@ services:
             - oai-nrf
         networks:
             public_net:
-               ipv4_address: 192.168.70.133
+                ipv4_address: 192.168.70.133
         profiles:
             - oai
     oai-upf:
@@ -145,7 +145,7 @@ services:
         privileged: true
         networks:
             public_net:
-               ipv4_address: 192.168.70.134
+                ipv4_address: 192.168.70.134
             n3_net:
                 ipv4_address: 192.168.71.134
         profiles:
@@ -162,16 +162,16 @@ services:
             - /lib/modules:/lib/modules:ro
             - /usr/src:/usr/src:ro
             - /usr/include/linux:/usr/include/linux:ro
-            - /sys/kernel/debug:/sys/kernel/debug:rw 
+            - /sys/kernel/debug:/sys/kernel/debug:rw
             - ./oai/conf/oai-cn5g-ue.yaml:/opt/CoreNetworkTrafficGenerator/config/ue.yaml
             - ./oai/conf/oai-cn5g-gnb.yaml:/opt/CoreNetworkTrafficGenerator/config/gnb.yaml
             - ./output/:/var/log/CoreNetworkTrafficGenerator/
         command: python3 run.py --statistics --sctp --folder=/var/log/CoreNetworkTrafficGenerator/oai
         networks:
             public_net:
-               ipv4_address: 192.168.70.140
+                ipv4_address: 192.168.70.140
             n3_net:
-               ipv4_address: 192.168.71.140
+                ipv4_address: 192.168.71.140
         profiles:
             - cn-tg
     oai-ext-dn:
@@ -190,7 +190,7 @@ services:
             retries: 5
         networks:
             public_net:
-               ipv4_address: 192.168.70.135
+                ipv4_address: 192.168.70.135
         profiles:
             - oai
 

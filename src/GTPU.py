@@ -52,9 +52,9 @@ class GTPU():
                 self.start()
         except Exception as e:
             print(f"Error sending: {e}")
-        
+
     def run_gtpu_generator(self, cpu):
-        affinity_mask = { cpu } 
+        affinity_mask = { cpu }
         pid = 0
         os.sched_setaffinity(0, affinity_mask)
         while self.generate:
@@ -70,7 +70,7 @@ class GTPU():
                 delta = val - prev
                 prev = val
                 print("{} pkt/s".format(delta))
-            time.sleep(1) 
+            time.sleep(1)
 
     def stop(self):
         self.generate = False
