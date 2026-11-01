@@ -6,5 +6,33 @@ authors:
   - given-names: Tariro
     family-names: Mukute
     email: tariromukute@gmail.com
-url: https://github.com/tariromukute/cn-tg
+repository-code: https://github.com/tariromukute/CoreNetworkTrafficGenerator
 version: 0.1.0
+preferred-citation:
+  type: conference-paper
+  title: "5G Core Network Load Testing Traffic Generator: Emulating Real-World Traffic Scenarios"
+  authors:
+    - given-names: Tariro
+      family-names: Mukute
+      affiliation: University of Cape Town
+    - given-names: Albert A.
+      family-names: Lysko
+      affiliation: Council for Scientific and Industrial Research
+    - given-names: Joyce
+      family-names: Mwangama
+      affiliation: University of Cape Town
+  collection-title: "2025 IEEE Globecom Workshops (GC Wkshps)"
+  collection-type: proceedings
+  conference:
+    name: "2025 IEEE Globecom Workshops (GC Wkshps)"
+    city: Taipei
+    country: TW
+    date-start: 2025-12-08
+    date-end: 2025-12-12
+  publisher:
+    name: IEEE
+  start: 253
+  end: 259
+  year: 2025
+  month: 12
+  doi: 10.1109/gcwkshps68340.2025.11591035

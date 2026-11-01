@@ -1,5 +1,7 @@
 # Mobile core network traffic generator
 
+[![DOI](https://img.shields.io/badge/DOI-10.1109%2Fgcwkshps68340.2025.11591035-blue)](https://doi.org/10.1109/gcwkshps68340.2025.11591035)
+
 A comprehensive traffic generator for 5G Core Network testing with features for UE/gNodeB emulation, control/user plane traffic generation, SCTP protocol analysis, and 5GC compliance validation.
 
 ## Features
@@ -125,3 +127,23 @@ The traffic generator can be used to validate responses from the core network. T
 ## Notes
 
 For a tutorial on how to run or test the traffic generator with open source 5G networks see the [Performance study of Open Source 5G Core networks](docs/PERFORMANCE_STUDY_OF_5G_CORES.md) under docs folder.
+
+## Citation
+
+If you use this traffic generator in your research, please cite:
+
+T. Mukute, A. A. Lysko and J. Mwangama, "5G Core Network Load Testing Traffic Generator: Emulating Real-World Traffic Scenarios," in *2025 IEEE Globecom Workshops (GC Wkshps)*, Taipei, Taiwan, 2025, pp. 253–259, doi: [10.1109/gcwkshps68340.2025.11591035](https://doi.org/10.1109/gcwkshps68340.2025.11591035).
+
+```bibtex
+@inproceedings{mukute2025cntg,
+  author    = {Mukute, Tariro and Lysko, Albert A. and Mwangama, Joyce},
+  title     = {{5G} Core Network Load Testing Traffic Generator: Emulating Real-World Traffic Scenarios},
+  booktitle = {2025 IEEE Globecom Workshops (GC Wkshps)},
+  address   = {Taipei, Taiwan},
+  publisher = {IEEE},
+  pages     = {253--259},
+  year      = {2025},
+  month     = dec,
+  doi       = {10.1109/gcwkshps68340.2025.11591035}
+}
+```
