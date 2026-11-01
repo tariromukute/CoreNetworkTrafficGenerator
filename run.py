@@ -320,10 +320,12 @@ def run_tracers(tracers, interval, exit_flag):
     """
 
     active_tracers = {}
+    # Shared with the signal handler so a tracer is not cleaned up twice
+    cleaned_tracers = {}
 
     # Set up signal handlers for graceful shutdown
     def handle_exit_signal(signum, frame):
-        cleanup_tracers(active_tracers, None)
+        cleanup_tracers(active_tracers, cleaned_tracers)
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, handle_exit_signal)
@@ -340,8 +342,6 @@ def run_tracers(tracers, interval, exit_flag):
     if not active_tracers:
         print("Warning: no SCTP tracers could be started")
         return
-
-    cleaned_tracers = {name: False for name in active_tracers.keys()}
 
     try:
         while not exit_flag.value:
