@@ -1,17 +1,20 @@
 # Standard library imports
 import time
 import csv
-from argparse import ArgumentParser
+from argparse import ArgumentParser, BooleanOptionalAction
 
 # Define struct for arguments
 import signal
 from src.UESim import UESim
 from src.SCTP import SCTPClient
+from src.affinity import process_cpus
 from src.NGAPSim import GNB
+from src.ranlink import PipeLink
+from src.shmlink import ShmLink
 from src.userplane import Context, UserPlane, providers_from_config
 from src.bpf.ipstats import IPStats
 from src.UE import *
-from multiprocessing import Process, active_children, Pipe, Value
+from multiprocessing import Process, active_children, Value
 import logging
 import yaml
 import json
@@ -145,6 +148,52 @@ def create_ues(ue_profiles, x):
     if p < x:
         dict_list = dict_list[:p]
     return dict_list, p
+
+
+def split_ues(ue_list, k):
+    """
+    Splits a gNB's UEs across its k UE simulators, in turn, so that a UE keeps its place in the gNB's
+    start order (simulator j has the gNB's UEs j, j + k, ...). Empty parts are left out.
+    """
+    parts = [{} for _ in range(k)]
+    for p, (ue_id, ue) in enumerate(ue_list.items()):
+        parts[p % k][ue_id] = ue
+    return [part for part in parts if part]
+
+
+def share(total, n, j):
+    """
+    Simulator j's share of a per-gNB limit split across n simulators: they add up to total, and each
+    gets at least one while total > 0 (0 stays 0, the open loop).
+    """
+    if total <= 0:
+        return 0
+    return max(1, total // n + (1 if j < total % n else 0))
+
+
+def make_link(kind, stop, ring_kib=32):
+    """
+    A UE-RAN link of this kind (--link): pipe (PipeLink, a multiprocessing.Pipe) or shm (ShmLink, two
+    rings of ring_kib KiB in shared memory with eventfd wake-ups; Linux on x86-64). A full link blocks
+    its sender until stop().
+    """
+    if kind == "shm":
+        return ShmLink(stop=stop, size=ring_kib * 1024)
+    if kind == "pipe":
+        return PipeLink(stop=stop)
+    raise ValueError(f"unknown link type {kind!r}")
+
+
+def run_process(target, cpu, links, own):
+    """
+    A UE simulator's or a gNB's process. It closes the links that are not its own, which a forked
+    child holds as well, so that a peer's exit ends a link (the process's own ends are attached by
+    target).
+    """
+    for link in links:
+        if link not in own:
+            link.close()
+    target(cpu)
 
 
 #######################################################################
@@ -401,7 +450,8 @@ def main(args):
         except yaml.YAMLError as exc:
             print(exc)
 
-    num_cpus = len(os.sched_getaffinity(0))
+    cpus = sorted(os.sched_getaffinity(0))
+    num_cpus = len(cpus)
     exit_program = multiprocessing.Value("i", 0)
 
     interfaces_map = get_network_interfaces_map()
@@ -449,47 +499,63 @@ def main(args):
         state_writer.writerow(list(fg_msg_codes.keys()))
 
     processes = []
-    num_gnbs = args.gnbs or (num_cpus - 1 if num_cpus > 1 else 1)
+    # Each gNB process has --ue-procs-per-ran UE simulators, each on a UE-RAN link of its own
+    per_ran = max(1, args.ue_procs_per_ran)
+    num_gnbs = args.gnbs or max(1, (num_cpus - 1) // (per_ran + 1))
     ue_lists, num_ues = create_ues(ue_config["ue_profiles"], num_gnbs)
+    # A CPU per process (see src/affinity.py), or no pinning
+    placement = iter(process_cpus(len(ue_lists), cpus, per_ran + 1) if args.pin else [None] * ((per_ran + 1) * len(ue_lists)))
+    links = []
     for i in range(len(ue_lists)):
-        sctp_client = SCTPClient(server_config)
-        ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
-        upf_to_ue, ue_to_upf = Pipe(duplex=True)
+        sctp_client = SCTPClient(server_config, nodelay=args.sctp_nodelay)
+        # The gNB's UEs, split across its UE simulators; a full link blocks its sender until the run ends
+        sims = split_ues(ue_lists[i], per_ran)
+        gnb_links = [make_link(args.link, lambda: exit_program.value, args.link_ring_kib) for _ in sims]
+        links += gnb_links
         config = {}
         gnb = GNB(
             exit_program,
             sctp_client,
             userplane,
             server_config,
-            ngap_to_ue,
-            ue_to_ngap,
-            upf_to_ue,
-            ue_to_upf,
+            [link.ran_end for link in gnb_links],
             args.verbose,
+            gnb_index=i,
+            ngap_fastpath=args.ngap_fastpath,
         )
-        ueSim = UESim(
-            ue_fg_msg_states,
-            exit_program,
-            ue_lists[i],
-            ngap_to_ue,
-            ue_to_ngap,
-            upf_to_ue,
-            ue_to_upf,
-            args.interval,
-            args.statistics,
-            args.verbose,
-            ue_sim_time,
-        )
-        # % num_cpus so that on single CPU, affirnity is set to CPU 0
+        for k, (sim_ues, link) in enumerate(zip(sims, gnb_links)):
+            # UE simulator j: one per gNB (j = i) by default. With several, they take turns to start
+            # the gNB's UEs, so that the gNB still starts one every interval, and share --inflight
+            j = i * per_ran + k
+            ueSim = UESim(
+                ue_fg_msg_states,
+                exit_program,
+                sim_ues,
+                link.ue_end,
+                args.interval * len(sims),
+                args.statistics,
+                args.verbose,
+                ue_sim_time,
+                folder=args.folder,
+                index=j,
+                poisson=args.poisson,
+                seed=args.seed + j,
+                inflight=share(args.inflight, len(sims), k),
+                ue_timeout=args.ue_timeout,
+                phase=args.interval * k,
+            )
+            processes.append(
+                Process(name=f"ueSIM-{j}", target=run_process, args=(ueSim.run, next(placement), links, [link]))
+            )
         processes.append(
-            Process(name=f"ueSIM-{i}", target=ueSim.run, args=((i + 1) % num_cpus,))
-        )
-        processes.append(
-            Process(name=f"gnb-{i}", target=gnb.run, args=((i + 1) % num_cpus,))
+            Process(name=f"gnb-{i}", target=run_process, args=(gnb.run, next(placement), links, gnb_links))
         )
 
     for process in processes:
         process.start()
+    # The processes have their ends of the links
+    for link in links:
+        link.close()
 
     # SIGTERM (docker/nerdctl stop) ends the run like Ctrl-C. Set after the children are
     # started, so that terminate() still ends them.
@@ -615,13 +681,61 @@ if __name__ == "__main__":
         "--interval",
         type=float,
         default=0,
-        help="Interval between starting UEs, in seconds (0: all at once)",
+        help="Interval between starting UEs, in seconds, per gNB (0: all at once)",
+    )
+    parser.add_argument(
+        "--poisson",
+        action="store_true",
+        help="Start UEs as a Poisson process whose mean gap is the interval",
+    )
+    parser.add_argument("--seed", type=int, default=1, help="Seed of the Poisson starts (gNB i uses seed + i)")
+    parser.add_argument(
+        "--inflight",
+        type=int,
+        default=0,
+        help="Closed loop: at most this many UEs per gNB in their procedures at once (0: open loop); a UE "
+        "is done at the end of its procedures or, with 5GSMPDUSessionTransmission, once it holds its PDU "
+        "session (at its PDU Session Establishment Accept)",
+    )
+    parser.add_argument(
+        "--ue-timeout",
+        type=float,
+        default=30.0,
+        help="With --inflight: free the place of a UE that has not finished after this many seconds",
     )
     parser.add_argument(
         "--gnbs",
         type=int,
         default=0,
-        help="Number of gNB processes, each with its own NG setup (default: one per CPU, less one)",
+        help="Number of gNBs, each with its own NG setup, a process and --ue-procs-per-ran UE simulator "
+        "processes (default: the CPUs less one, over the processes per gNB)",
+    )
+    parser.add_argument(
+        "--ue-procs-per-ran",
+        type=int,
+        default=1,
+        help="UE simulator processes per gNB process, each on a link of its own; a gNB's UEs are split "
+        "across them, and -i and --inflight stay per gNB (default 1)",
+    )
+    parser.add_argument(
+        "--link",
+        choices=["pipe", "shm"],
+        default="pipe",
+        help="The UE-RAN link between each UE simulator and its gNB: pipe (a multiprocessing pipe) or shm "
+        "(rings in shared memory, eventfd wake-ups; Linux on x86-64) (default pipe)",
+    )
+    parser.add_argument(
+        "--link-ring-kib",
+        type=int,
+        default=32,
+        help="With --link shm: each ring's size in KiB, a power of two (two rings per link); the default holds "
+        "about as many messages as a pipe (default 32)",
+    )
+    parser.add_argument(
+        "--pin",
+        action=BooleanOptionalAction,
+        default=True,
+        help="Pin each UE simulator and gNB process to a CPU of its own (--no-pin: let the scheduler place them)",
     )
     parser.add_argument(
         "-n",
@@ -672,6 +786,21 @@ if __name__ == "__main__":
         help="Period/interval (seconds) for printing statistics",
     )
 
+    parser.add_argument(
+        "--sctp-nodelay",
+        action=BooleanOptionalAction,
+        default=True,
+        help="Send each NGAP message at once (SCTP_NODELAY); --no-sctp-nodelay keeps Nagle's algorithm",
+    )
+    parser.add_argument(
+        "--ngap-fastpath",
+        action=BooleanOptionalAction,
+        default=True,
+        help="Build the gNB's NGAP messages of a registration, a PDU session's setup and a UE context release from "
+        "byte templates and parse the downlink ones without pycrate (src/ngapfast.py); --no-ngap-fastpath: "
+        "pycrate for every message",
+    )
+
     # Add SCTP-specific arguments
     parser.add_argument(
         "--sctp", action="store_true", help="Enable all SCTP tracing modules"
@@ -695,6 +824,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+    if args.link_ring_kib < 1 or args.link_ring_kib & (args.link_ring_kib - 1):
+        parser.error(f"--link-ring-kib must be a power of two, not {args.link_ring_kib}")
 
     # If --sctp is specified, enable all SCTP tracing modules
     if args.sctp:

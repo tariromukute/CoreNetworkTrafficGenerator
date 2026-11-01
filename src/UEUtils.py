@@ -7,6 +7,7 @@ from pycrate_mobile.NAS import FGMMRegistrationRequest, FGMMMODeregistrationRequ
 from pycrate_mobile.NAS5G import parse_NAS5G
 from CryptoMobile.Milenage import Milenage, make_OPc
 from CryptoMobile.conv import conv_501_A2, conv_501_A4, conv_501_A6, conv_501_A7, conv_501_A8
+from src import nascache
 
 logger = logging.getLogger('__UESim__') 
 
@@ -171,7 +172,7 @@ def security_prot_decrypt(Msg, ue):
         # decrypt message
         try:
             Msg.decrypt(ue.k_nas_enc, dir=1, fgea=ue.CiphAlgo, seqnoff=0, bearer=1)
-            Msg, err = parse_NAS5G(nas_plaintext(Msg))
+            Msg, err = nascache.parse_NAS5G(nas_plaintext(Msg))
             if err:
                 return None
             return Msg

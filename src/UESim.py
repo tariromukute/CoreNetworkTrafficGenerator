@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import logging
@@ -18,6 +19,18 @@ import multiprocessing
 import json
 import csv
 import queue
+import random
+from src.pacing import InFlight, start_offsets
+from src import nascache, nasfast
+from src.ranlink import (CONNECT, DL_NAS, RELEASE, UL_NAS, UP_CONTROL, FrameError, LinkClosed, LinkStopped,
+                         connect_payload, is_plain_registration_request, up_control_payload)
+import src.UE as ue_module
+
+def _nas_fastpath():
+    """ Whether the UEs may take their messages from src/nasfast.py, which gives the handlers the
+    fields they read and bytes, not pycrate messages: not when the messages are validated, logged or
+    used by the compliance tests """
+    return g_verbose < 3 and ue_module.g_verbose < 3 and nasfast.enabled()
 
 def interrupt_handler(ueSim, ask, signum, frame):
     if ask:
@@ -32,26 +45,45 @@ import threading
 # Create a lock object
 lock = threading.Lock()
 num_threads = 2
+# The UE's own sign of the (R)AN connection's release (UE.py, UEMessages.py): what a RELEASE from the
+# RAN becomes for the dispatcher
+AN_RELEASE = b'F'
+# When a UE has finished, for the closed loop (--inflight): what it last "sent" frees its place.
+#   5GMMANConnectionReleaseComplete  the end of its procedure list (internal): after the Registration
+#       Complete of a registration-only profile, or after the AN release that ends a deregistration
+#   5GSMPDUSessionTransmission       it holds its PDU session (the pdu profile's last procedure, which never
+#       ends): its PDU Session Establishment Accept has come, in the PDU Session Resource Setup Request
+#       whose response the gNB sent before it handed the UE the NAS PDU (NGAPSim), and the session has
+#       gone to the user plane; the UE keeps it until CN-TG stops
+CLOSED_LOOP_DONE = frozenset(('5GMMANConnectionReleaseComplete', '5GSMPDUSessionTransmission'))
 class UESim:
     exit_flag = False
     global start_time
 
-    def __init__(self, ue_fg_msg_states, exit_program, ue_list, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, interval, statistics, verbose, ue_sim_time):
+    def __init__(self, ue_fg_msg_states, exit_program, ue_list, link, interval, statistics, verbose, ue_sim_time, folder='.', index=None,
+                 poisson=False, seed=None, inflight=0, ue_timeout=30.0, phase=0.0):
         global g_verbose
         g_verbose = verbose
-        self.ngap_to_ue = ngap_to_ue
-        self.ue_to_ngap = ue_to_ngap
-        self.upf_to_ue = upf_to_ue
-        self.ue_to_upf = ue_to_upf
+        # The UE-RAN link to the gNB (src/ranlink.py): this simulator's end, a RanLink
+        self.link = link
         self.statistics = statistics
         self.ue_list = ue_list
         self.number = len(ue_list)
         self.interval = interval
+        # When this simulator's first UE starts, in s: the UE simulators of one gNB take turns
+        self.phase = phase
         self.ue_sim_time = ue_sim_time
+        self.folder = folder   # where procedure_times_<index>.csv and .json go
+        self.index = index
+        # When to start the UEs (src/pacing.py): every interval s, or as a Poisson process with that mean
+        # gap; with inflight > 0, also at most inflight UEs in their procedures at once (a closed loop)
+        self.poisson = poisson
+        self.rng = random.Random(seed)
+        self.inflight = InFlight(inflight, ue_timeout) if inflight else None
         self.exit_program = exit_program 
         self.procedures_count = {}
         self.ue_fg_msg_states = ue_fg_msg_states
-        # init() and the workers all write to the pipes to the gNB: one write at a time
+        # init() and the workers all send on the link to the gNB: one send at a time
         self.send_lock = threading.Lock()
         self.worker_queues = []
         global logger
@@ -67,9 +99,12 @@ class UESim:
         else:
             logging.basicConfig(level=logging.DEBUG)
 
-    def dispatcher(self, data: bytes, ueId):
-        received_at = time.time()
+    def dispatcher(self, data: bytes, ueId, received_at=None, ul_sent=None):
+        received_at = received_at or time.time()
         ue = self.ue_list[ueId]
+        # When the gNB sent the UE's uplink messages: these replace the times taken when they were built
+        for code, sent_at in ul_sent or ():
+            ue.procedure_times[code] = sent_at
         if data == None:
             tx_nas_pdu, ue, sent_type = ue.next_action(None, None) if g_verbose <= 3 else ue.next_compliance_test(None, None)
             ue.procedure_times[fg_msg_codes[sent_type]] = time.time()
@@ -80,30 +115,35 @@ class UESim:
         if data == b'F':
             return ue.next_action(data, '5GMMANConnectionReleaseComplete') if g_verbose <= 3 else ue.next_compliance_test(data, '5GMMANConnectionReleaseComplete')
         
-        Msg, err = parse_NAS5G(data)
-        if err:
-            return None, ue
-        
-        msg_type = Msg._name
-        
-        if msg_type == '5GMMSecProtNASMessage':
-            try:
-                Msg = security_prot_decrypt(Msg, ue)
-                if Msg and Msg._by_name.count('5GMMSecurityModeCommand'):
-                    Msg = Msg['5GMMSecurityModeCommand']
-                    msg_type = Msg._name
-                elif Msg:
-                    msg_type = Msg._name
-                else:
-                    logger.error("Unexpected None value for Decrypted 5GMMSecProtNASMessage Msg")
-                    return None, ue, None
-            except err:
-                logger.exception(err)
-                return None, ue, None
+        # The messages of a registration, PDU session and deregistration without pycrate (src/nasfast.py)
+        fast = nasfast.downlink(data, ue) if _nas_fastpath() else None
+        if fast is not None:
+            Msg, msg_type = fast
+        else:
+            Msg, err = nascache.parse_NAS5G(data)
+            if err:
+                return None, ue
 
-        if Msg._name == '5GMMDLNASTransport':
-            Msg = dl_nas_transport_extract(Msg, ue)
             msg_type = Msg._name
+
+            if msg_type == '5GMMSecProtNASMessage':
+                try:
+                    Msg = security_prot_decrypt(Msg, ue)
+                    if Msg and Msg._by_name.count('5GMMSecurityModeCommand'):
+                        Msg = Msg['5GMMSecurityModeCommand']
+                        msg_type = Msg._name
+                    elif Msg:
+                        msg_type = Msg._name
+                    else:
+                        logger.error("Unexpected None value for Decrypted 5GMMSecProtNASMessage Msg")
+                        return None, ue, None
+                except err:
+                    logger.exception(err)
+                    return None, ue, None
+
+            if Msg._name == '5GMMDLNASTransport':
+                Msg = dl_nas_transport_extract(Msg, ue)
+                msg_type = Msg._name
         
         # TODO handle recording of procedure
         if msg_type == '5GMMConfigurationUpdateCommand': # Ignore 5GMMConfigurationUpdateCommand
@@ -130,13 +170,26 @@ class UESim:
         return None, ue_, sent_type
     
 
-    def _send_ngap(self, msg):
-        with self.send_lock:
-            self.ue_to_ngap.send(msg)
+    def _send_nas(self, ue_id, nas_pdu, code):
+        """ A UE's uplink NAS message, with its message code: the initial Registration Request starts
+        the UE's connection (CONNECT, the gNB's Initial UE Message), any other goes in UL_NAS """
+        if is_plain_registration_request(nas_pdu):
+            self._send(CONNECT, ue_id, connect_payload(nas_pdu), code)
+        else:
+            self._send(UL_NAS, ue_id, nas_pdu, code)
 
-    def _send_upf(self, msg):
-        with self.send_lock:
-            self.ue_to_upf.send(msg)
+    def _send_up_control(self, ue_id, address, supi):
+        """ A PDU session is up at address: the gNB hands it to the user plane """
+        self._send(UP_CONTROL, ue_id, up_control_payload(address, supi))
+
+    def _send(self, kind, ue_id, payload, code=0):
+        try:
+            with self.send_lock:
+                self.link.send(kind, ue_id, payload, code)
+        except LinkStopped:
+            logger.debug(f"UE {ue_id}: the run ended before the link to the gNB took its message")
+        except LinkClosed as e:
+            logger.warning(f"UE {ue_id}: the link to the gNB has ended ({e}); its message is lost")
 
     def _load_ngap_to_ue_thread(self):
         """ Load the threads that handle NAS DownLink messages from gNB
@@ -154,12 +207,27 @@ class UESim:
         return threads
 
     def _ngap_to_ue_reader(self):
-        """ Thread function that reads NAS DownLink messages from gNB and hands them to the workers """
+        """ Thread function that reads the gNB's events from the link and hands them to the workers """
         while not self.exit_program.value:
-            if not self.ue_to_ngap.poll(0.5):   # so that the loop sees exit_program
+            try:
+                event = self.link.recv(0.5)   # a timeout, so that the loop sees exit_program
+            except LinkClosed:
+                logger.info("The gNB has closed the link")
+                return
+            except FrameError as e:
+                logger.error(f"A frame from the gNB that is not one: {e}")
                 continue
-            data, ueId = self.ue_to_ngap.recv()
-            self.worker_queues[ueId % len(self.worker_queues)].put((data, ueId))
+            if event is None:
+                continue
+            # A NAS PDU (or the release), the time the gNB received it, when it sent the UE's uplink messages
+            if event.kind == DL_NAS:
+                data = event.payload
+            elif event.kind == RELEASE:
+                data = AN_RELEASE
+            else:
+                continue
+            ueId = event.ue_id
+            self.worker_queues[ueId % len(self.worker_queues)].put((data, ueId, event.received_at, event.stamps))
 
     def _ngap_to_ue_thread_function(self, messages):
         """ Thread function that will handle NAS DownLink messages from gNB 
@@ -171,23 +239,23 @@ class UESim:
         """
         while not self.exit_program.value:
             try:
-                data, ueId = messages.get(timeout=0.5)
+                data, ueId, received_at, ul_sent = messages.get(timeout=0.5)
             except queue.Empty:
                 continue
             if not data:
                 continue
             try:
-                self._handle_downlink(data, ueId)
+                self._handle_downlink(data, ueId, received_at, ul_sent)
             except Exception:
                 logger.exception(f"UE {ueId}: handling a downlink message failed")
 
-    def _handle_downlink(self, data, ueId):
-        tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId)
+    def _handle_downlink(self, data, ueId, received_at=None, ul_sent=None):
+        tx_nas_pdu, ue, sent_type = self.dispatcher(data, ueId, received_at, ul_sent)
         self.ue_list[int(ue.supi[-10:])] = ue
         if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
-            self._send_ngap((tx_nas_pdu, ueId))
+            self._send_nas(ueId, tx_nas_pdu, fg_msg_codes[sent_type])
         elif tx_nas_pdu:
-            self._send_upf((tx_nas_pdu, ueId, ue.supi))
+            self._send_up_control(ueId, tx_nas_pdu, ue.supi)
             
         if sent_type == '5GMMRegistrationComplete' or sent_type == '5GSMPDUSessionEstabComplete' or sent_type == '5GSMPDUSessionTransmissionComplete':
             # send the next procedure
@@ -195,11 +263,13 @@ class UESim:
             self.ue_list[int(ue.supi[-10:])] = ue
 
             if tx_nas_pdu and sent_type != '5GSMPDUSessionTransmission':
-                self._send_ngap((tx_nas_pdu, ueId))
+                self._send_nas(ueId, tx_nas_pdu, fg_msg_codes[sent_type])
             elif tx_nas_pdu:
-                self._send_upf((tx_nas_pdu, ueId, ue.supi))
+                self._send_up_control(ueId, tx_nas_pdu, ue.supi)
         
         # TODO: handle recording of operation
+        if sent_type in CLOSED_LOOP_DONE and self.inflight:
+            self.inflight.release(ueId)   # the UE has finished, or holds its session: the next may start
         if sent_type is None: # Leave state as is, e.g., on ConfigurationUpdateCommand
             return
         msg_code = fg_msg_codes[sent_type] - FGMM_MIN_TYPE
@@ -214,11 +284,20 @@ class UESim:
         global start_time
         start_time = time.time()
         self.procedures_count["NULL"] = len(self.ue_list.items()) # All UEs are initialised with last_procedure = NULL, set count to the number of UEs
-        for supi, ue in self.ue_list.items():
+        ues = [ue for ue in self.ue_list.values() if ue]
+        offsets = start_offsets(len(ues), self.interval, self.poisson, self.rng)
+        for ue, offset in zip(ues, offsets):
+            offset += self.phase
+            # An absolute schedule: a late start does not delay the later ones
+            wait = start_time + offset - time.time()
+            if wait > 0:
+                time.sleep(wait)
+            if self.inflight and not self.inflight.acquire(int(ue.supi[-10:]), stop=lambda: self.exit_program.value):
+                return
             if (ue):
                 tx_nas_pdu, ue_, sent_type = ue.next_action(None, ) if g_verbose <= 3 else ue.next_compliance_test(None, )
                 self.ue_list[int(ue.supi[-10:])] = ue
-                self._send_ngap((tx_nas_pdu, int(ue.supi[-10:])))
+                self._send_nas(int(ue.supi[-10:]), tx_nas_pdu, fg_msg_codes[sent_type])
 
                 msg_code = fg_msg_codes[sent_type] - FGMM_MIN_TYPE
                 self.procedures_count[ue.current_procedure] = self.procedures_count.get(ue.current_procedure, 1) - 1
@@ -227,9 +306,14 @@ class UESim:
                     self.ue_fg_msg_states[msg_code] += 1
                 
                 ue.current_procedure = msg_code
-                if self.interval:
-                    time.sleep(self.interval)
 
+
+    def _expire_inflight(self):
+        """ Free the places of UEs that did not finish in time, so the closed loop goes on """
+        while not self.exit_program.value:
+            time.sleep(0.5)
+            for ue_id in self.inflight.expire():
+                logger.warning(f"UE {ue_id} did not finish within {self.inflight.timeout} s: its place is freed")
 
     def show_results(self):
         global start_time
@@ -295,10 +379,12 @@ class UESim:
         
         message_codes = ["UE"] + list(range(FGMM_MIN_TYPE, FGSM_MAX_TYPE + 1))
 
-        with open(f'procedure_times_{psutil.Process().cpu_num()}.json', 'a+') as f:
+        # One pair of files per UE simulator, in the output folder
+        name = os.path.join(self.folder, f'procedure_times_{self.index if self.index is not None else psutil.Process().cpu_num()}')
+        with open(f'{name}.json', 'w') as f:
                 json.dump(jsonArray, f)
 
-        with open(f'procedure_times_{psutil.Process().cpu_num()}.csv', 'a+') as csvfile:
+        with open(f'{name}.csv', 'w') as csvfile:
             hwriter = csv.writer(csvfile)
             hwriter.writerow(headers)
             writer = csv.DictWriter(csvfile, fieldnames=message_codes)
@@ -317,8 +403,9 @@ class UESim:
         
     def run(self, cpu_core):
         """ Run the NAS thread """
-        affinity_mask = { cpu_core } 
-        os.sched_setaffinity(0, affinity_mask)
+        if cpu_core is not None:
+            os.sched_setaffinity(0, {cpu_core})
+        self.link.attach()
         signal.signal(signal.SIGINT, partial(interrupt_handler, self, True))
         logger.info(f"Running {multiprocessing.current_process().name} with {len(self.ue_list)} UEs on CPU {psutil.Process().cpu_num()}")
 
@@ -326,12 +413,13 @@ class UESim:
         time.sleep(5)
         # Handle the 5GC's answers while the UEs are still being started (-i paces the starts)
         self.ngap_to_ue_thread = self._load_ngap_to_ue_thread()
+        if self.inflight:
+            threading.Thread(target=self._expire_inflight, daemon=True).start()
         self.init()
         # self.upf_to_ue_thread = self._load_upf_to_ue_thread()
         while not self.exit_program.value:
             time.sleep(1)
   
-        self.ngap_to_ue.close()
         self.stop()
 
     def stop(self):
