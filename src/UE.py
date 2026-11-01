@@ -162,6 +162,7 @@ class UE:
         self.MsgInBytes = None
         self.RcvMsgInBytes = None
         self.IpAddress = None
+        self.ul_nas_count = 0  # uplink NAS COUNT of the current NAS security context
         self.CiphAlgo = None
         self.IntegAlgo = None
         self.start_time = None
@@ -197,6 +198,8 @@ class UE:
             self.amf = config['amf']
             self.imei = config['imei']
             self.imeiSv = config['imeiSv']
+            # PDU sessions to establish, as in UERANSIM: type, apn (the DNN) and slice
+            self.sessions = config.get('sessions') or []
             sn_name = "5G:mnc{:03d}.mcc{:03d}.3gppnetwork.org".format(
                 int(config['mnc']), int(config['mcc']))
             self.sn_name = sn_name.encode()
@@ -272,7 +275,7 @@ class UE:
         
         DecryptMsg = None
         if Msg !=  None and Msg._name == '5GMMSecProtNASMessage':
-            DecryptMsg, e = parse_NAS5G(Msg._dec_msg)
+            DecryptMsg, e = parse_NAS5G(nas_plaintext(Msg))
         logger.debug(f" \n|----------------------------------------------------------------------------------------------------------------|\n\
         UE {self.supi} sending message \n\
 |----------------------------------------------------------------------------------------------------------------|\n\

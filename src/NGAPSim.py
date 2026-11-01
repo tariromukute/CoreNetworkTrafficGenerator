@@ -5,6 +5,7 @@ import threading
 import sys
 import socket
 from src.SCTP import SCTPClient
+from src.userplane import Session
 from pycrate_asn1dir import NGAP
 from pycrate_mobile.NAS import parse_NAS5G
 from pycrate_core import utils_py3
@@ -131,6 +132,7 @@ def pdu_session_resource_setup(PDU):
     # # TODO: implement the setup logic
 
     return PDU, pdu_session_nas_pdu, { 'ran_ue_ngap_id': ran_ue_ngap_id, 'amf_ue_ngap_id': amf_ue_ngap_id,
+                                      'pdu_session_id': pdu_session_resource_setup_list_su_req[0]['pDUSessionID'],
                                       'qos_identifier': qos_identifiers[0]['qosFlowIdentifier'],
                                        'ul_up_transport_layer_information': ul_up_transport_layer_information,
                                         'dl_up_transport_layer_information': dl_up_transport_layer_information }
@@ -170,10 +172,16 @@ import threading
 # Create a lock object
 ue_to_ngap_lock = threading.Lock()
 ngap_to_ue_lock = threading.Lock()
-num_threads = 2
+# NGAP.NGAP_PDU_Descriptions.NGAP_PDU is one shared, stateful ASN.1 object: setting or decoding a
+# value and encoding it must not interleave between threads, or one thread encodes the other's
+# message (one UE's message is sent twice, another's never).
+ngap_pdu_lock = threading.Lock()
+# One thread per direction keeps each UE's NGAP messages in order (NAS COUNT, procedure order);
+# encoding and decoding are serialised by ngap_pdu_lock and the GIL anyway.
+num_threads = 1
 class GNB():
 
-    def __init__(self, gnb_exit_flag, sctp: SCTPClient, gtpu, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose) -> None:
+    def __init__(self, gnb_exit_flag, sctp: SCTPClient, userplane, server_config: dict, ngap_to_ue, ue_to_ngap, upf_to_ue, ue_to_upf, verbose) -> None:
         global logger
         # Set logging level based on the verbose argument
         if verbose == 0:
@@ -187,7 +195,7 @@ class GNB():
         self.exit_flag = gnb_exit_flag
         global gtpIp
         gtpIp = server_config['gtpIp']
-        self.gtpu = gtpu
+        self.userplane = userplane  # src.userplane.UserPlane: the sessions' traffic
         self.ues = {} # key -> ran_ue_ngap_id = { amf_ue_ngap_id: ue.supi[-10:], qfi,  ul_teid, dl_teid }, value -> amf_ue_ngap_id assigned by core network
         self.sctp = sctp
         self.ngap_to_ue = ngap_to_ue
@@ -226,10 +234,11 @@ class GNB():
     def initiate(self) -> None:
         # Send NGSetupRequest
         IEs = []
-        PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
-        ng_setup_request(PDU, IEs, self)
-        ng_setup_pdu_aper = PDU.to_aper()
-        logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+        with ngap_pdu_lock:
+            PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+            ng_setup_request(PDU, IEs, self)
+            ng_setup_pdu_aper = PDU.to_aper()
+            logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
                 gNB sending message to 5GC\n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 {PDU.show()}\n\
@@ -265,19 +274,31 @@ class GNB():
                 with ngap_to_ue_lock:
                     data = self.sctp.recv()
                 if data:
-                    PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
-                    PDU.from_aper(data)
-                    logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                    with ngap_pdu_lock:
+                        PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+                        PDU.from_aper(data)
+                        logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
                 gNB received message from 5GC\n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 {PDU.show()}\n\
 |----------------------------------------------------------------------------------------------------------------|\n\n")
-                    procedureCode = PDU.get_val()[1]['procedureCode']
-                    procedure_func = downlink_mapper.get(procedureCode)
-                    if not procedure_func:
-                        # logger.debug(f"Received downlink procedure {procedureCode} without handler mapped to it")
-                        continue
-                    ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
+                        procedureCode = PDU.get_val()[1]['procedureCode']
+                        procedure_func = downlink_mapper.get(procedureCode)
+                        if not procedure_func:
+                            # logger.debug(f"Received downlink procedure {procedureCode} without handler mapped to it")
+                            continue
+                        ngap_pdu, nas_pdu, ue_ = procedure_func(PDU)
+                        ngap_aper = None
+                        if ngap_pdu:
+                            logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                gNB sending message to 5GC\n\
+|----------------------------------------------------------------------------------------------------------------|\n\
+{ngap_pdu.show()}\n\
+|----------------------------------------------------------------------------------------------------------------|\n\n")
+                            ngap_aper = ngap_pdu.to_aper()
+                    if procedureCode == 41 and ue_:
+                        # UE Context Release: its sessions' traffic stops
+                        self.userplane.release_ue(ue_['ran_ue_ngap_id'])
                         
                     if ue_:
                         if not ue_['ran_ue_ngap_id'] in self.ues:
@@ -292,13 +313,9 @@ class GNB():
                             self.ues[ue_['ran_ue_ngap_id']]['ul_teid'] = ul_teid
                             self.ues[ue_['ran_ue_ngap_id']]['dl_teid'] = dl_teid
                             self.ues[ue_['ran_ue_ngap_id']]['upf_address'] = upf_address
-                    if ngap_pdu:
-                        logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
-                gNB sending message to 5GC\n\
-|----------------------------------------------------------------------------------------------------------------|\n\
-{ngap_pdu.show()}\n\
-|----------------------------------------------------------------------------------------------------------------|\n\n")
-                        self.sctp.send(ngap_pdu.to_aper())
+                            self.ues[ue_['ran_ue_ngap_id']]['pdu_session_id'] = ue_.get('pdu_session_id')
+                    if ngap_aper:
+                        self.sctp.send(ngap_aper)
                     if nas_pdu:
                         self.ngap_to_ue.send((nas_pdu, ue_['ran_ue_ngap_id']))
             except Exception as e:
@@ -341,19 +358,21 @@ class GNB():
                         logger.error("Error parsing NAS message: %s", err)
                         continue
                     amf_ue_ngap_id = self.ues.get(ran_ue_ngap_id).get('amf_ue_ngap_id') if self.ues.get(ran_ue_ngap_id) else None
-                    PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
                     IEs = []
                     IEs.append({'id': 38, 'criticality': 'reject', 'value': ('NAS-PDU', Msg.to_bytes())})
                     procedure_func = ue_uplink_mapper.get(Msg._name)
                     if not procedure_func:
                         procedure_func = uplink_nas_transport
-                    procedure_func(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id }, self)
-                    logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
+                    with ngap_pdu_lock:
+                        PDU = NGAP.NGAP_PDU_Descriptions.NGAP_PDU
+                        procedure_func(PDU, IEs, {'amf_ue_ngap_id': amf_ue_ngap_id, 'ran_ue_ngap_id': ran_ue_ngap_id }, self)
+                        logger.debug(f"\n|----------------------------------------------------------------------------------------------------------------|\n\
                 gNB sending message to 5GC\n\
 |----------------------------------------------------------------------------------------------------------------|\n\
 {PDU.show()}\n\
 |----------------------------------------------------------------------------------------------------------------|\n\n")
-                    self.sctp.send(PDU.to_aper())
+                        ngap_aper = PDU.to_aper()
+                    self.sctp.send(ngap_aper)
             except Exception as e:
                 logger.error(f"Error receiving message from UESim: {e}")
                 # IF error occurs, likely from SCTP end program
@@ -375,12 +394,17 @@ class GNB():
         """
         while not self.exit_flag.value:
             try:
-                # data is the ip address in bytes
-                data, ran_ue_ngap_id = self.upf_to_ue.recv()
+                # data is the ip address in bytes; the UE also sends its SUPI
+                msg = self.upf_to_ue.recv()
+                data, ran_ue_ngap_id = msg[0], msg[1]
                 if data:
                     # ran_ue_ngap_id = int(ue.supi[-10:])
                     ue = self.ues.get(ran_ue_ngap_id)
-                    self.gtpu.send(ue, data)
+                    self.userplane.add_session(Session(
+                        supi=msg[2] if len(msg) > 2 else None, ue_ip=socket.inet_ntoa(data),
+                        pdu_session_id=ue.get('pdu_session_id'), ul_teid=ue['ul_teid'], qfi=ue['qfi'],
+                        upf_address=ue.get('upf_address'), dl_teid=ue.get('dl_teid'), gnb_address=gtpIp,
+                        ran_ue_ngap_id=ran_ue_ngap_id, amf_ue_ngap_id=ue.get('amf_ue_ngap_id'), t=time.time()))
             except Exception as e:
                 # self.exit_flag.value = True
                 logger.error(f"Error receive DP message from UESim: {e}")

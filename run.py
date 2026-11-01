@@ -8,8 +8,7 @@ import signal
 from src.UESim import UESim
 from src.SCTP import SCTPClient
 from src.NGAPSim import GNB
-from src.GTPU import GTPU, GTPUConfig
-from src.bpf.XDPLoader import Trafficgen
+from src.userplane import Context, UserPlane, providers_from_config
 from src.bpf.ipstats import IPStats
 from src.UE import *
 from multiprocessing import Process, active_children, Pipe, Value
@@ -180,7 +179,7 @@ def print_stats(
             f"{'':<8} | {' '.join(f'{pkt_s:>10}{bytes_s:>10}' for _ in sorted(interfaces_map))}"
         )  # Subheaders
         ip_stats = ipstats.get_stats()
-        gtpu_stats = gtpuTrafficgen.get_stats()
+        gtpu_stats = gtpuTrafficgen.get_stats() if gtpuTrafficgen else {}
         # Merge GTPU stats with ip stats
         for key, value in gtpu_stats.items():
             group = ip_stats[key]
@@ -406,16 +405,15 @@ def main(args):
     exit_program = multiprocessing.Value("i", 0)
 
     interfaces_map = get_network_interfaces_map()
-    gtpuTrafficgen = Trafficgen(server_config["gtpuConfig"]["interface"])
-    gtpuConfig = GTPUConfig(
-        src_mac=server_config["gtpuConfig"]["srcMac"],
-        dst_mac=server_config["gtpuConfig"]["dstMac"],
-        src_ip=server_config["gtpuConfig"]["srcIp"],
-        dst_ip=server_config["gtpuConfig"]["dstIp"],
-        cpu_cores=range(num_cpus // 2),
-        num_pkts=args.num_pkts,
+    # The user plane: the providers that give each PDU session its traffic as it comes up
+    # (src/userplane: file, xdp, trex). Without a userPlane section, gtpuConfig configures the
+    # XDP generator, as before. It runs in a process of its own, started before the gNBs.
+    userplane = UserPlane(
+        providers_from_config(server_config),
+        Context(folder=args.folder, verbose=args.verbose, num_pkts=int(args.num_pkts), num_cpus=num_cpus),
     )
-    gtpu = GTPU(gtpuConfig, gtpuTrafficgen, args.verbose)
+    userplane.start()
+    gtpuTrafficgen = None  # the XDP generator and its counters live in the user plane process
 
     # Start SCTP tracers if requested
     tracer_process = None
@@ -451,9 +449,8 @@ def main(args):
         state_writer.writerow(list(fg_msg_codes.keys()))
 
     processes = []
-    ue_lists, num_ues = create_ues(
-        ue_config["ue_profiles"], num_cpus - 1 if num_cpus > 1 else 1
-    )
+    num_gnbs = args.gnbs or (num_cpus - 1 if num_cpus > 1 else 1)
+    ue_lists, num_ues = create_ues(ue_config["ue_profiles"], num_gnbs)
     for i in range(len(ue_lists)):
         sctp_client = SCTPClient(server_config)
         ngap_to_ue, ue_to_ngap = Pipe(duplex=True)
@@ -462,7 +459,7 @@ def main(args):
         gnb = GNB(
             exit_program,
             sctp_client,
-            gtpu,
+            userplane,
             server_config,
             ngap_to_ue,
             ue_to_ngap,
@@ -493,6 +490,12 @@ def main(args):
 
     for process in processes:
         process.start()
+
+    # SIGTERM (docker/nerdctl stop) ends the run like Ctrl-C. Set after the children are
+    # started, so that terminate() still ends them.
+    def handle_sigterm(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, handle_sigterm)
 
     ipstats = None
     if args.ebpf:
@@ -527,6 +530,8 @@ def main(args):
             # Wait for a short time before checking again
             time.sleep(args.period)
         except KeyboardInterrupt:
+            # Let the UE and gNB processes stop by themselves, so that they write their results
+            exit_program.value = True
             break
 
     # Allow for sime for process to exit after setting exit_program.value = True
@@ -534,6 +539,9 @@ def main(args):
 
     if tracer_process:
         tracer_process.join()
+
+    # Stop the sessions' traffic before the gNB processes go
+    userplane.stop()
 
     for process in processes:
         process.join(timeout=0.2)
@@ -605,9 +613,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "-i",
         "--interval",
-        type=bool,
-        default=False,
-        help="Interval of adding UEs in seconds",
+        type=float,
+        default=0,
+        help="Interval between starting UEs, in seconds (0: all at once)",
+    )
+    parser.add_argument(
+        "--gnbs",
+        type=int,
+        default=0,
+        help="Number of gNB processes, each with its own NG setup (default: one per CPU, less one)",
     )
     parser.add_argument(
         "-n",
