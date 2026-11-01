@@ -5,17 +5,18 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
     git \
+    kmod \
     python3-dev \
     python3-bpfcc \
     python3.12-venv \
     bpfcc-tools \
-    && apt-get install -y linux-headers-$(uname -r) || apt-get install -y linux-headers-generic \
     libbpf-dev \
     clang-14 \
     python3-setuptools \
     build-essential \
     vim \
     libsctp-dev \
+    && (apt-get install -y linux-headers-$(uname -r) || apt-get install -y linux-headers-generic) \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/CoreNetworkTrafficGenerator

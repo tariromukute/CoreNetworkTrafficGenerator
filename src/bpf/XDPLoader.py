@@ -112,7 +112,7 @@ class Trafficgen:
             print("Failed to call xdp_gen function")
 
     def add_ue_record(self, ip_address_str: str, teid: int, qfi: int) -> None:
-        """ This function adds a new user equipment (UE) record to the specified supi_record_map iterated through when generating 
+        """ This function adds a new user equipment (UE) record to the specified supi_record_map iterated through when generating
         PDU session traffic. The UE record is identified by its IP address, teid and qfi values. """
 
         supi_record_map = self.b.get_table("supi_record_map")
